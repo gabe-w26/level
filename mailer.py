@@ -23,7 +23,9 @@ SMTP_PORT = int(os.environ.get('SMTP_PORT', 587))
 SMTP_USER = os.environ.get('SMTP_USER', '')
 SMTP_PASS = os.environ.get('SMTP_PASS', '')
 MAIL_FROM = os.environ.get('MAIL_FROM', f'{config.BRAND} <{config.SUPPORT_EMAIL}>')
-BASE_URL = os.environ.get('BASE_URL', 'http://localhost:5050').rstrip('/')
+# Render sets RENDER_EXTERNAL_URL itself, so links work without any setup.
+BASE_URL = (os.environ.get('BASE_URL') or os.environ.get('RENDER_EXTERNAL_URL')
+            or 'http://localhost:5050').rstrip('/')
 ENABLED = bool(SMTP_HOST)
 
 

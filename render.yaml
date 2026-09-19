@@ -36,7 +36,7 @@ services:
       - key: ADMIN_PASSWORD
         sync: false
       - key: BASE_URL
-        sync: false               # your live address, e.g. https://level.onrender.com
+        sync: false               # only needed once you point your own domain at it
       - key: SUPPORT_EMAIL
         sync: false
       - key: LEGAL_ENTITY
