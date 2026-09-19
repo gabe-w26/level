@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Admin — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Overview</h1>
+      <p class="muted">{{ now|when }} NZ time{% if offset %} · demo clock {{ '%g'|format(offset) }} h ahead{% endif %}</p>
+    </div>
+  </div>
+
+  {% set ns = namespace(mrr=0) %}
+  {% for key in cfg.TIER_ORDER %}{% set ns.mrr = ns.mrr + tiers[key].price * by_tier.get(key, 0) %}{% endfor %}
+  <div class="admin-stats">
+    <div><b>{{ stats.customers }}</b><span class="small muted">customers</span></div>
+    <div><b>{{ stats.paying }}</b><span class="small muted">paying trades of {{ stats.trades }}</span></div>
+    <div><b>${{ ns.mrr }}</b><span class="small muted">monthly revenue {{ cfg.PRICE_GST_NOTE }}</span></div>
+    <div><b>{{ stats.open_jobs }}</b><span class="small muted">jobs taking quotes</span></div>
+    <div><b>{{ stats.quotes }}</b><span class="small muted">quotes sent</span></div>
+    <a href="{{ url_for('admin_trades') }}"><b>{{ stats.unverified }}</b><span class="small muted">trades to check</span></a>
+    <a href="{{ url_for('admin_claims') }}"><b>{{ stats.claims }}</b><span class="small muted">refunds to review</span></a>
+    <a href="{{ url_for('admin_reports') }}"><b>{{ stats.reports }}</b><span class="small muted">reports</span></a>
+  </div>
+  <p class="small muted" style="margin-top:10px">Active plans: {% for key in cfg.TIER_ORDER %}{{ tiers[key].name }} {{ by_tier.get(key, 0) }}{{ ' · ' if not loop.last }}{% endfor %}</p>
+
+  <div class="grid-2" style="margin-top:20px">
+    <div class="card">
+      <h3>Run the rules</h3>
+      <p class="small muted">The sweep runs automatically every couple of minutes: it hands on expired offers, closes old jobs, renews demo plans and settles finished months. Run it now to see changes straight away.</p>
+      <form method="post" action="{{ url_for('admin_sweep') }}">{{ m.csrf() }}<button class="btn btn-sm" type="submit">Run sweep now</button></form>
+    </div>
+    {% if demo_tools %}
+    <div class="card">
+      <h3>Demo tools</h3>
+      <p class="small muted">Move the clock forward to watch the rules work. At +24 hours, trades who didn’t quote are swapped for new ones. At +30 days, months end and refunds are worked out.</p>
+      <div class="actions">
+        {% for h, label in [(1, '+1 hour'), (24, '+24 hours'), (168, '+7 days'), (720, '+30 days')] %}
+        <form method="post" action="{{ url_for('admin_clock') }}">{{ m.csrf() }}<input type="hidden" name="hours" value="{{ h }}"><button class="btn btn-quiet btn-sm" type="submit">{{ label }}</button></form>
+        {% endfor %}
+        <form method="post" action="{{ url_for('admin_clock') }}">{{ m.csrf() }}<input type="hidden" name="hours" value="reset"><button class="btn btn-quiet btn-sm" type="submit">Reset clock</button></form>
+      </div>
+      <hr class="divider">
+      <form method="post" action="{{ url_for('admin_seed') }}" data-confirm="Add demo trades, customers and jobs?">{{ m.csrf() }}<button class="btn btn-sm" type="submit">Load demo data</button></form>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="section-title"><h2>Recent jobs</h2></div>
+  <div class="card table-wrap" style="padding:6px 10px">
+    <table>
+      <thead><tr><th>Job</th><th>Budget</th><th>Status</th><th>Quotes</th><th>Offered (deciding)</th><th>Posted</th></tr></thead>
+      <tbody>
+        {% for j in jobs %}
+        <tr>
+          <td><a href="{{ url_for('admin_job', job_id=j.id) }}">{{ j.title }}</a><div class="small muted">{{ j.category_name }} · {{ j.area_name }} · <a href="{{ url_for('admin_inspect') }}?job={{ j.id }}">behind the scenes</a></div></td>
+          <td>{{ bands[j.value_band].short }}</td>
+          <td>{{ m.status_pill(j.status) }}</td>
+          <td>{{ m.meter(j.quote_count) }}</td>
+          <td class="num">{{ j.offers_total }} ({{ j.offers_active }})</td>
+          <td class="small">{{ j.created_at|ago }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="muted">No jobs yet.{% if demo_tools %} Load the demo data to see the platform working.{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

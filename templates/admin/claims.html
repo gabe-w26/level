@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Refunds — admin{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Refunds</h1>
+      <p class="muted">Every finished month is checked against the guarantee.{% if not cfg.GUARANTEE_AUTO_APPROVE %} Refunds wait for your OK — set GUARANTEE_AUTO_APPROVE=1 to pay them automatically.{% endif %}</p>
+    </div>
+  </div>
+  <div class="card table-wrap" style="padding:6px 10px">
+    <table>
+      <thead><tr><th>Trade</th><th>Month</th><th>Amount</th><th>Offered</th><th>Quoted / needed</th><th>Won</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for c in rows %}
+        <tr>
+          <td>{{ c.business_name }}</td>
+          <td class="small">{{ c.period_start|day }} – {{ c.period_end|day }}</td>
+          <td class="num">${{ '%.2f'|format(c.amount_cents / 100) }}</td>
+          <td class="num">{{ c.offers_received }}</td>
+          <td class="num">{{ c.quotes_sent }} / {{ c.quotes_required }}</td>
+          <td class="num">{{ c.jobs_won }}</td>
+          <td>{{ m.status_pill(c.status) }}{% if c.note %}<div class="small muted">{{ c.note }}</div>{% endif %}</td>
+          <td>
+            {% if c.status in ('pending', 'approved') %}
+            <div class="actions">
+              <form method="post" action="{{ url_for('admin_claim', claim_id=c.id, action='refund') }}" data-confirm="Refund ${{ '%.2f'|format(c.amount_cents / 100) }} to {{ c.business_name }}?">{{ m.csrf() }}<button class="btn btn-pine btn-sm" type="submit">Refund</button></form>
+              <details class="more"><summary>Decline</summary>
+                <form method="post" action="{{ url_for('admin_claim', claim_id=c.id, action='deny') }}" class="report-form">{{ m.csrf() }}<input name="note" type="text" placeholder="Reason the trade will see" required style="width:220px"><button class="btn btn-danger btn-sm" type="submit">Decline</button></form>
+              </details>
+            </div>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="muted">No finished months yet. They appear here when a trade’s billing month ends.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

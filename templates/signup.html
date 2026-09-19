@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Join as a trade — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="auth">
+    <h1 style="font-size:38px">Join as a trade</h1>
+    <p class="muted">Two minutes. Next you’ll pick your trades and areas, then a plan.</p>
+    <form method="post" class="form card" novalidate>
+      {{ m.csrf() }}
+      <div class="{{ 'has-error' if errors.name }}">
+        <label for="name">Your name</label>
+        <input id="name" name="name" type="text" autocomplete="name" value="{{ form.get('name', '') }}">
+        {{ m.err(errors, 'name') }}
+      </div>
+      <div class="{{ 'has-error' if errors.business_name }}">
+        <label for="business_name">Business or trading name</label>
+        <input id="business_name" name="business_name" type="text" autocomplete="organization" value="{{ form.get('business_name', '') }}">
+        {{ m.err(errors, 'business_name') }}
+      </div>
+      <div class="{{ 'has-error' if errors.email }}">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" value="{{ form.get('email', '') }}">
+        {{ m.err(errors, 'email') }}
+      </div>
+      <div class="{{ 'has-error' if errors.phone }}">
+        <label for="phone">Mobile <span class="hint">Shared only with customers who choose you.</span></label>
+        <input id="phone" name="phone" type="tel" autocomplete="tel" value="{{ form.get('phone', '') }}">
+        {{ m.err(errors, 'phone') }}
+      </div>
+      <div class="{{ 'has-error' if errors.password }}">
+        <label for="password">Create a password <span class="hint">At least 8 characters.</span></label>
+        <input id="password" name="password" type="password" autocomplete="new-password">
+        {{ m.err(errors, 'password') }}
+      </div>
+      <div><button class="btn" type="submit">Create trade account</button></div>
+    </form>
+    <p class="small muted" style="margin-top:16px">Already joined? <a href="{{ url_for('login') }}">Log in</a>. Need a job done instead? <a href="{{ url_for('post_job') }}">Post a job</a>.</p>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Messages — {{ job.title }}{% endblock %}
+{% block main %}
+<div class="wrap page narrow">
+  {% if me.id == job.customer_id %}
+  <p class="small"><a href="{{ url_for('customer_job', job_id=job.id) }}#q{{ quote.id }}">← Back to your quotes</a></p>
+  {% else %}
+  <p class="small"><a href="{{ url_for('trade_job', job_id=job.id) }}">← Back to the job</a></p>
+  {% endif %}
+  <h1 style="font-size:32px">{{ job.title }}</h1>
+  <p class="muted">Messages between {{ customer.name.split(' ')[0] }} and {{ trade.business_name }}</p>
+
+  <div class="thread">
+    {% for msg in msgs %}
+    <div class="msg{{ ' mine' if msg.sender_id == me.id }}">{{ msg.body }}<time>{{ msg.created_at|when }}</time></div>
+    {% else %}
+    <div class="empty"><p style="margin:0">No messages yet. Ask about the quote, the job or timing.</p></div>
+    {% endfor %}
+    <span id="end"></span>
+  </div>
+
+  <form method="post" class="card form" style="gap:12px">
+    {{ m.csrf() }}
+    <label for="body" style="margin:0">Message</label>
+    <textarea id="body" name="body" required style="min-height:90px"></textarea>
+    <div><button class="btn" type="submit">Send message</button></div>
+  </form>
+  <p class="small muted" style="margin-top:14px">Get the price and scope in writing before work starts, and pay against progress rather than a large deposit upfront.</p>
+</div>
+{% endblock %}

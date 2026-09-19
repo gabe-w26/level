@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Trades — admin{% endblock %}
+{% macro check(t, what, when, token) %}
+<form method="post" action="{{ url_for('admin_check', trade_id=t.user_id) }}" class="inline">
+  <input type="hidden" name="_csrf" value="{{ token }}"><input type="hidden" name="what" value="{{ what }}"><input type="hidden" name="ok" value="{{ '0' if when else '1' }}">
+  {% if when %}<span class="badge" style="cursor:default">✓ {{ when|day }}</span> <button class="linkish small" type="submit">Undo</button>
+  {% else %}<button class="btn btn-quiet btn-sm" type="submit" style="margin-top:4px">Mark checked</button>{% endif %}
+</form>
+{% endmacro %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Trades</h1>
+      <p class="muted">Check each detail against its register or certificate, then mark it checked. Customers only ever see badges for checked details.</p>
+    </div>
+  </div>
+  <div class="card table-wrap" style="padding:6px 10px">
+    <table>
+      <thead><tr><th>Trade</th><th>Plan</th><th>Licence</th><th>NZBN</th><th>Insurance</th></tr></thead>
+      <tbody>
+        {% for t in rows %}
+        <tr id="t{{ t.user_id }}">
+          <td><a href="{{ url_for('pro_profile', trade_id=t.user_id) }}"><b>{{ t.business_name }}</b></a><div class="small muted">{{ t.name }} · {{ t.email }}{% if t.phone %} · {{ t.phone }}{% endif %}</div></td>
+          <td class="small">{% if t.sub_status == 'active' %}{{ tiers[t.tier].name }}{% if t.paused %} · paused{% endif %}{% else %}<span class="muted">{{ t.sub_status }}</span>{% endif %}</td>
+          <td class="small">
+            {% if t.licence_type and t.licence_type != 'none' %}
+              {{ licences[t.licence_type][0] }}<div>{{ t.licence_number }}{% if licences[t.licence_type][1] %} · <a href="{{ licences[t.licence_type][1] }}" target="_blank" rel="noopener">register ↗</a>{% endif %}</div>
+              {{ check(t, 'licence', t.licence_checked_at, csrf_token()) }}
+            {% else %}<span class="muted">None needed</span>{% endif %}
+          </td>
+          <td class="small">
+            {% if t.nzbn %}{{ t.nzbn }}<div><a href="https://www.nzbn.govt.nz/" target="_blank" rel="noopener">NZBN register ↗</a></div>{{ check(t, 'nzbn', t.nzbn_checked_at, csrf_token()) }}
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td class="small">
+            {% if t.insurance_insurer %}{{ t.insurance_insurer }}<div class="muted">to {{ t.insurance_expiry or 'unknown' }}</div>{{ check(t, 'insurance', t.insurance_checked_at, csrf_token()) }}
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">No trades yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

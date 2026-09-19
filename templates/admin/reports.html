@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Reports — admin{% endblock %}
+{% set reasons = {'wrong_band': 'Budget band looks wrong', 'misdescribed': 'Job is misdescribed', 'fake': 'Looks fake or spam', 'unreachable': 'Already done or customer unreachable'} %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head"><h1>Reports</h1></div>
+
+  <div class="section-title" style="margin-top:0"><h2>Jobs reported by trades</h2></div>
+  <div class="card table-wrap" style="padding:6px 10px">
+    <table>
+      <thead><tr><th>Job</th><th>Reported by</th><th>Reason</th><th>When</th><th></th></tr></thead>
+      <tbody>
+        {% for r in reports %}
+        <tr>
+          <td><a href="{{ url_for('admin_job', job_id=r.job_id) }}">{{ r.title }}</a></td>
+          <td>{{ r.business_name }}</td>
+          <td>{{ reasons.get(r.reason, r.reason) }}{% if r.note %}<div class="small muted">{{ r.note }}</div>{% endif %}</td>
+          <td class="small">{{ r.created_at|ago }}</td>
+          <td>{% if r.status == 'open' %}<form method="post" action="{{ url_for('admin_resolve_report', report_id=r.id) }}">{{ m.csrf() }}<button class="btn btn-quiet btn-sm" type="submit">Mark resolved</button></form>{% else %}<span class="small muted">Resolved</span>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">No reported jobs.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-title"><h2>Quotes reported by customers</h2><span class="label">Reported quotes don’t count towards the guarantee</span></div>
+  <div class="card table-wrap" style="padding:6px 10px">
+    <table>
+      <thead><tr><th>Job</th><th>Trade</th><th>Reason</th><th>Quote</th><th></th></tr></thead>
+      <tbody>
+        {% for q in flagged %}
+        <tr>
+          <td><a href="{{ url_for('admin_job', job_id=q.job_id) }}">{{ q.title }}</a></td>
+          <td>{{ q.business_name }}</td>
+          <td>{{ q.flag_reason }}</td>
+          <td class="small">{{ q|price }} — {{ q.message[:120] }}{{ '…' if q.message|length > 120 }}</td>
+          <td><form method="post" action="{{ url_for('admin_unflag', quote_id=q.id) }}">{{ m.csrf() }}<button class="btn btn-quiet btn-sm" type="submit">It’s genuine — clear</button></form></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">No reported quotes.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

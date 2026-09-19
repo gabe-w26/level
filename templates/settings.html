@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Settings — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page narrow">
+  <div class="page-head">
+    <div>
+      <h1>Settings</h1>
+      <p class="muted">Your details, how we contact you, and your password.</p>
+    </div>
+  </div>
+
+  <form method="post" class="form-step" style="margin-bottom:18px" novalidate>
+    {{ m.csrf() }}
+    <input type="hidden" name="action" value="details">
+    <h2 style="margin:0">Your details</h2>
+    <div class="row">
+      <div class="{{ 'has-error' if errors.name }}">
+        <label for="name">Name</label>
+        <input id="name" name="name" type="text" value="{{ form.get('name') or me.name }}">
+        {{ m.err(errors, 'name') }}
+      </div>
+      <div class="{{ 'has-error' if errors.phone }}">
+        <label for="phone">Phone</label>
+        <input id="phone" name="phone" type="tel" value="{{ form.get('phone') or me.phone or '' }}">
+        {{ m.err(errors, 'phone') }}
+      </div>
+    </div>
+    <label class="check">
+      <input type="checkbox" name="email_alerts" value="1" {{ 'checked' if me.email_alerts }}>
+      <span>Email me about new jobs, quotes and messages<span class="hint">Password resets are always sent, whatever you choose here.</span></span>
+    </label>
+    <div><button class="btn" type="submit">Save details</button></div>
+  </form>
+
+  <div class="form-step" style="margin-bottom:18px">
+    <h2 style="margin:0">Email address</h2>
+    <p class="small" style="margin:0">
+      {{ me.email }} —
+      {% if me.email_verified_at %}<span class="badge" style="cursor:default">✓ Confirmed</span>
+      {% else %}<span class="badge wait">Not confirmed yet</span>{% endif %}
+    </p>
+    {% if not me.email_verified_at %}
+    <form method="post" class="inline">{{ m.csrf() }}<input type="hidden" name="action" value="verify"><button class="btn btn-quiet btn-sm" type="submit">Send me a confirmation email</button></form>
+    {% endif %}
+    <form method="post" class="form" style="gap:14px" novalidate>
+      {{ m.csrf() }}
+      <input type="hidden" name="action" value="email">
+      <div class="{{ 'has-error' if errors.email }}">
+        <label for="email">New email address</label>
+        <input id="email" name="email" type="email" value="{{ form.get('email', '') if form.get('action') == 'email' }}">
+        {{ m.err(errors, 'email') }}
+      </div>
+      <div class="{{ 'has-error' if errors.current_password and form.get('action') == 'email' }}">
+        <label for="email_password">Your password</label>
+        <input id="email_password" name="current_password" type="password" autocomplete="current-password">
+        {% if form.get('action') == 'email' %}{{ m.err(errors, 'current_password') }}{% endif %}
+      </div>
+      <div><button class="btn btn-quiet" type="submit">Change email</button></div>
+    </form>
+  </div>
+
+  <form method="post" class="form-step" style="margin-bottom:18px" novalidate>
+    {{ m.csrf() }}
+    <input type="hidden" name="action" value="password">
+    <h2 style="margin:0">Password</h2>
+    <div class="row">
+      <div class="{{ 'has-error' if errors.current_password and form.get('action') == 'password' }}">
+        <label for="old_password">Current password</label>
+        <input id="old_password" name="current_password" type="password" autocomplete="current-password">
+        {% if form.get('action') == 'password' %}{{ m.err(errors, 'current_password') }}{% endif %}
+      </div>
+      <div class="{{ 'has-error' if errors.password }}">
+        <label for="new_password">New password <span class="hint">At least 8 characters.</span></label>
+        <input id="new_password" name="password" type="password" autocomplete="new-password">
+        {{ m.err(errors, 'password') }}
+      </div>
+    </div>
+    <div><button class="btn btn-quiet" type="submit">Change password</button></div>
+  </form>
+
+  <details class="form-step" style="display:block">
+    <summary style="cursor:pointer;font-weight:700">Close my account</summary>
+    <p class="small muted" style="margin:12px 0 0">
+      {% if me.role == 'customer' %}Any job still taking quotes will be closed and the trades told.
+      {% else %}Your plan stops, you’ll get no more jobs, and your contact details are removed. Reviews customers left stay on the site.{% endif %}
+      Your name, phone and email are deleted. This can’t be undone.
+    </p>
+    <form method="post" class="form" style="gap:14px;margin-top:14px" novalidate>
+      {{ m.csrf() }}
+      <input type="hidden" name="action" value="close">
+      <div class="{{ 'has-error' if errors.current_password and form.get('action') == 'close' }}">
+        <label for="close_password">Your password</label>
+        <input id="close_password" name="current_password" type="password" autocomplete="current-password">
+        {% if form.get('action') == 'close' %}{{ m.err(errors, 'current_password') }}{% endif %}
+      </div>
+      <div class="{{ 'has-error' if errors.confirm }}">
+        <label for="confirm">Type CLOSE to confirm</label>
+        <input id="confirm" name="confirm" type="text" autocomplete="off">
+        {{ m.err(errors, 'confirm') }}
+      </div>
+      <div><button class="btn btn-danger" type="submit" data-confirm="Close your account for good?">Close my account</button></div>
+    </form>
+  </details>
+</div>
+{% endblock %}

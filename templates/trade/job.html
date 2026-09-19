@@ -1,0 +1,218 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}{{ job.title }} — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <p class="small"><a href="{{ url_for('trade_home') }}">← Jobs</a></p>
+  <div class="page-head">
+    <div>
+      <h1>{{ job.title }}</h1>
+      <p class="muted">{{ job.category_name }} · {{ job.suburb }}, {{ job.area_name }} · posted {{ job.created_at|ago }}</p>
+    </div>
+    {{ m.stamp(job, big=true) }}
+  </div>
+
+  <div class="two">
+    <div class="stack">
+      {% if quote %}
+        <div class="notice {{ 'ok' if quote.status in ('accepted', 'shortlisted') }}">
+          {% if quote.status == 'accepted' %}<b>You won this job.</b> Get in touch with the customer to confirm the details.
+          {% elif quote.status == 'shortlisted' %}<b>The customer shared their contact details.</b> Give them a call.
+          {% elif quote.status == 'declined' %}The customer went another way this time.
+          {% else %}Quote sent {{ quote.created_at|ago }}. We’ll let you know when the customer responds.{% endif %}
+        </div>
+        {% if contact %}
+        <dl class="kv contact" style="margin:0">
+          <dt>Name</dt><dd>{{ contact.name }}</dd>
+          <dt>Phone</dt><dd><a href="tel:{{ contact.phone }}">{{ contact.phone }}</a></dd>
+          <dt>Email</dt><dd><a href="mailto:{{ contact.email }}">{{ contact.email }}</a></dd>
+          {% if job.address %}<dt>Address</dt><dd>{{ job.address }}</dd>{% endif %}
+        </dl>
+        {% endif %}
+      {% elif can_quote %}
+        <div class="notice act"><b>{{ m.countdown(offer.expires_at, 'Quote within ', '') }}</b> · {{ cfg.MAX_QUOTES - job.quote_count }} of {{ cfg.MAX_QUOTES }} quote slots left. First in, first served.</div>
+      {% else %}
+        <div class="notice">
+          {% if offer.status == 'declined' %}You passed on this job.
+          {% elif offer.status == 'closed' and job.status in ('full', 'open') %}This job filled up with {{ cfg.MAX_QUOTES }} quotes before you quoted.
+          {% elif job.status not in ('open', 'full') %}The customer closed this job.
+          {% elif job.status == 'full' %}This job filled up with {{ cfg.MAX_QUOTES }} quotes before you quoted.
+          {% else %}Your {{ cfg.OFFER_WINDOW_HOURS }} hours ran out, so the job went to another trade.{% endif %}
+        </div>
+      {% endif %}
+
+      <div class="card">
+        <h2>The job</h2>
+        <p class="desc">{{ job.description }}</p>
+        <dl class="kv">
+          <dt>Budget</dt><dd>{{ bands[job.value_band].label }}</dd>
+          <dt>Timing</dt><dd>{{ cfg.TIMING.get(job.timing, '—') }}</dd>
+          <dt>Property</dt><dd>{{ cfg.PROPERTY_TYPES.get(job.property_type, '—') }}</dd>
+          <dt>Where</dt><dd>{{ job.suburb }}, {{ job.area_name }}{% if not contact %}<span class="hint">Street address shared if the customer chooses you</span>{% endif %}</dd>
+        </dl>
+        {% if photos %}
+        <div class="photos" style="margin-top:14px">
+          {% for p in photos %}<a href="{{ url_for('upload', name=p.filename) }}" target="_blank" rel="noopener"><img src="{{ url_for('upload', name=p.filename) }}" alt="Job photo {{ loop.index }}" loading="lazy"></a>{% endfor %}
+        </div>
+        {% endif %}
+        {% if job.licence_note %}<p class="notice small" style="margin:14px 0 0">{{ job.licence_note }}</p>{% endif %}
+      </div>
+
+      {% if can_quote and not quote %}
+      <form method="post" action="{{ url_for('trade_quote', job_id=job.id) }}" class="card form" data-price-form id="quote">
+        {{ m.csrf() }}
+        <h2 style="margin:0">Your quote</h2>
+        {% if error %}<p class="notice error" role="alert" style="margin:0">{{ error }}</p>{% endif %}
+        {% set pt = form.get('price_type', 'fixed') %}
+        <div>
+          <span class="lbl" id="pt-lbl">How are you pricing it?</span>
+          <div class="choices" role="radiogroup" aria-labelledby="pt-lbl">
+            <label class="choice"><input type="radio" name="price_type" value="fixed" {{ 'checked' if pt == 'fixed' }}><span>Fixed price<small>One price for the job</small></span></label>
+            <label class="choice"><input type="radio" name="price_type" value="range" {{ 'checked' if pt == 'range' }}><span>Price range<small>The cost depends on what you find</small></span></label>
+            <label class="choice"><input type="radio" name="price_type" value="site_visit" {{ 'checked' if pt == 'site_visit' }}><span>Site visit first<small>You need to see it to price it</small></span></label>
+          </div>
+        </div>
+        <div class="row">
+          <div data-show-for="fixed range">
+            <label for="amount_low"><span data-show-for="fixed">Price</span><span data-show-for="range">From</span></label>
+            <input id="amount_low" name="amount_low" type="text" inputmode="decimal" placeholder="$" value="{{ form.get('amount_low', '') }}">
+          </div>
+          <div data-show-for="range">
+            <label for="amount_high">To</label>
+            <input id="amount_high" name="amount_high" type="text" inputmode="decimal" placeholder="$" value="{{ form.get('amount_high', '') }}">
+          </div>
+          <div data-show-for="fixed range">
+            <span class="lbl">GST</span>
+            <div class="actions" style="min-height:46px">
+              <label class="check"><input type="radio" name="gst" value="incl" {{ 'checked' if form.get('gst', 'incl') == 'incl' }}> Includes GST</label>
+              <label class="check"><input type="radio" name="gst" value="excl" {{ 'checked' if form.get('gst') == 'excl' }}> Plus GST</label>
+            </div>
+          </div>
+        </div>
+        <div>
+          <label for="message">Message to the customer <span class="hint">How you’d do the job, and anything you’d want to check first.</span></label>
+          <textarea id="message" name="message" required>{{ form.get('message', '') }}</textarea>
+        </div>
+        <div class="row">
+          <div><label for="inclusions">What’s included</label><textarea id="inclusions" name="inclusions" style="min-height:80px">{{ form.get('inclusions', '') }}</textarea></div>
+          <div><label for="exclusions">What’s not included</label><textarea id="exclusions" name="exclusions" style="min-height:80px">{{ form.get('exclusions', '') }}</textarea></div>
+        </div>
+        <div class="row">
+          <div><label for="warranty">Warranty</label><input id="warranty" name="warranty" type="text" placeholder="e.g. 2 years on workmanship" value="{{ form.get('warranty', t.workmanship_guarantee or '') }}"></div>
+          <div><label for="available_from">Can start</label><input id="available_from" name="available_from" type="text" placeholder="e.g. week of 6 October" value="{{ form.get('available_from', '') }}"></div>
+          <div><label for="duration">Takes about</label><input id="duration" name="duration" type="text" placeholder="e.g. 3 days" value="{{ form.get('duration', '') }}"></div>
+        </div>
+        {% if job.property_type != 'commercial' %}
+        <label class="check notice act" style="margin:0">
+          <input type="checkbox" name="act_docs_promised" value="1" {{ 'checked' if form.get('act_docs_promised') }}>
+          <span>If my price is {{ threshold|money }} or more including GST, I’ll give the customer a written contract, a disclosure statement and MBIE’s checklist before work starts.<span class="hint">The Building Act requires these for residential work of this size.</span></span>
+        </label>
+        {% endif %}
+        <div class="form-foot">
+          <p class="privacy">The customer sees your business name, badges, reviews and this quote. Your phone and email are shared only if they choose you.</p>
+          <button class="btn" type="submit">Send quote</button>
+        </div>
+      </form>
+      {% endif %}
+
+      {% if quote %}
+      <div class="card">
+        <div class="actions" style="justify-content:space-between"><h2 style="margin:0">Your quote</h2>{{ m.status_pill(quote.status) }}</div>
+        <p class="quote-price" style="text-align:left;margin:14px 0">{{ quote|price }}{% if quote.price_type != 'site_visit' %}<small>{{ 'incl. GST' if quote.gst_included else 'plus GST' }}</small>{% endif %}</p>
+        <p class="desc">{{ quote.message }}</p>
+        <dl class="kv">
+          {% if quote.inclusions %}<dt>Includes</dt><dd>{{ quote.inclusions }}</dd>{% endif %}
+          {% if quote.exclusions %}<dt>Doesn’t include</dt><dd>{{ quote.exclusions }}</dd>{% endif %}
+          {% if quote.warranty %}<dt>Warranty</dt><dd>{{ quote.warranty }}</dd>{% endif %}
+          {% if quote.available_from %}<dt>Can start</dt><dd>{{ quote.available_from }}</dd>{% endif %}
+          {% if quote.duration %}<dt>Takes about</dt><dd>{{ quote.duration }}</dd>{% endif %}
+        </dl>
+        <p style="margin:16px 0 0"><a class="btn btn-quiet btn-sm" href="{{ url_for('thread', job_id=job.id, trade_id=t.user_id) }}">Messages with the customer</a></p>
+        {% if quote.status == 'sent' and job.status in ('open', 'full') %}
+        <details class="more" style="margin-top:16px">
+          <summary>Change this quote</summary>
+          <p class="small muted" style="margin:10px 0 0">You can tidy it up until the customer responds. Your place in the first {{ cfg.MAX_QUOTES }} doesn’t change.</p>
+          <form method="post" action="{{ url_for('edit_quote', job_id=job.id) }}" class="form" data-price-form style="margin-top:12px">
+            {{ m.csrf() }}
+            {% if error %}<p class="notice error" role="alert" style="margin:0">{{ error }}</p>{% endif %}
+            {% set pt = quote.price_type %}
+            <div>
+              <span class="lbl" id="edit-pt-lbl">How are you pricing it?</span>
+              <div class="choices" role="radiogroup" aria-labelledby="edit-pt-lbl">
+                <label class="choice"><input type="radio" name="price_type" value="fixed" {{ 'checked' if pt == 'fixed' }}><span>Fixed price</span></label>
+                <label class="choice"><input type="radio" name="price_type" value="range" {{ 'checked' if pt == 'range' }}><span>Price range</span></label>
+                <label class="choice"><input type="radio" name="price_type" value="site_visit" {{ 'checked' if pt == 'site_visit' }}><span>Site visit first</span></label>
+              </div>
+            </div>
+            <div class="row">
+              <div data-show-for="fixed range"><label for="edit_low">Price / from</label><input id="edit_low" name="amount_low" type="text" inputmode="decimal" value="{{ quote.amount_low or '' }}"></div>
+              <div data-show-for="range"><label for="edit_high">To</label><input id="edit_high" name="amount_high" type="text" inputmode="decimal" value="{{ quote.amount_high or '' }}"></div>
+              <div data-show-for="fixed range">
+                <span class="lbl">GST</span>
+                <div class="actions" style="min-height:46px">
+                  <label class="check"><input type="radio" name="gst" value="incl" {{ 'checked' if quote.gst_included }}> Includes GST</label>
+                  <label class="check"><input type="radio" name="gst" value="excl" {{ 'checked' if not quote.gst_included }}> Plus GST</label>
+                </div>
+              </div>
+            </div>
+            <div><label for="edit_message">Message to the customer</label><textarea id="edit_message" name="message" required>{{ quote.message }}</textarea></div>
+            <div class="row">
+              <div><label for="edit_inc">What’s included</label><textarea id="edit_inc" name="inclusions" style="min-height:80px">{{ quote.inclusions or '' }}</textarea></div>
+              <div><label for="edit_exc">What’s not included</label><textarea id="edit_exc" name="exclusions" style="min-height:80px">{{ quote.exclusions or '' }}</textarea></div>
+            </div>
+            <div class="row">
+              <div><label for="edit_warranty">Warranty</label><input id="edit_warranty" name="warranty" type="text" value="{{ quote.warranty or '' }}"></div>
+              <div><label for="edit_start">Can start</label><input id="edit_start" name="available_from" type="text" value="{{ quote.available_from or '' }}"></div>
+              <div><label for="edit_duration">Takes about</label><input id="edit_duration" name="duration" type="text" value="{{ quote.duration or '' }}"></div>
+            </div>
+            {% if job.property_type != 'commercial' %}
+            <label class="check"><input type="checkbox" name="act_docs_promised" value="1" {{ 'checked' if quote.act_docs_promised }}> <span class="small">If my price is {{ threshold|money }} or more incl. GST, I’ll provide the written contract, disclosure statement and MBIE checklist.</span></label>
+            {% endif %}
+            <div><button class="btn btn-quiet" type="submit">Save changes</button></div>
+          </form>
+        </details>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <aside class="stack">
+      <div class="card">
+        <h3>About this customer</h3>
+        <dl class="kv">
+          <dt>Joined</dt><dd>{{ record.since or '—' }}</dd>
+          <dt>Jobs posted</dt><dd>{{ record.jobs }}</dd>
+          <dt>Hired here</dt><dd>{{ record.hired }}</dd>
+          <dt>Replied to quotes</dt><dd>{% if record.quotes %}{{ record.answered }} of {{ record.quotes }}{% else %}No quotes yet{% endif %}</dd>
+        </dl>
+        <p class="small muted" style="margin:10px 0 0">A reply means they shared their details, accepted or declined — not just opened the quote.</p>
+      </div>
+      {% if can_quote and not quote %}
+      <div class="card">
+        <h3>Not for you?</h3>
+        <p class="small muted">Pass and the job goes to another trade straight away.</p>
+        <form method="post" action="{{ url_for('trade_pass', job_id=job.id) }}" data-confirm="Pass on this job? It’ll go to another trade.">{{ m.csrf() }}<button class="btn btn-quiet btn-sm" type="submit">Pass on this job</button></form>
+      </div>
+      {% endif %}
+      <div class="card">
+        <h3>Something off?</h3>
+        {% if reported %}
+        <p class="small muted" style="margin:0">You’ve reported this job. We’ll look into it.</p>
+        {% else %}
+        <form method="post" action="{{ url_for('trade_report', job_id=job.id) }}" class="form" style="gap:10px">
+          {{ m.csrf() }}
+          <select name="reason" aria-label="What’s wrong with this job?">
+            <option value="wrong_band">The budget band looks wrong</option>
+            <option value="misdescribed">The job is misdescribed</option>
+            <option value="fake">Looks fake or spam</option>
+            <option value="unreachable">Already done, or customer unreachable</option>
+          </select>
+          <input name="note" type="text" placeholder="Anything we should know (optional)" aria-label="Details">
+          <div><button class="btn btn-quiet btn-sm" type="submit">Report job</button></div>
+        </form>
+        {% endif %}
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}

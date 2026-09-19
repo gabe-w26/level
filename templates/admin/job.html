@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Job {{ job.id }} — admin{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <p class="small"><a href="{{ url_for('admin_home') }}">← Overview</a></p>
+  <div class="page-head">
+    <div>
+      <h1>{{ job.title }}</h1>
+      <p class="muted">{{ job.category_name }} · {{ job.suburb }}, {{ job.area_name }} · {{ bands[job.value_band].label }} · posted {{ job.created_at|when }}<br>Customer: {{ customer.name }} · {{ customer.email }} · {{ customer.phone or '' }}</p>
+    </div>
+    {{ m.stamp(job, big=true) }}
+  </div>
+
+  <p><a class="btn btn-quiet btn-sm" href="{{ url_for('admin_inspect') }}?job={{ job.id }}">Behind the scenes: how this job moved through the rules</a></p>
+
+  <div class="section-title"><h2>Distribution log</h2><span class="label">{{ offers|length }} offers</span></div>
+  <div class="card table-wrap" style="padding:6px 10px">
+    <table>
+      <thead><tr><th>Wave</th><th>Trade</th><th>Plan</th><th>Status</th><th>Offered</th><th>Expires</th><th>Opened</th><th>Resolved</th></tr></thead>
+      <tbody>
+        {% for o in offers %}
+        <tr>
+          <td class="num">{{ o.wave }}</td>
+          <td>{{ o.business_name }}</td>
+          <td>{{ tiers[o.tier].name if o.tier else '—' }}</td>
+          <td><span class="pill {{ o.status }}">{{ o.status }}</span></td>
+          <td class="small">{{ o.offered_at|when }}</td>
+          <td class="small">{{ o.expires_at|when }}</td>
+          <td class="small">{{ o.seen_at|when if o.seen_at else '—' }}</td>
+          <td class="small">{{ o.resolved_at|when if o.resolved_at else '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="muted">Not offered to anyone yet — no matching trades on a plan that covers this job.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-title"><h2>Quotes</h2></div>
+  <div class="card table-wrap" style="padding:6px 10px">
+    <table>
+      <thead><tr><th>#</th><th>Trade</th><th>Price</th><th>Status</th><th>Sent</th></tr></thead>
+      <tbody>
+        {% for q in quotes %}
+        <tr><td class="num">{{ loop.index }}</td><td>{{ q.business_name }}{% if q.flagged %} <span class="pill declined">reported</span>{% endif %}</td><td class="num">{{ q|price }}</td><td>{{ m.status_pill(q.status) }}</td><td class="small">{{ q.created_at|when }}</td></tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">No quotes yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" style="margin-top:16px"><h3>Description</h3><p class="desc" style="margin:0">{{ job.description }}</p></div>
+</div>
+{% endblock %}

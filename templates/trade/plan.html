@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Your plan — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Your plan</h1>
+      <p class="muted">{% if subscribed %}{{ tiers[t.tier].name }} · {{ tiers[t.tier].covers }} · {% if t.cancel_at_period_end %}ends{% else %}renews{% endif %} {{ t.period_end|day }}{% else %}No active plan{% endif %}</p>
+    </div>
+  </div>
+  {% if request.args.get('done') %}<p class="notice ok">Payment received. Your plan switches on as soon as Stripe confirms it — usually within a few seconds.</p>{% endif %}
+  {% if cfg.FREE_PILOT %}
+  <p class="notice ok"><b>You’re not being charged.</b> {{ cfg.BRAND }} is free while we get going — pick the size of job you want to see. The prices below are what we’ll charge later, and we’ll email you well before that starts.</p>
+  {% elif not live %}
+  <p class="notice small">Demo billing: no card is charged. Choosing a plan switches it on straight away for 30 days. Add your Stripe keys to take real payments.</p>
+  {% endif %}
+
+  <div class="tiers">
+    {% for key in cfg.TIER_ORDER %}{% set tier = tiers[key] %}{% set current = subscribed and t.tier == key %}
+    <div class="tier{{ ' current' if current }}">
+      <p class="label">{{ 'Your plan' if current else tier.name }}</p>
+      <div class="tier-price">${{ tier.price }}<small> /month {{ cfg.PRICE_GST_NOTE }}</small></div>
+      <p style="margin:0"><b>{{ tier.covers }}.</b></p>
+      {% if current %}
+        <span class="pill active" style="align-self:flex-start;margin-top:auto">Current plan</span>
+      {% else %}
+        <form method="post" action="{{ url_for('choose_plan') }}">
+          {{ m.csrf() }}<input type="hidden" name="tier" value="{{ key }}">
+          <button class="btn{{ ' btn-ghost' if subscribed }}" type="submit">{% if subscribed %}Switch to {{ tier.name }}{% else %}Choose {{ tier.name }}{% endif %}</button>
+        </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if subscribed %}
+  <div class="card" style="margin-top:16px">
+    <div class="actions" style="justify-content:space-between">
+      {% if t.cancel_at_period_end %}
+        <p style="margin:0">Your plan ends on {{ t.period_end|day }}. You’ll keep getting jobs until then.</p>
+        <form method="post" action="{{ url_for('resume_plan') }}">{{ m.csrf() }}<button class="btn btn-sm" type="submit">Keep my plan</button></form>
+      {% else %}
+        <p style="margin:0">Month to month. Cancel any time and keep getting jobs until {{ t.period_end|day }}.</p>
+        <form method="post" action="{{ url_for('cancel_plan') }}" data-confirm="Cancel your plan? You’ll keep getting jobs until {{ t.period_end|day }}.">{{ m.csrf() }}<button class="btn btn-danger btn-sm" type="submit">Cancel plan</button></form>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="section-title"><h2>Months and refunds</h2><a class="small" href="{{ url_for('pricing') }}#guarantee">Guarantee terms</a></div>
+  {% if payments %}
+  <div class="card table-wrap" style="padding:6px 10px">
+    <table>
+      <thead><tr><th>Month</th><th>Plan</th><th>Paid</th><th>Offered</th><th>Quoted</th><th>Won</th><th>Guarantee</th></tr></thead>
+      <tbody>
+        {% for p in payments %}{% set s = stats[p.id] %}{% set c = claims.get(p.id) %}
+        <tr>
+          <td>{{ p.period_start|day }} – {{ p.period_end|day }}</td>
+          <td>{{ tiers[p.tier].name }}</td>
+          <td class="num">${{ '%.2f'|format(p.amount_cents / 100) }}</td>
+          <td class="num">{{ s.offers }}</td>
+          <td class="num">{{ s.quotes }}</td>
+          <td class="num">{{ s.won }}</td>
+          <td>
+            {% if c %}
+              {{ m.status_pill(c.status) }}
+              {% if c.status == 'not_eligible' %}<div class="small muted">{% if c.jobs_won %}Won {{ c.jobs_won }} job{{ 's' if c.jobs_won > 1 }}{% else %}{{ c.quotes_sent }} of {{ c.quotes_required }} quotes{% endif %}</div>
+              {% elif c.status == 'denied' and c.note %}<div class="small muted">{{ c.note }}</div>{% endif %}
+            {% else %}<span class="small muted">Month in progress</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Your billing months will show here, with jobs offered, quotes sent and any refund.</p>
+  {% endif %}
+</div>
+{% endblock %}

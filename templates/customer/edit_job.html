@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Edit “{{ job.title }}” — {{ cfg.BRAND }}{% endblock %}
+{% set band_help = {'small': 'Repairs, small installs, a day or two of work', 'medium': 'Renovations, decks, re-roofs, rewires', 'large': 'New builds, extensions, full renovations'} %}
+{% block main %}
+<div class="wrap page narrow">
+  <p class="small"><a href="{{ url_for('customer_job', job_id=job.id) }}">← Back to the job</a></p>
+  <div class="page-head">
+    <div>
+      <h1>Edit this job</h1>
+      <p class="muted">Trades who have it open will be told you’ve made changes.</p>
+    </div>
+  </div>
+  {% if errors %}<p class="notice error" role="alert">Check the highlighted fields below.</p>{% endif %}
+  {% if locked %}<p class="notice">The trade and area can’t change now, because trades have already been offered this job — those decide who sees it. Close this job and post a new one if you need to change them.</p>{% endif %}
+
+  <form method="post" enctype="multipart/form-data" class="form" novalidate>
+    {{ m.csrf() }}
+    <fieldset class="form-step">
+      <legend>The job</legend>
+      <div class="{{ 'has-error' if errors.title }}">
+        <label for="title">Job title</label>
+        <input id="title" name="title" type="text" maxlength="80" value="{{ form.title or '' }}">
+        {{ m.err(errors, 'title') }}
+      </div>
+      <div class="{{ 'has-error' if errors.description }}">
+        <label for="description">Description</label>
+        <textarea id="description" name="description">{{ form.description or '' }}</textarea>
+        {{ m.err(errors, 'description') }}
+      </div>
+      <div class="{{ 'has-error' if errors.timing }}">
+        <span class="lbl" id="timing-lbl">When do you want it done?</span>
+        <div class="choices" role="radiogroup" aria-labelledby="timing-lbl">
+          {% for key, label in cfg.TIMING.items() %}
+          <label class="choice"><input type="radio" name="timing" value="{{ key }}" {{ 'checked' if form.timing == key }}><span>{{ label }}</span></label>
+          {% endfor %}
+        </div>
+        {{ m.err(errors, 'timing') }}
+      </div>
+      {% if not locked %}
+      <div class="{{ 'has-error' if errors.value_band }}">
+        <span class="lbl" id="band-lbl">Rough budget</span>
+        <div class="choices" role="radiogroup" aria-labelledby="band-lbl">
+          {% for key, b in bands.items() %}
+          <label class="choice"><input type="radio" name="value_band" value="{{ key }}" {{ 'checked' if form.value_band == key }}><span>{{ b.label }}<small>{{ band_help[key] }}</small></span></label>
+          {% endfor %}
+        </div>
+        {{ m.err(errors, 'value_band') }}
+      </div>
+      {% endif %}
+    </fieldset>
+
+    <fieldset class="form-step">
+      <legend>Where</legend>
+      <div class="row">
+        <div class="{{ 'has-error' if errors.suburb }}">
+          <label for="suburb">Suburb <span class="hint">Trades see this.</span></label>
+          <input id="suburb" name="suburb" type="text" value="{{ form.suburb or '' }}">
+          {{ m.err(errors, 'suburb') }}
+        </div>
+        <div>
+          <label for="address">Street address <span class="hint">Only shared with trades you choose.</span></label>
+          <input id="address" name="address" type="text" value="{{ form.address or '' }}">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="form-step">
+      <legend>Photos</legend>
+      {% if photos %}
+      <div class="photos">
+        {% for p in photos %}
+        <div>
+          <img src="{{ url_for('upload', name=p.filename) }}" alt="Job photo {{ loop.index }}" loading="lazy">
+          <button form="delete-{{ p.id }}" class="btn btn-quiet btn-sm" type="submit" style="width:100%;margin-top:6px">Remove</button>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <div class="{{ 'has-error' if errors.photos }}">
+        <label for="photos">Add photos <span class="hint">Up to 6 in total.</span></label>
+        <input id="photos" name="photos" type="file" accept="image/*" multiple>
+        {{ m.err(errors, 'photos') }}
+      </div>
+    </fieldset>
+
+    <div class="form-foot">
+      <a class="small" href="{{ url_for('customer_job', job_id=job.id) }}">Cancel</a>
+      <button class="btn" type="submit">Save changes</button>
+    </div>
+  </form>
+
+  {% for p in photos %}
+  <form id="delete-{{ p.id }}" method="post" action="{{ url_for('delete_photo', job_id=job.id, photo_id=p.id) }}" data-confirm="Remove this photo?">{{ m.csrf() }}</form>
+  {% endfor %}
+</div>
+{% endblock %}

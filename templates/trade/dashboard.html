@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Jobs — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>{{ t.business_name }}</h1>
+      <p class="muted">{% if subscribed %}{{ tiers[t.tier].name }} plan · {{ tiers[t.tier].covers }}{% else %}No active plan{% endif %}</p>
+    </div>
+    <a class="btn btn-quiet" href="{{ url_for('pro_profile', trade_id=t.user_id) }}">View your public profile</a>
+  </div>
+
+  {% if not subscribed %}
+  <div class="notice warn">
+    <p><b>Pick a plan to start getting jobs.</b> Plans start at $30 a month, and if you quote on 5 jobs in a month without winning one, that month is refunded.</p>
+    <p><a class="btn btn-sm" href="{{ url_for('trade_plan') }}">Choose a plan</a></p>
+  </div>
+  {% endif %}
+
+  <div class="two">
+    <div>
+      <div class="section-title" style="margin-top:0"><h2>Waiting on you</h2><span class="label">{{ leads|length }} job{{ 's' if leads|length != 1 }}</span></div>
+      {% if leads %}
+      <div class="jobs">
+        {% for o in leads %}
+        <a class="job-card" href="{{ url_for('trade_job', job_id=o.job_id) }}">
+          {{ m.stamp({'id': o.job_id, 'area_name': o.area_name, 'value_band': o.value_band, 'quote_count': o.quote_count, 'category_name': o.category_name, 'status': 'open'}) }}
+          <div>
+            <h3>{{ o.title }}</h3>
+            <div class="job-meta"><span>{{ o.suburb }}</span><span>{{ cfg.TIMING.get(o.timing, '') }}</span>{% if not o.seen_at %}<span class="pill open">New</span>{% endif %}</div>
+          </div>
+          <div class="job-side">
+            {{ m.countdown(o.expires_at) }}
+            <span class="small muted">{{ cfg.MAX_QUOTES - o.quote_count }} of {{ cfg.MAX_QUOTES }} quote slots left</span>
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty">
+        <h3>No jobs waiting right now</h3>
+        <p style="margin:0">{% if t.paused %}New jobs are paused. Turn them back on to be offered work.{% elif subscribed %}We’ll let you know the moment a matching job comes up. Jobs are shared by rotation, so your turn comes round.{% else %}Choose a plan and matching jobs will start arriving.{% endif %}</p>
+      </div>
+      {% endif %}
+
+      <div class="section-title"><h2>Your quotes</h2></div>
+      {% if quoted %}
+      <div class="card table-wrap" style="padding:6px 10px">
+        <table>
+          <thead><tr><th>Job</th><th>Your price</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            {% for q in quoted %}
+            <tr>
+              <td><a href="{{ url_for('trade_job', job_id=q.job_id) }}">{{ q.title }}</a><div class="small muted">{{ q.suburb }} · sent {{ q.created_at|day }}</div></td>
+              <td class="num">{{ q|price }}</td>
+              <td>{{ m.status_pill(q.status) }}</td>
+              <td>{% if q.unread %}<a class="small" href="{{ url_for('thread', job_id=q.job_id, trade_id=t.user_id) }}">{{ q.unread }} new message{{ 's' if q.unread > 1 }}</a>{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="muted">Quotes you send appear here, with where each one is up to.</p>
+      {% endif %}
+
+      {% if missed %}
+      <div class="section-title"><h2>Missed</h2></div>
+      <div class="card table-wrap" style="padding:6px 10px">
+        <table>
+          <tbody>
+            {% for o in missed %}
+            <tr><td>{{ o.title }}</td><td class="small muted">{{ {'expired': 'Your 24 hours ran out', 'closed': 'Filled up or closed before you quoted', 'declined': 'You passed'}[o.status] }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+
+    <aside class="stack">
+      {% if progress %}
+      <div class="card">
+        <h3 style="margin-bottom:2px">This month</h3>
+        <p class="small muted" style="margin:0">{{ progress.payment.period_start|day }} – {{ progress.payment.period_end|day }}</p>
+        <div class="stat-row">
+          <div><b>{{ progress.offers }}</b><span>jobs offered</span></div>
+          <div><b>{{ progress.quotes }}</b><span>quotes sent</span></div>
+          <div><b>{{ progress.won }}</b><span>won</span></div>
+        </div>
+        {% if progress.won %}
+        <p class="small" style="margin:0">You’ve paid ${{ '%.2f'|format(progress.payment.amount_cents / 100) }} this month and won {{ progress.won }} job{{ 's' if progress.won > 1 }} — ${{ '%.2f'|format(progress.payment.amount_cents / 100 / progress.won) }} per job won.</p>
+        {% elif cfg.FREE_PILOT %}
+        <p class="small muted" style="margin:0">You’re on the free pilot — nothing to pay, so there’s nothing to refund. Quote on whatever suits you.</p>
+        {% else %}
+        <span class="lbl" style="margin:4px 0 0">No-job guarantee</span>
+        {% set pct = [100, progress.quotes * 100 // progress.target]|min %}
+        <div class="progress{{ ' done' if progress.qualified }}"><i style="width:{{ pct }}%"></i></div>
+        <p class="small muted" style="margin:0">{% if progress.qualified %}You’ve sent {{ progress.target }} quotes. If you don’t win a job this month, it’s refunded.{% else %}{{ progress.quotes }} of {{ progress.target }} quotes. Send {{ progress.target - progress.quotes }} more and, if you don’t win a job, this month is refunded.{% endif %}</p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {% if fair %}
+      <div class="card">
+        <h3>Your fair share</h3>
+        <p class="small" style="margin:0">In the last 30 days you were offered <b>{{ fair.mine }}</b> job{{ 's' if fair.mine != 1 }}.{% if fair.peer_avg is not none %} The {{ fair.peers }} other trade{{ 's' if fair.peers != 1 }} on your plan who share your trade and an area averaged <b>{{ '%.1f'|format(fair.peer_avg) }}</b>.{% else %} No other trades on your plan share your trade and area yet.{% endif %}</p>
+      </div>
+      {% endif %}
+
+      <div class="card" id="availability">
+        <h3>Availability</h3>
+        {% if t.paused %}
+        <p class="small">New jobs are paused{% if t.paused_until %} until {{ t.paused_until|day }}{% endif %}.</p>
+        <form method="post" action="{{ url_for('trade_availability') }}">{{ m.csrf() }}<input type="hidden" name="choice" value="on"><button class="btn btn-sm" type="submit">Turn new jobs on</button></form>
+        {% else %}
+        <p class="small">You’re getting new jobs. Flat out? Pause them — when you’re back, you’ll be near the front of the rotation.</p>
+        <form method="post" action="{{ url_for('trade_availability') }}" class="actions">
+          {{ m.csrf() }}
+          <select name="choice" aria-label="How long to pause for" style="width:auto">
+            <option value="1w">Pause for 1 week</option><option value="2w">Pause for 2 weeks</option>
+            <option value="4w">Pause for 4 weeks</option><option value="indef">Pause until I turn them on</option>
+          </select>
+          <button class="btn btn-quiet btn-sm" type="submit">Pause</button>
+        </form>
+        <p class="small muted" style="margin:8px 0 0">Pausing means you need the full {{ cfg.GUARANTEE_MIN_QUOTES }} quotes for this month’s guarantee.</p>
+        {% endif %}
+      </div>
+
+      <div class="card">
+        <h3>Reviews</h3>
+        <p class="small" style="margin:0">{{ m.stars(rating) }}</p>
+        <p class="small muted" style="margin:6px 0 0">Reviews show on your profile and quotes. They never affect which jobs you’re offered.</p>
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Pricing for trades — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<section class="band" style="padding-top:48px">
+  <div class="wrap">
+    <div class="band-head">
+      <h1 style="font-size:clamp(32px,4.4vw,52px)">One flat price. Pick the size of job you want.</h1>
+      <p>No tokens, no lead fees, no contract. Every plan includes all the jobs below it.</p>
+    </div>
+    {% if cfg.FREE_PILOT %}
+    <p class="notice ok" style="max-width:760px"><b>Free while we get going.</b> Pick the size of job you want to see and you’ll start getting jobs — no card needed. The prices below are what we’ll charge later, and we’ll email you well before that starts.</p>
+    {% endif %}
+    <div class="tiers">
+      {% for key in cfg.TIER_ORDER %}{% set t = tiers[key] %}
+      <div class="tier">
+        <p class="label">{{ t.name }}</p>
+        <div class="tier-price">${{ t.price }}<small> /month {{ cfg.PRICE_GST_NOTE }}</small></div>
+        <p style="margin:0"><b>{{ t.covers }}.</b></p>
+        <ul>
+          {% if key == 'small' %}<li>Repairs, maintenance and small installs</li>
+          {% elif key == 'medium' %}<li>Renovations, decks, re-roofs, rewires</li><li>Includes every job under $5,000</li>
+          {% else %}<li>New builds, extensions, full renovations</li><li>Includes every job under $50,000</li>{% endif %}
+          <li>Jobs offered by fair rotation</li>
+          <li>No-job guarantee</li>
+        </ul>
+        <a class="btn{% if key != 'medium' %} btn-ghost{% endif %}" href="{{ url_for('signup') }}">Start with {{ t.name }}</a>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="card" style="margin-top:24px">
+      <h3>What each plan covers</h3>
+      {% set pos = {'small': 24, 'medium': 72, 'large': 100} %}
+      <div class="tape" role="img" aria-label="$30 a month covers jobs up to $5,000. $50 covers jobs up to $50,000. $90 covers every job.">
+        <div class="tape-scale"><span style="left:0">$0</span><span style="left:24%">$5k</span><span style="left:72%">$50k</span><span style="left:100%">$50k+</span></div>
+        {% for key in cfg.TIER_ORDER %}{% set t = tiers[key] %}
+        <div class="tape-row">
+          <div class="tape-price">${{ t.price }}<small> /mo</small></div>
+          <div class="tape-track"><div class="tape-fill" style="width:{{ pos[key] }}%">{{ t.name }}</div></div>
+        </div>
+        {% endfor %}
+      </div>
+      <p class="small muted" style="margin:14px 0 0">The customer picks a rough budget when they post, and that decides which plans include the job. You can still quote whatever the work really costs.</p>
+    </div>
+  </div>
+</section>
+
+<section class="band band-paper" id="guarantee">
+  <div class="wrap split" style="align-items:start">
+    <div>
+      <h2>The no-job guarantee</h2>
+      <p class="lede">If you don’t win a job in a billing month, we refund that month.</p>
+      <p class="muted">It’s there so trying {{ cfg.BRAND }} isn’t a gamble. Here’s exactly how it works.</p>
+    </div>
+    <ol class="terms">
+      <li><b>Send at least {{ cfg.GUARANTEE_MIN_QUOTES }} quotes in the month.</b> If we offered you fewer than {{ cfg.GUARANTEE_MIN_QUOTES }} jobs, quote on every job we offered. If we offered you none, you qualify automatically.</li>
+      <li><b>Winning a job</b> means a customer accepted your quote on {{ cfg.BRAND }} during that billing month.</li>
+      <li><b>If you pause new jobs</b> at any point in the month, you need the full {{ cfg.GUARANTEE_MIN_QUOTES }} quotes, however many jobs you were offered.</li>
+      <li><b>Quotes must be genuine.</b> A quote a customer reports as not genuine, and that we agree isn’t, doesn’t count.</li>
+      <li><b>We check every month when it ends</b> and refund the full month to the card you paid with. You’ll see the result on your Plan page.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap narrow">
+    <h2>Plan questions</h2>
+    <div class="faq">
+      <details><summary>Is there a contract?</summary><p>No. Plans are month to month. Cancel online in one click and you keep getting jobs until the end of the month you’ve paid for.</p></details>
+      <details><summary>Can I change plans?</summary><p>Any time, from your Plan page. The change applies straight away.</p></details>
+      <details><summary>How many jobs will I get?</summary><p>That depends on how many jobs are posted in your trade and area. Your dashboard shows how many you were offered next to the average for trades on your plan in your trade and area, so you can see the rotation is fair.</p></details>
+      <details><summary>What if I’m flat out?</summary><p>Pause new jobs for one, two or four weeks from your dashboard. If you let {{ cfg.AUTO_PAUSE_AFTER }} jobs in a row run out without quoting, we pause them for you so customers aren’t left waiting.</p></details>
+      <details><summary>What do I need to join?</summary><p>Your business name, the trades you do, the areas you cover and — if your work needs one — your licence or registration number. NZBN and insurance details help your quotes stand out.</p></details>
+    </div>
+    <div class="actions" style="margin-top:28px"><a class="btn" href="{{ url_for('signup') }}">Join as a trade</a></div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Post a job — {{ cfg.BRAND }}{% endblock %}
+{% set steps = 3 if me else 4 %}
+{% set band_help = {'small': 'Repairs, small installs, a day or two of work', 'medium': 'Renovations, decks, re-roofs, rewires', 'large': 'New builds, extensions, full renovations'} %}
+{% block main %}
+<div class="wrap page narrow">
+  <div class="page-head">
+    <div>
+      <h1>Post a job</h1>
+      <p class="muted">Free. It goes to {{ cfg.TRADES_PER_JOB }} local trades and you’ll get up to {{ cfg.MAX_QUOTES }} quotes.</p>
+    </div>
+  </div>
+  {% if errors %}<p class="notice error" role="alert">Check the {{ errors|length }} highlighted field{{ 's' if errors|length > 1 }} below.</p>{% endif %}
+
+  <form method="post" enctype="multipart/form-data" class="form" novalidate>
+    {{ m.csrf() }}
+
+    <fieldset class="form-step">
+      <legend><span class="step-no">1 / {{ steps }}</span>What needs doing?</legend>
+      <div class="{{ 'has-error' if errors.category }}">
+        <label for="category">Type of trade</label>
+        <select id="category" name="category">
+          <option value="">Choose one</option>
+          {% for c in categories %}<option value="{{ c.slug }}" {{ 'selected' if form.get('category') == c.slug }}>{{ c.name }}</option>{% endfor %}
+        </select>
+        {{ m.err(errors, 'category') }}
+      </div>
+      <div class="{{ 'has-error' if errors.title }}">
+        <label for="title">Job title <span class="hint">For example “Replace rotten deck boards” or “Rewire kitchen for an induction hob”.</span></label>
+        <input id="title" name="title" type="text" maxlength="80" value="{{ form.get('title', '') }}">
+        {{ m.err(errors, 'title') }}
+      </div>
+      <div class="{{ 'has-error' if errors.description }}">
+        <label for="description">Describe the job <span class="hint">What needs doing, sizes or quantities, materials you’ve chosen, access, and anything you’ve already tried.</span></label>
+        <textarea id="description" name="description">{{ form.get('description', '') }}</textarea>
+        {{ m.err(errors, 'description') }}
+      </div>
+      <div class="{{ 'has-error' if errors.photos }}">
+        <label for="photos">Photos <span class="hint">Optional, up to 6. Photos help trades quote without a site visit.</span></label>
+        <input id="photos" name="photos" type="file" accept="image/*" multiple>
+        {{ m.err(errors, 'photos') }}
+      </div>
+    </fieldset>
+
+    <fieldset class="form-step">
+      <legend><span class="step-no">2 / {{ steps }}</span>Budget and timing</legend>
+      <div class="{{ 'has-error' if errors.value_band }}">
+        <span class="lbl" id="band-lbl">Rough budget <span class="hint">Your best guess. It decides which trades’ plans include the job — trades still quote what it really costs.</span></span>
+        <div class="choices" role="radiogroup" aria-labelledby="band-lbl">
+          {% for key, b in bands.items() %}
+          <label class="choice"><input type="radio" name="value_band" value="{{ key }}" {{ 'checked' if form.get('value_band') == key }}><span>{{ b.label }}<small>{{ band_help[key] }}</small></span></label>
+          {% endfor %}
+        </div>
+        {{ m.err(errors, 'value_band') }}
+      </div>
+      <div class="{{ 'has-error' if errors.timing }}">
+        <span class="lbl" id="timing-lbl">When do you want it done?</span>
+        <div class="choices" role="radiogroup" aria-labelledby="timing-lbl">
+          {% for key, label in cfg.TIMING.items() %}
+          <label class="choice"><input type="radio" name="timing" value="{{ key }}" {{ 'checked' if form.get('timing') == key }}><span>{{ label }}</span></label>
+          {% endfor %}
+        </div>
+        {{ m.err(errors, 'timing') }}
+      </div>
+    </fieldset>
+
+    <fieldset class="form-step">
+      <legend><span class="step-no">3 / {{ steps }}</span>Where is it?</legend>
+      <div class="row">
+        <div class="{{ 'has-error' if errors.area }}">
+          <label for="area">Area</label>
+          <select id="area" name="area">
+            <option value="">Choose your area</option>
+            {% for region, areas in regions.items() %}
+            <optgroup label="{{ region }}">{% for a in areas %}<option value="{{ a.slug }}" {{ 'selected' if form.get('area') == a.slug }}>{{ a.name }}</option>{% endfor %}</optgroup>
+            {% endfor %}
+          </select>
+          {{ m.err(errors, 'area') }}
+        </div>
+        <div class="{{ 'has-error' if errors.suburb }}">
+          <label for="suburb">Suburb <span class="hint">Trades see this.</span></label>
+          <input id="suburb" name="suburb" type="text" autocomplete="address-level2" value="{{ form.get('suburb', '') }}">
+          {{ m.err(errors, 'suburb') }}
+        </div>
+      </div>
+      <div>
+        <label for="address">Street address <span class="hint">Optional. Only shared with trades you choose.</span></label>
+        <input id="address" name="address" type="text" autocomplete="street-address" value="{{ form.get('address', '') }}">
+      </div>
+      <div class="{{ 'has-error' if errors.property_type }}">
+        <label for="property_type">Type of property</label>
+        <select id="property_type" name="property_type">
+          <option value="">Choose one</option>
+          {% for key, label in cfg.PROPERTY_TYPES.items() %}<option value="{{ key }}" {{ 'selected' if form.get('property_type') == key }}>{{ label }}</option>{% endfor %}
+        </select>
+        {{ m.err(errors, 'property_type') }}
+      </div>
+    </fieldset>
+
+    {% if not me %}
+    <fieldset class="form-step">
+      <legend><span class="step-no">4 / 4</span>Your details</legend>
+      <p class="small muted" style="margin:0">So you can see and compare your quotes. Already have an account? <a href="{{ url_for('login', next=url_for('post_job')) }}">Log in first</a>.</p>
+      <div class="row">
+        <div class="{{ 'has-error' if errors.name }}">
+          <label for="name">Your name</label>
+          <input id="name" name="name" type="text" autocomplete="name" value="{{ form.get('name', '') }}">
+          {{ m.err(errors, 'name') }}
+        </div>
+        <div class="{{ 'has-error' if errors.phone }}">
+          <label for="phone">Phone</label>
+          <input id="phone" name="phone" type="tel" autocomplete="tel" value="{{ form.get('phone', '') }}">
+          {{ m.err(errors, 'phone') }}
+        </div>
+      </div>
+      <div class="row">
+        <div class="{{ 'has-error' if errors.email }}">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" value="{{ form.get('email', '') }}">
+          {{ m.err(errors, 'email') }}
+        </div>
+        <div class="{{ 'has-error' if errors.password }}">
+          <label for="password">Create a password <span class="hint">At least 8 characters.</span></label>
+          <input id="password" name="password" type="password" autocomplete="new-password">
+          {{ m.err(errors, 'password') }}
+        </div>
+      </div>
+    </fieldset>
+    {% endif %}
+
+    <div class="form-foot">
+      <p class="privacy">Trades see the job details and your suburb. Your name, phone, email and address are only shared with trades you choose.</p>
+      <button class="btn" type="submit">Post job — it’s free</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Your profile — {{ cfg.BRAND }}{% endblock %}
+{% macro checked(when) %}{% if when %}<span class="hint" style="color:var(--pine)">✓ Checked {{ when|day }}</span>{% endif %}{% endmacro %}
+{% block main %}
+<div class="wrap page narrow">
+  <div class="page-head">
+    <div>
+      <h1>Your profile</h1>
+      <p class="muted">Your trades and areas decide which jobs you’re offered. Customers see the rest.</p>
+    </div>
+  </div>
+  {% if errors %}<p class="notice error" role="alert">Check the highlighted fields below.</p>{% endif %}
+
+  <form method="post" class="form" novalidate>
+    {{ m.csrf() }}
+    <fieldset class="form-step">
+      <legend>Your business</legend>
+      <div class="row">
+        <div class="{{ 'has-error' if errors.business_name }}">
+          <label for="business_name">Business or trading name</label>
+          <input id="business_name" name="business_name" type="text" value="{{ form.business_name or '' }}">
+          {{ m.err(errors, 'business_name') }}
+        </div>
+        <div class="{{ 'has-error' if errors.years_trading }}">
+          <label for="years_trading">Years in business</label>
+          <input id="years_trading" name="years_trading" type="number" min="0" max="80" value="{{ form.years_trading if form.years_trading is not none else '' }}">
+          {{ m.err(errors, 'years_trading') }}
+        </div>
+      </div>
+      <div>
+        <label for="about">About your work <span class="hint">Specialties, crew size, how you like to work.</span></label>
+        <textarea id="about" name="about">{{ form.about or '' }}</textarea>
+      </div>
+      <div>
+        <label for="workmanship_guarantee">Workmanship guarantee <span class="hint">For example “2 years on all workmanship”. Pre-fills your quotes.</span></label>
+        <input id="workmanship_guarantee" name="workmanship_guarantee" type="text" value="{{ form.workmanship_guarantee or '' }}">
+      </div>
+    </fieldset>
+
+    <fieldset class="form-step">
+      <legend>Trades you do</legend>
+      <p class="hint" style="margin:0">Up to 5. You’ll be offered jobs in these.</p>
+      <div class="checks">
+        {% for c in categories %}<label class="check"><input type="checkbox" name="categories" value="{{ c.id }}" {{ 'checked' if c.id in chosen_c }}> {{ c.name }}</label>{% endfor %}
+      </div>
+      {{ m.err(errors, 'categories') }}
+    </fieldset>
+
+    <fieldset class="form-step">
+      <legend>Areas you cover</legend>
+      <div>
+        {% for region, areas in regions.items() %}
+        <div class="region">
+          <h4>{{ region }}</h4>
+          <div class="checks">{% for a in areas %}<label class="check"><input type="checkbox" name="areas" value="{{ a.id }}" {{ 'checked' if a.id in chosen_a }}> {{ a.name }}</label>{% endfor %}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {{ m.err(errors, 'areas') }}
+    </fieldset>
+
+    <fieldset class="form-step">
+      <legend>Checks</legend>
+      <p class="hint" style="margin:0">We check these against the public registers and your certificate. Each shows as a badge on your quotes once checked. If you change a detail, we check it again.</p>
+      <div class="row">
+        <div class="{{ 'has-error' if errors.licence_type }}">
+          <label for="licence_type">Licence or registration</label>
+          <select id="licence_type" name="licence_type">
+            {% for key, lic in licences.items() %}<option value="{{ key }}" {{ 'selected' if (form.licence_type or 'none') == key }}>{{ lic[0] }}</option>{% endfor %}
+          </select>
+          {{ m.err(errors, 'licence_type') }}
+        </div>
+        <div class="{{ 'has-error' if errors.licence_number }}">
+          <label for="licence_number">Licence or registration number {{ checked(t.licence_checked_at) }}</label>
+          <input id="licence_number" name="licence_number" type="text" value="{{ form.licence_number or '' }}">
+          {{ m.err(errors, 'licence_number') }}
+        </div>
+      </div>
+      <div class="{{ 'has-error' if errors.nzbn }}">
+        <label for="nzbn">NZBN <span class="hint">13 digits, starting with 94.</span> {{ checked(t.nzbn_checked_at) }}</label>
+        <input id="nzbn" name="nzbn" type="text" inputmode="numeric" value="{{ form.nzbn or '' }}">
+        {{ m.err(errors, 'nzbn') }}
+      </div>
+      <div class="row">
+        <div>
+          <label for="insurance_insurer">Public liability insurer {{ checked(t.insurance_checked_at) }}</label>
+          <input id="insurance_insurer" name="insurance_insurer" type="text" value="{{ form.insurance_insurer or '' }}">
+        </div>
+        <div class="{{ 'has-error' if errors.insurance_expiry }}">
+          <label for="insurance_expiry">Policy expiry</label>
+          <input id="insurance_expiry" name="insurance_expiry" type="date" value="{{ form.insurance_expiry or '' }}">
+          {{ m.err(errors, 'insurance_expiry') }}
+        </div>
+      </div>
+    </fieldset>
+
+    <div class="form-foot"><span></span><button class="btn" type="submit">Save profile</button></div>
+  </form>
+</div>
+{% endblock %}

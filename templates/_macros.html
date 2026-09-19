@@ -1,0 +1,61 @@
+{% macro csrf() %}<input type="hidden" name="_csrf" value="{{ csrf_token() }}">{% endmacro %}
+
+{# The job stamp: area, value band, quotes in, job number and trade — like the
+   grade stamp on a length of framing timber. #}
+{% macro stamp(job, big=false) %}
+{%- set state = 'is-full' if job.status == 'full' else ('is-closed' if job.status not in ('open', 'full') else '') -%}
+<div class="stamp{% if big %} stamp-big{% endif %} {{ state }}" role="img"
+     aria-label="Job {{ job.id }}, {{ job.category_name }} in {{ job.area_name }}, {{ bands[job.value_band].label }}, {{ job.quote_count }} of {{ cfg.MAX_QUOTES }} quotes">
+  <span class="stamp-top">{{ job.area_name }}</span>
+  <span class="stamp-mid"><b>{{ bands[job.value_band].short }}</b><i>{{ job.quote_count }}/{{ cfg.MAX_QUOTES }}</i></span>
+  <span class="stamp-bot">Job {{ '%04d'|format(job.id) }} · {{ job.category_name }}</span>
+</div>
+{% endmacro %}
+
+{% macro meter(n) %}
+<span class="meter" role="img" aria-label="{{ n }} of {{ cfg.MAX_QUOTES }} quotes">{% for i in range(cfg.MAX_QUOTES) %}<i class="{{ 'on' if i < n }}"></i>{% endfor %}</span>
+{% endmacro %}
+
+{% macro countdown(expires_at, prefix='', suffix=' left') %}
+{%- set s = expires_at|secs_left -%}
+<span class="countdown{% if 0 < s < 14400 %} urgent{% endif %}{% if s == 0 %} done{% endif %}" data-countdown data-seconds="{{ s }}" data-prefix="{{ prefix }}" data-suffix="{{ suffix }}">
+  {%- if s == 0 %}Time’s up{% elif s >= 172800 %}{{ prefix }}{{ s // 86400 }}d {{ (s % 86400) // 3600 }}h{{ suffix }}{% elif s >= 3600 %}{{ prefix }}{{ s // 3600 }}h {{ '%02d'|format((s % 3600) // 60) }}m{{ suffix }}{% else %}{{ prefix }}{{ s // 60 }}m{{ suffix }}{% endif -%}
+</span>
+{%- endmacro %}
+
+{% macro status_pill(status) %}
+{%- set words = {'open': 'Taking quotes', 'full': 'Quotes full', 'hired': 'Hired', 'closed': 'Closed', 'expired': 'Closed',
+                 'sent': 'Sent', 'shortlisted': 'Contact shared', 'accepted': 'Won', 'declined': 'Not chosen',
+                 'pending': 'Refund due', 'approved': 'Refund due', 'refunded': 'Refunded', 'denied': 'Declined',
+                 'not_eligible': 'Didn’t qualify', 'active': 'Waiting on you', 'quoted': 'Quoted',
+                 'expired_offer': 'Ran out of time'} -%}
+<span class="pill {{ status }}">{{ words.get(status, status|replace('_', ' ')) }}</span>
+{% endmacro %}
+
+{# Badges only ever show what we've checked, with when, so the claim is true. #}
+{% macro badges(t, show_waiting=false) %}
+<ul class="badges">
+  {% if t.licence_type and t.licence_type != 'none' %}
+    {% if t.licence_checked_at %}
+      <li class="badge" title="We checked licence {{ t.licence_number }} on the public register on {{ t.licence_checked_at|day }}.">✓ {{ licences[t.licence_type][0] }}</li>
+    {% elif show_waiting %}<li class="badge wait">Licence not yet checked</li>{% endif %}
+  {% endif %}
+  {% if t.nzbn_checked_at %}<li class="badge" title="NZBN {{ t.nzbn }} checked on the NZ Business Number register on {{ t.nzbn_checked_at|day }}.">✓ NZBN checked</li>
+  {% elif t.nzbn and show_waiting %}<li class="badge wait">NZBN not yet checked</li>{% endif %}
+  {% if t.insurance_checked_at %}<li class="badge" title="We saw a public liability certificate from {{ t.insurance_insurer }}{% if t.insurance_expiry %}, valid to {{ t.insurance_expiry|day }}{% endif %}. Checked {{ t.insurance_checked_at|day }}.">✓ Insured{% if t.insurance_expiry %} to {{ t.insurance_expiry|day }}{% endif %}</li>
+  {% elif t.insurance_insurer and show_waiting %}<li class="badge wait">Insurance not yet checked</li>{% endif %}
+</ul>
+{% endmacro %}
+
+{# Stars only appear from 3 reviews, so one early review can't make or break a trade. #}
+{% macro stars(rating) %}
+{%- if rating.n and rating.n >= 3 -%}
+<span class="stars"><b>{{ '%.1f'|format(rating.avg) }}</b> ★ from {{ rating.n }} reviews</span>
+{%- elif rating.n -%}
+<span class="stars new">{{ rating.n }} review{{ 's' if rating.n > 1 }} so far</span>
+{%- else -%}
+<span class="stars new">New to {{ cfg.BRAND }}</span>
+{%- endif -%}
+{% endmacro %}
+
+{% macro err(errors, name) %}{% if errors and errors.get(name) %}<p class="field-error" id="{{ name }}-err">{{ errors[name] }}</p>{% endif %}{% endmacro %}

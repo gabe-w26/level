@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Review {{ trade.business_name }} — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page narrow">
+  <p class="small"><a href="{{ url_for('customer_job', job_id=job.id) }}">← Back to the job</a></p>
+  <h1 style="font-size:36px">Review {{ trade.business_name }}</h1>
+  <p class="muted">For “{{ job.title }}”. Only customers who hired a trade here can review them.</p>
+  <form method="post" class="form card">
+    {{ m.csrf() }}
+    {% for key, label in parts %}
+    <div class="{{ 'has-error' if errors.get(key) }}">
+      <span class="lbl" id="{{ key }}-lbl">{{ label }}</span>
+      <div class="choices" role="radiogroup" aria-labelledby="{{ key }}-lbl" style="grid-template-columns:repeat(5,minmax(0,1fr))">
+        {% for n in range(1, 6) %}
+        <label class="choice"><input type="radio" name="{{ key }}" value="{{ n }}" {{ 'checked' if request.form.get(key) == n|string }}><span style="text-align:center">{{ n }} ★</span></label>
+        {% endfor %}
+      </div>
+      {{ m.err(errors, key) }}
+    </div>
+    {% endfor %}
+    <div>
+      <label for="body">What should other people know? <span class="hint">Optional.</span></label>
+      <textarea id="body" name="body">{{ request.form.get('body', '') }}</textarea>
+    </div>
+    <div><button class="btn" type="submit">Post review</button></div>
+  </form>
+</div>
+{% endblock %}

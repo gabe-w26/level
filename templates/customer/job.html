@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}{{ job.title }} — {{ cfg.BRAND }}{% endblock %}
+{% set hired = quotes|selectattr('status', 'equalto', 'accepted')|first %}
+{% block main %}
+<div class="wrap page">
+  <p class="small"><a href="{{ url_for('customer_home') }}">← My jobs</a></p>
+  <div class="page-head">
+    <div>
+      <h1>{{ job.title }}</h1>
+      <p class="muted">{{ job.category_name }} · {{ job.suburb }}, {{ job.area_name }} · posted {{ job.created_at|day }}</p>
+    </div>
+    {{ m.stamp(job, big=true) }}
+  </div>
+
+  {% if job.status == 'open' %}
+  <div class="tracker">
+    <div><b>{{ stats.total }}</b><span>trades offered so far</span></div>
+    <div><b>{{ stats.active }}</b><span>deciding now</span></div>
+    <div><b>{{ job.quote_count }}/{{ cfg.MAX_QUOTES }}</b><span>quotes in</span></div>
+    <div><b>{{ stats.passed }}</b><span>passed or ran out of time</span></div>
+  </div>
+  <p class="small muted" style="margin-top:10px">
+    {% if stats.active %}Trades who haven’t quoted when their 24 hours are up are swapped for new ones. Next swap in {{ m.countdown(stats.next_expiry, suffix='') }}.
+    {% elif stats.total == 0 %}No trades cover this job yet. We’ll offer it the moment a matching trade joins.
+    {% else %}Every matching trade has seen this job. New trades are offered it as they join.{% endif %}
+    Taking quotes until {{ job.closes_at|day }}.
+  </p>
+  <p class="small" style="margin-top:6px"><a href="{{ url_for('edit_job', job_id=job.id) }}">Edit this job</a></p>
+  {% elif job.status == 'full' %}
+  <p class="notice ok">You have all {{ cfg.MAX_QUOTES }} quotes and the job is closed to other trades. Compare them below, then accept one or close the job. You can still <a href="{{ url_for('edit_job', job_id=job.id) }}">edit the details</a>.</p>
+  {% elif job.status == 'hired' %}
+  <p class="notice ok">You hired {{ hired.business_name if hired else 'a trade' }}.{% if not reviewed %} <a href="{{ url_for('review', job_id=job.id) }}">Review the work</a> once it’s done.{% else %} Thanks for your review.{% endif %}</p>
+  {% else %}
+  <div class="notice">
+    <p>This job is closed{% if job.close_reason == 'time' %} after {{ cfg.JOB_OPEN_DAYS }} days{% endif %}.</p>
+    <form method="post" action="{{ url_for('repost_job', job_id=job.id) }}">{{ m.csrf() }}<button class="btn btn-sm" type="submit">Post this job again</button></form>
+  </div>
+  {% endif %}
+
+  <div class="two" style="margin-top:28px">
+    <div>
+      <div class="section-title" style="margin-top:0"><h2>Quotes</h2><span class="label">In the order they arrived</span></div>
+      {% if not quotes %}
+      <div class="empty"><h3>No quotes yet</h3><p style="margin:0">Quotes usually start arriving within a few hours. We’ll let you know as each one comes in.</p></div>
+      {% endif %}
+
+      {% for q in quotes %}
+      <article class="quote {{ q.status }}" id="q{{ q.id }}">
+        <div class="quote-head">
+          <div>
+            <span class="quote-order">Quote {{ loop.index }} · {{ q.created_at|when }}</span>
+            <h3><a href="{{ url_for('pro_profile', trade_id=q.trade_id) }}">{{ q.business_name }}</a></h3>
+            {{ m.stars(q.rating) }}
+            {{ m.badges(q) }}
+          </div>
+          <div class="quote-price">{{ q|price }}{% if q.price_type != 'site_visit' %}<small>{{ 'incl. GST' if q.gst_included else 'plus GST' }}</small>{% endif %}</div>
+        </div>
+        <div class="quote-body">
+          <p class="desc" style="margin:0">{{ q.message }}</p>
+          <dl class="kv">
+            {% if q.inclusions %}<dt>Includes</dt><dd>{{ q.inclusions }}</dd>{% endif %}
+            {% if q.exclusions %}<dt>Doesn’t include</dt><dd>{{ q.exclusions }}</dd>{% endif %}
+            {% if q.warranty %}<dt>Warranty</dt><dd>{{ q.warranty }}</dd>{% endif %}
+            {% if q.available_from %}<dt>Can start</dt><dd>{{ q.available_from }}</dd>{% endif %}
+            {% if q.duration %}<dt>Takes about</dt><dd>{{ q.duration }}</dd>{% endif %}
+          </dl>
+          {% if q.needs_act %}
+          <div class="notice act" style="margin:14px 0 0">
+            <p><b>This quote is {{ cfg.CONTRACT_THRESHOLD|money }} or more.</b> For residential work this size, the law requires a written contract, a disclosure statement and MBIE’s checklist before work starts. {{ q.business_name }} has confirmed they’ll provide them.</p>
+            <p><a href="https://www.building.govt.nz/projects-and-consents/why-contracts-are-valuable/contracts-for-your-building-project" target="_blank" rel="noopener">What the contract must include (building.govt.nz)</a></p>
+          </div>
+          {% endif %}
+          {% if q.status in ('shortlisted', 'accepted') %}
+          <dl class="kv contact">
+            <dt>Contact</dt><dd>{{ q.contact_name }}</dd>
+            <dt>Phone</dt><dd><a href="tel:{{ q.phone }}">{{ q.phone }}</a></dd>
+            <dt>Email</dt><dd><a href="mailto:{{ q.email }}">{{ q.email }}</a></dd>
+          </dl>
+          {% endif %}
+        </div>
+        <div class="quote-actions">
+          {{ m.status_pill(q.status) }}
+          <a class="btn btn-quiet btn-sm" href="{{ url_for('thread', job_id=job.id, trade_id=q.trade_id) }}">Messages{% if q.msg_count %} ({{ q.msg_count }}){% endif %}</a>
+          {% if job.status in ('open', 'full') and q.status in ('sent', 'shortlisted') %}
+            {% if q.status == 'sent' %}
+            <form method="post" action="{{ url_for('quote_action', job_id=job.id, quote_id=q.id, action='share') }}">{{ m.csrf() }}<button class="btn btn-quiet btn-sm" type="submit">Share my contact details</button></form>
+            {% endif %}
+            <form method="post" action="{{ url_for('quote_action', job_id=job.id, quote_id=q.id, action='accept') }}" class="actions" data-confirm="Accept {{ q.business_name }}’s quote? The other trades will be told you’ve gone with someone else.">
+              {{ m.csrf() }}
+              {% if q.needs_act %}<label class="check small"><input type="checkbox" name="act_ack" value="1" required> I’ll get the contract, disclosure statement and checklist before work starts</label>{% endif %}
+              <button class="btn btn-pine btn-sm" type="submit">Accept quote</button>
+            </form>
+            <form method="post" action="{{ url_for('quote_action', job_id=job.id, quote_id=q.id, action='decline') }}" data-confirm="Decline this quote? The trade will be told.">{{ m.csrf() }}<button class="btn btn-quiet btn-sm" type="submit">Decline</button></form>
+          {% endif %}
+          {% if not q.flagged %}
+          <details class="more">
+            <summary>Report</summary>
+            <form method="post" action="{{ url_for('quote_action', job_id=job.id, quote_id=q.id, action='flag') }}" class="report-form">
+              {{ m.csrf() }}
+              <select name="reason" aria-label="Why are you reporting this quote?">
+                <option>Not a genuine quote</option><option>Spam or advertising</option><option>Abusive or inappropriate</option>
+              </select>
+              <button class="btn btn-quiet btn-sm" type="submit">Report quote</button>
+            </form>
+          </details>
+          {% else %}<span class="small muted">Reported</span>{% endif %}
+        </div>
+      </article>
+      {% endfor %}
+
+      {% if quotes|length > 1 %}
+      <div class="section-title"><h2>Side by side</h2></div>
+      <div class="card table-wrap" style="padding:6px 10px">
+        <table class="compare">
+          <thead><tr><th></th>{% for q in quotes %}<th>{{ loop.index }}. {{ q.business_name }}</th>{% endfor %}</tr></thead>
+          <tbody>
+            <tr><th>Price</th>{% for q in quotes %}<td class="num"><b>{{ q|price }}</b>{% if q.price_type != 'site_visit' %} {{ 'incl. GST' if q.gst_included else 'plus GST' }}{% endif %}</td>{% endfor %}</tr>
+            <tr><th>Includes</th>{% for q in quotes %}<td>{{ q.inclusions or '—' }}</td>{% endfor %}</tr>
+            <tr><th>Doesn’t include</th>{% for q in quotes %}<td>{{ q.exclusions or '—' }}</td>{% endfor %}</tr>
+            <tr><th>Warranty</th>{% for q in quotes %}<td>{{ q.warranty or '—' }}</td>{% endfor %}</tr>
+            <tr><th>Can start</th>{% for q in quotes %}<td>{{ q.available_from or '—' }}</td>{% endfor %}</tr>
+            <tr><th>Takes</th>{% for q in quotes %}<td>{{ q.duration or '—' }}</td>{% endfor %}</tr>
+            <tr><th>Licence</th>{% for q in quotes %}<td>{% if q.licence_checked_at %}✓ {{ licences[q.licence_type][0] }}{% elif q.licence_type and q.licence_type != 'none' %}Given, not yet checked{% else %}—{% endif %}</td>{% endfor %}</tr>
+            <tr><th>Insurance</th>{% for q in quotes %}<td>{% if q.insurance_checked_at %}✓ Checked{% elif q.insurance_insurer %}Given, not yet checked{% else %}—{% endif %}</td>{% endfor %}</tr>
+            <tr><th>Reviews</th>{% for q in quotes %}<td>{{ m.stars(q.rating) }}</td>{% endfor %}</tr>
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+
+    <aside class="stack">
+      {% if job.status in ('open', 'full') %}
+      <div class="card">
+        <h3>Close this job</h3>
+        <form method="post" action="{{ url_for('close_job', job_id=job.id) }}" class="form" style="gap:12px" data-confirm="Close this job? Trades still deciding will be told.">
+          {{ m.csrf() }}
+          <fieldset>
+            <legend class="lbl" style="font:700 15px var(--f-body);margin-bottom:8px">What happened?</legend>
+            <div style="display:grid;gap:8px">
+              {% for q in quotes if q.status in ('sent', 'shortlisted') %}
+              <label class="check"><input type="radio" name="outcome" value="{{ q.id }}"> I hired {{ q.business_name }}</label>
+              {% endfor %}
+              <label class="check"><input type="radio" name="outcome" value="elsewhere"> I hired someone else</label>
+              <label class="check"><input type="radio" name="outcome" value="not_going_ahead" checked> I’m not going ahead</label>
+            </div>
+          </fieldset>
+          <div><button class="btn btn-quiet btn-sm" type="submit">Close job</button></div>
+        </form>
+      </div>
+      {% endif %}
+      <div class="card">
+        <h3>Job details</h3>
+        <p class="desc">{{ job.description }}</p>
+        <dl class="kv">
+          <dt>Budget</dt><dd>{{ bands[job.value_band].label }}</dd>
+          <dt>Timing</dt><dd>{{ cfg.TIMING.get(job.timing, '—') }}</dd>
+          <dt>Property</dt><dd>{{ cfg.PROPERTY_TYPES.get(job.property_type, '—') }}</dd>
+          {% if job.address %}<dt>Address</dt><dd>{{ job.address }}<span class="hint">Only shared with trades you choose</span></dd>{% endif %}
+        </dl>
+        {% if photos %}
+        <div class="photos" style="margin-top:14px">
+          {% for p in photos %}<a href="{{ url_for('upload', name=p.filename) }}" target="_blank" rel="noopener"><img src="{{ url_for('upload', name=p.filename) }}" alt="Job photo {{ loop.index }}" loading="lazy"></a>{% endfor %}
+        </div>
+        {% endif %}
+        {% if job.licence_note %}<p class="notice small" style="margin:14px 0 0">{{ job.licence_note }}</p>{% endif %}
+      </div>
+      <div class="card small">
+        <h3>Paying your trade</h3>
+        <p class="muted" style="margin:0">Get the price and scope in writing before work starts, and pay against progress rather than a large deposit upfront.</p>
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}

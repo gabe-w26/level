@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}My jobs — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <h1>My jobs</h1>
+    <a class="btn" href="{{ url_for('post_job') }}">Post a job</a>
+  </div>
+  {% if jobs %}
+  <div class="jobs">
+    {% for j in jobs %}
+    <a class="job-card" href="{{ url_for('customer_job', job_id=j.id) }}">
+      {{ m.stamp(j) }}
+      <div>
+        <h3>{{ j.title }}</h3>
+        <div class="job-meta"><span>{{ j.suburb }}</span><span>Posted {{ j.created_at|day }}</span></div>
+      </div>
+      <div class="job-side">{{ m.status_pill(j.status) }}{{ m.meter(j.quote_count) }}</div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">
+    <h3>No jobs yet</h3>
+    <p>Post your first job and up to {{ cfg.MAX_QUOTES }} quotes will come to you here.</p>
+    <a class="btn" href="{{ url_for('post_job') }}">Post a job</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

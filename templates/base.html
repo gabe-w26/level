@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ cfg.BRAND }} — {{ cfg.TAGLINE }}{% endblock %}</title>
+<meta name="description" content="Post a job free and get up to six quotes from local NZ trades. Trades pay one flat monthly price — no lead fees — and get the month back if they don’t win a job.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Martian+Mono:wdth,wght@75..112.5,400..600&family=Public+Sans:ital,wght@0,400..700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect x='2' y='11' width='36' height='18' rx='5' fill='%23fff' stroke='%2316202B' stroke-width='3'/%3E%3Crect x='11' y='15.5' width='18' height='9' rx='4.5' fill='%23E4EBFB' stroke='%231F4FD1' stroke-width='2'/%3E%3Ccircle cx='20' cy='20' r='2.8' fill='%231F4FD1'/%3E%3C/svg%3E">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+{% set logo %}<svg viewBox="0 0 42 19" aria-hidden="true"><rect x="1.25" y="1.25" width="39.5" height="16.5" rx="4.5" fill="none" stroke="currentColor" stroke-width="2.5"/><rect x="12" y="5.5" width="18" height="8" rx="4" fill="#E4EBFB" stroke="#1F4FD1" stroke-width="1.5"/><circle cx="21" cy="9.5" r="2.4" fill="#1F4FD1"/><path d="M17 5.5v8M25 5.5v8" stroke="#16202B" stroke-width="1.1"/></svg>{% endset %}
+<header class="site-head">
+  <div class="wrap head-row">
+    <a class="brand" href="{{ url_for('index') }}">{{ logo }}{{ cfg.BRAND }}</a>
+    <nav class="nav" aria-label="Main">
+      {% if not me %}
+        <a href="{{ url_for('index') }}#how">How it works</a>
+        <a href="{{ url_for('pricing') }}">For trades</a>
+        <a href="{{ url_for('login') }}">Log in</a>
+        <a class="btn btn-sm" href="{{ url_for('post_job') }}">Post a job</a>
+      {% elif me.role == 'customer' %}
+        <a href="{{ url_for('customer_home') }}">My jobs</a>
+        <a class="btn btn-sm" href="{{ url_for('post_job') }}">Post a job</a>
+      {% elif me.role == 'trade' %}
+        <a href="{{ url_for('trade_home') }}">Jobs</a>
+        <a href="{{ url_for('trade_plan') }}">Plan</a>
+        <a href="{{ url_for('trade_setup') }}">Profile</a>
+      {% else %}
+        <a href="{{ url_for('admin_home') }}">Overview</a>
+        <a href="{{ url_for('admin_inspect') }}">Behind the scenes</a>
+        <a href="{{ url_for('admin_trades') }}">Trades</a>
+        <a href="{{ url_for('admin_claims') }}">Refunds</a>
+        <a href="{{ url_for('admin_reports') }}">Reports</a>
+      {% endif %}
+      {% if me %}
+        <a href="{{ url_for('settings') }}">Settings</a>
+        <a class="bell" href="{{ url_for('notifications') }}" aria-label="Notifications{% if unread %}, {{ unread }} unread{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          {% if unread %}<span class="dot">{{ unread if unread < 100 else '99+' }}</span>{% endif %}
+        </a>
+        <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="linkish" type="submit">Log out</button></form>
+      {% endif %}
+    </nav>
+  </div>
+</header>
+{% with msgs = get_flashed_messages(with_categories=true) %}
+  {% if msgs %}<div class="wrap flashes">{% for cat, m in msgs %}<p class="flash flash-{{ cat }}" role="status">{{ m }}</p>{% endfor %}</div>{% endif %}
+{% endwith %}
+<main id="main">{% block main %}{% endblock %}</main>
+<footer class="site-foot">
+  <div class="wrap foot-row">
+    <div>
+      <div class="foot-brand">{{ cfg.BRAND }}</div>
+      <p>{{ cfg.TAGLINE }}. Made in Aotearoa.</p>
+      <p class="small">Trade prices are shown {{ cfg.PRICE_GST_NOTE }}. Posting a job is always free.</p>
+    </div>
+    <ul>
+      <li><a href="{{ url_for('post_job') }}">Post a job</a></li>
+      <li><a href="{{ url_for('index') }}#how">How it works</a></li>
+      <li><a href="{{ url_for('pricing') }}">Pricing for trades</a></li>
+      <li><a href="{{ url_for('pricing') }}#guarantee">No-job guarantee</a></li>
+    </ul>
+    <ul>
+      <li><a href="{{ url_for('signup') }}">Join as a trade</a></li>
+      <li><a href="{{ url_for('login') }}">Log in</a></li>
+      <li><a href="{{ url_for('terms') }}">Terms of use</a></li>
+      <li><a href="{{ url_for('privacy') }}">Privacy</a></li>
+      <li><a href="mailto:{{ cfg.SUPPORT_EMAIL }}">{{ cfg.SUPPORT_EMAIL }}</a></li>
+    </ul>
+  </div>
+</footer>
+<script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>

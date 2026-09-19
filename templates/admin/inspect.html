@@ -1,0 +1,137 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Behind the scenes — {{ job.title }}{% endblock %}
+{% set states = {'active': 'Deciding', 'quoted': 'Quoted', 'expired': 'Ran out of time', 'declined': 'Passed', 'closed': 'Slot closed'} %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Behind the scenes</h1>
+      <p class="muted">The same job customers and trades see, with every decision the program made, and why.</p>
+    </div>
+    <form method="get" action="{{ url_for('admin_inspect') }}" class="actions">
+      <label class="vh" for="job">Choose a job</label>
+      <select id="job" name="job" style="width:auto;max-width:330px">
+        {% for j in jobs %}<option value="{{ j.id }}" {{ 'selected' if j.id == job.id }}>{{ '%04d'|format(j.id) }} · {{ j.title[:40] }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-quiet btn-sm" type="submit">Show this job</button>
+    </form>
+  </div>
+
+  <div class="card" style="display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:center">
+    <div>
+      <h2 style="margin:0 0 4px">{{ job.title }}</h2>
+      <p class="muted small" style="margin:0">{{ job.category_name }} · {{ job.suburb }}, {{ job.area_name }} · {{ bands[job.value_band].label }} · posted {{ job.created_at|when }}</p>
+      <p class="small" style="margin:10px 0 0">{{ m.status_pill(job.status) }} <a href="{{ url_for('admin_job', job_id=job.id) }}">See the raw data</a></p>
+    </div>
+    {{ m.stamp(job, big=true) }}
+  </div>
+
+  <div class="section-title"><h2>1. Who could get this job</h2><span class="label">engine.py · _candidate_rows()</span></div>
+  <div class="card">
+    <p class="muted small" style="margin:0 0 16px">Every trade on the site is narrowed down by trade, area, plan and availability. Reviews and ratings are never part of this.</p>
+    {% set top = ex.funnel[0][1] or 1 %}
+    <div class="funnel">
+      {% for label, count, note in ex.funnel %}
+      <div class="funnel-row">
+        <span>{{ label }}<small>{{ note }}</small></span>
+        <div class="funnel-bar"><i style="width:{{ (100 * count / top)|round(1) }}%"></i></div>
+        <b>{{ count }}</b>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="small muted" style="margin:16px 0 0">Out of those, {{ cfg.TRADES_PER_JOB }} hold a slot at any one time. The rest wait their turn.</p>
+  </div>
+
+  <div class="section-title"><h2>2. The {{ cfg.TRADES_PER_JOB }} slots</h2><span class="label">{{ ex.live }} live · {{ ex.slots|length }} trades have held one</span></div>
+  <div class="card">
+    <p class="muted small" style="margin:0 0 14px">A slot is live while a trade is still deciding, or has quoted. The moment one frees up, it goes to the next trade in the queue.</p>
+    {% if ex.slots %}
+    <div class="slots">
+      {% for s in ex.slots %}
+      <div class="slot {{ s.status }}">
+        <span class="state">Wave {{ s.wave }} · {{ states.get(s.status, s.status) }}</span>
+        <b>{{ s.business_name }}</b>
+        {% if s.status == 'active' %}<em>{{ m.countdown(s.expires_at) }}</em><em>{{ 'Opened it' if s.seen_at else 'Not opened yet' }}</em>
+        {% elif s.price %}<em>{{ s.price }}</em>
+        {% elif s.resolved_at %}<em>{{ s.resolved_at|ago }}</em>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted" style="margin:0">No trade has been offered this job yet — nobody matched it.</p>
+    {% endif %}
+  </div>
+
+  <div class="section-title"><h2>3. Next in the queue</h2><span class="label">Fair rotation</span></div>
+  <div class="card">
+    <p class="muted small" style="margin:0 0 14px">Order comes from who has been offered the fewest {{ job.category_name|lower }} jobs of this size in the last {{ cfg.ROTATION_LOOKBACK_DAYS }} days, then who has waited longest. Level ties are settled at random, so the order can shuffle between refreshes.</p>
+    {% if ex.queue %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Trade</th><th>Plan</th><th>Jobs like this, last {{ cfg.ROTATION_LOOKBACK_DAYS }} days</th><th>Last offered anything</th></tr></thead>
+        <tbody>
+          {% for r in ex.queue[:10] %}
+          <tr>
+            <td class="num">{{ loop.index }}</td>
+            <td>{{ r.business_name }}</td>
+            <td class="small">{{ tiers[r.tier].name }}</td>
+            <td class="num">{{ r.recent }}</td>
+            <td class="small">{{ r.last_offered_at|ago if r.last_offered_at else 'Never' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if ex.queue|length > 10 %}<p class="small muted" style="margin:12px 0 0">{{ ex.queue|length - 10 }} more waiting behind them.</p>{% endif %}
+    {% else %}
+    <p class="muted" style="margin:0">Nobody is waiting: every matching trade has already had a turn at this job{{ ', so freed slots stay empty until a new trade joins' if job.status == 'open' }}.</p>
+    {% endif %}
+  </div>
+
+  <div class="section-title"><h2>4. What happens next</h2><span class="label">engine.py · sweep()</span></div>
+  <div class="card">
+    {% if ex.upcoming %}
+    <ul style="list-style:none;padding:0;margin:0;display:grid;gap:14px">
+      {% for u in ex.upcoming %}
+      <li>
+        <b>{{ u.text }}</b> — {{ m.countdown(u.when, 'in ', '') }}<span class="muted small"> ({{ u.when|when }})</span>
+        <span class="hint">{{ u.detail }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="small muted" style="margin:16px 0 0">A background task checks this every couple of minutes. You can force it with <b>Run sweep now</b>, or jump the clock with the demo buttons on the <a href="{{ url_for('admin_home') }}">overview</a>.</p>
+    {% else %}
+    <p class="muted" style="margin:0">Nothing is scheduled — this job is {{ {'full': 'full', 'hired': 'done', 'closed': 'closed', 'expired': 'closed'}.get(job.status, job.status) }}.</p>
+    {% endif %}
+  </div>
+
+  <div class="section-title"><h2>5. Everything that has happened</h2><span class="label">{{ ex.timeline|length }} events</span></div>
+  <div class="card">
+    <ul class="tl">
+      {% for e in ex.timeline %}
+      <li><time>{{ e.when|when }}</time><b>{{ e.text }}</b>{% if e.detail %}<p>{{ e.detail }}</p>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div class="section-title"><h2>6. The rules driving all of it</h2><span class="label">Change them in config.py</span></div>
+  <div class="card table-wrap">
+    <table>
+      <thead><tr><th>Rule</th><th>Set to</th><th>Where it lives in the code</th></tr></thead>
+      <tbody>
+        <tr><td>Trades holding a slot at once</td><td class="num">{{ cfg.TRADES_PER_JOB }}</td><td class="small">TRADES_PER_JOB · engine.fill_slots()</td></tr>
+        <tr><td>Quotes the customer can receive</td><td class="num">{{ cfg.MAX_QUOTES }}</td><td class="small">MAX_QUOTES · engine.submit_quote()</td></tr>
+        <tr><td>Hours to quote before the slot moves on</td><td class="num">{{ cfg.OFFER_WINDOW_HOURS }}</td><td class="small">OFFER_WINDOW_HOURS · engine.sweep()</td></tr>
+        <tr><td>Days a job keeps being passed around</td><td class="num">{{ cfg.JOB_OPEN_DAYS }}</td><td class="small">JOB_OPEN_DAYS · engine.sweep()</td></tr>
+        <tr><td>Days of history the rotation counts</td><td class="num">{{ cfg.ROTATION_LOOKBACK_DAYS }}</td><td class="small">ROTATION_LOOKBACK_DAYS · engine._candidate_rows()</td></tr>
+        <tr><td>Ignored jobs in a row before a trade is paused</td><td class="num">{{ cfg.AUTO_PAUSE_AFTER }}</td><td class="small">AUTO_PAUSE_AFTER · engine._maybe_auto_pause()</td></tr>
+        <tr><td>Quotes needed for the no-job refund</td><td class="num">{{ cfg.GUARANTEE_MIN_QUOTES }}</td><td class="small">GUARANTEE_MIN_QUOTES · engine.evaluate_guarantees()</td></tr>
+        <tr><td>Plans that can see this job</td><td>{% for t in ex.tiers %}{{ tiers[t].name }}{{ ', ' if not loop.last }}{% endfor %}</td><td class="small">TIERS · engine.tiers_that_see()</td></tr>
+        <tr><td>Quote value that triggers contract paperwork</td><td class="num">{{ cfg.CONTRACT_THRESHOLD|money }}</td><td class="small">CONTRACT_THRESHOLD · engine.needs_act_docs()</td></tr>
+        <tr><td>Do reviews change who is offered a job?</td><td><b>No</b></td><td class="small">Ratings are never read by engine._candidate_rows()</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

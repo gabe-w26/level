@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Notifications — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page narrow">
+  <div class="page-head">
+    <h1>Notifications</h1>
+    {% if unread %}<form method="post" action="{{ url_for('read_all') }}">{{ m.csrf() }}<button class="btn btn-quiet btn-sm" type="submit">Mark all as read</button></form>{% endif %}
+  </div>
+  {% if rows %}
+  <ul class="notes card" style="padding:0 14px">
+    {% for n in rows %}
+    <li class="{{ 'unread' if not n.read_at }}"><a href="{{ url_for('open_notification', nid=n.id) }}"><span style="flex:1">{{ n.body }}</span><time>{{ n.created_at|ago }}</time></a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="empty"><h3>Nothing yet</h3><p>New quotes, jobs and messages will show up here.</p></div>
+  {% endif %}
+</div>
+{% endblock %}

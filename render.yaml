@@ -1,0 +1,61 @@
+# Render blueprint: creates the website and its database in one step.
+# In Render: New → Blueprint → pick this repo. Render reads this file and asks
+# you for the few values marked sync: false.
+services:
+  - type: web
+    name: level
+    runtime: python
+    plan: starter                 # needed for the disk that holds job photos
+    region: singapore             # closest Render region to New Zealand
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 2 --threads 4 --worker-class gthread --timeout 30 --max-requests 1000 --max-requests-jitter 100
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: uploads
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SECRET_KEY
+        generateValue: true       # Render makes a long random one
+      - key: DATABASE_URL
+        fromDatabase:
+          name: level-db
+          property: connectionString
+      - key: UPLOAD_FOLDER
+        value: /data/uploads
+      - key: FREE_PILOT
+        value: "1"                # trades get jobs with no card. Set to 0 to start charging
+      - key: PRICE_GST_NOTE
+        value: "+ GST"
+      - key: ADMIN_EMAIL
+        sync: false               # you'll be asked for this
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: BASE_URL
+        sync: false               # your live address, e.g. https://level.onrender.com
+      - key: SUPPORT_EMAIL
+        sync: false
+      - key: LEGAL_ENTITY
+        sync: false
+      - key: LEGAL_ADDRESS
+        sync: false
+      # Email — fill these in when you set up a sending account.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+
+databases:
+  - name: level-db
+    plan: basic-256mb
+    region: singapore

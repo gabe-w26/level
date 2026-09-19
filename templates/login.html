@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Log in — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="auth">
+    <h1 style="font-size:38px">Log in</h1>
+    {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" class="form card">
+      {{ m.csrf() }}
+      <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+      <div>
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required value="{{ request.form.get('email', '') }}">
+      </div>
+      <div>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <div class="actions"><button class="btn" type="submit">Log in</button><a class="small" href="{{ url_for('forgot') }}">Forgot your password?</a></div>
+    </form>
+    <p class="small muted" style="margin-top:16px">New here? <a href="{{ url_for('post_job') }}">Post a job</a> or <a href="{{ url_for('signup') }}">join as a trade</a>.</p>
+    {% if demo_tools %}
+    <div class="notice small">
+      <p><b>Open the demo as</b> <a href="{{ url_for('demo_login', role='customer') }}">a customer</a> · <a href="{{ url_for('demo_login', role='trade') }}">a trade</a> · <a href="{{ url_for('demo_login', role='admin') }}">admin</a></p>
+      <p>Or log in: customer@level.local or trade@level.local with <code>demo1234</code>, admin@level.local with <code>admin123</code>. Run <code>python3 seed.py</code> first for the demo data.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

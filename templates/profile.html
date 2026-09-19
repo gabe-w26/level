@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}{{ t.business_name }} — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="two">
+    <div>
+      <p class="label">{{ cats|map(attribute='name')|join(' · ') }}</p>
+      <h1 style="font-size:clamp(30px,4vw,46px)">{{ t.business_name }}</h1>
+      <p>{{ m.stars(rating) }}</p>
+      {{ m.badges(t) }}
+      {% if t.about %}<p class="desc" style="margin-top:16px">{{ t.about }}</p>{% endif %}
+
+      <div class="section-title"><h2>Reviews</h2><span class="label">Only from customers who hired them here</span></div>
+      {% if rating.n and rating.n >= 3 %}
+      <div class="card" style="margin-bottom:14px">
+        <div class="stat-row" style="grid-template-columns:repeat(4,1fr);margin:0">
+          <div><b>{{ '%.1f'|format(rating.w) }}</b><span>Quality of work</span></div>
+          <div><b>{{ '%.1f'|format(rating.c) }}</b><span>Communication</span></div>
+          <div><b>{{ '%.1f'|format(rating.t) }}</b><span>On time</span></div>
+          <div><b>{{ '%.1f'|format(rating.v) }}</b><span>Value</span></div>
+        </div>
+      </div>
+      {% endif %}
+      {% for r in reviews %}
+      <article class="card review">
+        <div class="actions" style="justify-content:space-between">
+          <b>{{ '%.1f'|format(r.rating) }} ★ · {{ r.title }}</b>
+          <span class="small muted">{{ r.customer_name.split(' ')[0] }} · {{ r.created_at|day }}</span>
+        </div>
+        <div class="scores"><span>Work {{ r.workmanship }}/5</span><span>Communication {{ r.communication }}/5</span><span>On time {{ r.timeliness }}/5</span><span>Value {{ r.value_for_money }}/5</span></div>
+        {% if r.body %}<p class="desc" style="margin:0">{{ r.body }}</p>{% endif %}
+        {% if r.reply %}<p class="reply"><b>Reply from {{ t.business_name }}:</b> {{ r.reply }}</p>{% endif %}
+        {% if me and me.id == t.user_id %}
+        <details class="more" style="margin-top:10px"><summary>{{ 'Edit your reply' if r.reply else 'Reply' }}</summary>
+          <form method="post" action="{{ url_for('review_reply', review_id=r.id) }}" class="form" style="gap:10px;margin-top:10px">
+            {{ m.csrf() }}<textarea name="reply" style="min-height:80px" aria-label="Your reply">{{ r.reply or '' }}</textarea>
+            <div><button class="btn btn-sm" type="submit">Save reply</button></div>
+          </form>
+        </details>
+        {% endif %}
+      </article>
+      {% else %}
+      <div class="empty"><p style="margin:0">No reviews yet. New trades get the same share of jobs as everyone else — reviews never decide who’s offered work.</p></div>
+      {% endfor %}
+    </div>
+
+    <aside class="card">
+      <dl class="kv">
+        {% if t.years_trading %}<dt>In business</dt><dd>{{ t.years_trading }} year{{ 's' if t.years_trading != 1 }}</dd>{% endif %}
+        <dt>Jobs won here</dt><dd>{{ done }}</dd>
+        <dt>Joined</dt><dd>{{ t.joined|day }}</dd>
+        {% if t.workmanship_guarantee %}<dt>Guarantee</dt><dd>{{ t.workmanship_guarantee }}</dd>{% endif %}
+        {% if t.nzbn %}<dt>NZBN</dt><dd>{{ t.nzbn }}</dd>{% endif %}
+        <dt>Status</dt><dd>In trade</dd>
+      </dl>
+      <hr class="divider">
+      <p class="lbl">Areas</p>
+      <p class="small muted" style="margin:0">{{ areas|map(attribute='name')|join(', ') }}</p>
+    </aside>
+  </div>
+</div>
+{% endblock %}

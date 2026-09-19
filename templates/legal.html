@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Terms of use' if page == 'terms' else 'Privacy' }} — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page narrow">
+{% if page == 'terms' %}
+  <h1>Terms of use</h1>
+  <p class="muted">Last updated {{ cfg.TERMS_UPDATED }}. {{ cfg.LEGAL_ENTITY }}{% if cfg.LEGAL_NZBN %}, NZBN {{ cfg.LEGAL_NZBN }}{% endif %}, {{ cfg.LEGAL_ADDRESS }}.</p>
+
+  <h2>What {{ cfg.BRAND }} does</h2>
+  <p>{{ cfg.BRAND }} introduces people who need work done to tradespeople who might do it. Customers post a job, we offer it to {{ cfg.TRADES_PER_JOB }} matching trades, and up to {{ cfg.MAX_QUOTES }} of them can send a quote.</p>
+  <p>We are not a party to any agreement you reach. The contract for the work is between the customer and the trade. We don’t supervise the work, hold your money, or guarantee the result.</p>
+
+  <h2>Your account</h2>
+  <p>Give us true details and keep your password to yourself. You must be 18 or over to have an account. Tell us if something looks wrong on your account.</p>
+  <p>We can suspend or remove an account that breaks these terms, is used dishonestly, or puts other people at risk. You can close your account at any time from your settings.</p>
+
+  <h2>If you’re a customer</h2>
+  <ul>
+    <li>Posting a job and getting quotes is free.</li>
+    <li>Describe the job honestly. Trades quote on what you tell them.</li>
+    <li>Your suburb and job details go to the trades who are offered the job. Your name, phone, email and street address go only to trades you choose.</li>
+    <li>You decide who to hire, and you pay them directly. Check licences, insurance and references yourself before work starts.</li>
+    <li>For residential building work of {{ cfg.CONTRACT_THRESHOLD|money }} or more including GST, the law requires a written contract, a disclosure statement and a checklist before the work starts.</li>
+    <li>Reviews must be about work you actually had done, and honest.</li>
+  </ul>
+
+  <h2>If you’re a tradesperson</h2>
+  <ul>
+    <li>You must hold the licences and registrations your work requires, and keep them current. Tell us if that changes.</li>
+    <li>Badges on your profile only appear for details we have checked. Don’t claim qualifications, memberships or insurance you don’t hold.</li>
+    <li>Quote honestly, and honour a quote once a customer accepts it, or agree any change with them in writing.</li>
+    <li>You have {{ cfg.OFFER_WINDOW_HOURS }} hours to quote on a job you’re offered. After that the slot goes to another trade.</li>
+    <li>Use customer details only for the job they gave them to you for. Don’t add people to marketing lists.</li>
+  </ul>
+
+  <h2>Plans and payment</h2>
+  {% if cfg.FREE_PILOT %}
+  <p><b>{{ cfg.BRAND }} is free for tradespeople right now.</b> You pick the size of job you want to see, and you are not charged. If we start charging, we will email you first and you can leave before any payment is taken.</p>
+  <p>The prices we intend to charge later are ${{ tiers.small.price }}, ${{ tiers.medium.price }} and ${{ tiers.large.price }} a month {{ cfg.PRICE_GST_NOTE }}, for the three job sizes.</p>
+  {% else %}
+  <p>Plans are ${{ tiers.small.price }}, ${{ tiers.medium.price }} and ${{ tiers.large.price }} a month {{ cfg.PRICE_GST_NOTE }}, and each includes every job size below it. Plans run month to month and renew automatically until you cancel.</p>
+  <p>Cancel any time from your Plan page. You keep getting jobs until the end of the month you have paid for. We’ll tell you at least 30 days before any price change, and you can cancel before it takes effect.</p>
+  <h3>The no-job guarantee</h3>
+  <p>If you don’t win a job in a billing month, we refund that month, as long as:</p>
+  <ul>
+    <li>you sent at least {{ cfg.GUARANTEE_MIN_QUOTES }} quotes that month — or quoted on every job we offered you, if we offered fewer than {{ cfg.GUARANTEE_MIN_QUOTES }};</li>
+    <li>no customer accepted a quote of yours during that month;</li>
+    <li>you didn’t pause new jobs during the month, in which case the full {{ cfg.GUARANTEE_MIN_QUOTES }} quotes are needed; and</li>
+    <li>the quotes were genuine. A quote a customer reports, and we agree isn’t genuine, doesn’t count.</li>
+  </ul>
+  <p>We check each month once it ends and refund to the card you paid with.</p>
+  {% endif %}
+
+  <h2>What we don’t promise</h2>
+  <p>We check what we say we check, and we say when we checked it. We can’t promise the quality, honesty or availability of anyone you meet through {{ cfg.BRAND }}, that you’ll get quotes, or that a trade will get work.</p>
+  <p>Nothing here takes away rights you have under the Consumer Guarantees Act or the Fair Trading Act. Where you use {{ cfg.BRAND }} for business purposes, those guarantees don’t apply, and our liability to you is limited to the fees you paid us in the previous three months.</p>
+
+  <h2>Problems and disputes</h2>
+  <p>If something goes wrong with a job, talk to the other person first. We can help by giving each of you your own records of what was agreed here. Report a bad job or quote using the report links on the site.</p>
+  <p>These terms are governed by New Zealand law.</p>
+
+  <h2>Changes</h2>
+  <p>If we change these terms we’ll post the new version here and, for changes that matter, email you. Carrying on using {{ cfg.BRAND }} means you accept the change.</p>
+
+  <p class="muted small">Questions: <a href="mailto:{{ cfg.SUPPORT_EMAIL }}">{{ cfg.SUPPORT_EMAIL }}</a></p>
+
+{% else %}
+  <h1>Privacy</h1>
+  <p class="muted">Last updated {{ cfg.TERMS_UPDATED }}. {{ cfg.LEGAL_ENTITY }}{% if cfg.LEGAL_NZBN %}, NZBN {{ cfg.LEGAL_NZBN }}{% endif %}, {{ cfg.LEGAL_ADDRESS }}.</p>
+  <p>This explains what we collect, why, and who sees it. We follow the Privacy Act 2020.</p>
+
+  <h2>What we collect</h2>
+  <ul>
+    <li><b>Everyone:</b> name, email, phone, password (stored scrambled, never in plain text), and what you do on the site.</li>
+    <li><b>Customers:</b> the jobs you post, including the suburb, any street address you add, photos and messages.</li>
+    <li><b>Tradespeople:</b> business name, the trades and areas you cover, licence or registration numbers, NZBN, insurance details, quotes and messages.</li>
+    <li><b>Technical:</b> your IP address and browser, kept in server logs for security.</li>
+  </ul>
+
+  <h2>Who sees your details</h2>
+  <ul>
+    <li>Trades offered your job see the job details and your <b>suburb</b> — not your name, phone, email or street address.</li>
+    <li>Your name, phone, email and address go to a trade only when you share them or accept their quote.</li>
+    <li>A trade’s business name, badges and reviews are public on their profile.</li>
+    <li>We never sell your details, and we don’t give them to anyone else for marketing.</li>
+  </ul>
+
+  <h2>Checks we make</h2>
+  <p>For tradespeople, we check licence and registration numbers against the public registers run by the Licensed Building Practitioners scheme, the Electrical Workers Registration Board and the Plumbers, Gasfitters and Drainlayers Board, and we check NZBN details against the New Zealand Business Number register. We record what we checked and when.</p>
+
+  <h2>Emails</h2>
+  <p>We email you about jobs, quotes and messages. Turn those off in your settings or with the unsubscribe link in any of them. We’ll still email about your account, such as password resets.</p>
+
+  <h2>How long we keep things</h2>
+  <p>Job and quote records are kept while your account is open, so both sides have a record of what was agreed. When you close your account we delete your name, phone and email. Reviews stay, without your surname.</p>
+
+  <h2>Keeping it safe</h2>
+  <p>Data is sent over an encrypted connection and passwords are stored scrambled. If a breach happens that could seriously harm anyone, we’ll tell the people affected and the Privacy Commissioner.</p>
+
+  <h2>Your rights</h2>
+  <p>You can ask for a copy of what we hold about you, or ask us to correct it. Email <a href="mailto:{{ cfg.SUPPORT_EMAIL }}">{{ cfg.SUPPORT_EMAIL }}</a> and we’ll reply within 20 working days. If you’re not happy with our answer you can complain to the Office of the Privacy Commissioner at privacy.org.nz.</p>
+
+  <h2>Someone else’s details</h2>
+  <p>If you post a job using another person’s details, for example a tenant at the property, tell them you’ve done it. The Privacy Act requires people to be told when their information is collected from someone else.</p>
+
+  <h2>Cookies</h2>
+  <p>We use one cookie, to keep you logged in. There is no advertising or tracking on this site.</p>
+{% endif %}
+</div>
+{% endblock %}

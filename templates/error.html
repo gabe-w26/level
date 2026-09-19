@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page narrow">
+  <h1 style="font-size:40px">{{ title }}</h1>
+  <p class="lede">{{ body }}</p>
+  <div class="actions"><a class="btn" href="{{ url_for('index') }}">Go to the home page</a></div>
+</div>
+{% endblock %}
