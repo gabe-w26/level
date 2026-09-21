@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     role                TEXT NOT NULL,
     email               TEXT NOT NULL UNIQUE,
+    username            TEXT,
     password_hash       TEXT NOT NULL,
     name                TEXT NOT NULL,
     phone               TEXT,
@@ -249,6 +250,7 @@ CREATE TABLE IF NOT EXISTS locks (
     expires_at      TEXT NOT NULL
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users (username);
 CREATE INDEX IF NOT EXISTS idx_offers_job      ON offers (job_id, status);
 CREATE INDEX IF NOT EXISTS idx_offers_trade    ON offers (trade_id, offered_at);
 CREATE INDEX IF NOT EXISTS idx_offers_expiry   ON offers (status, expires_at);
@@ -268,6 +270,8 @@ MIGRATIONS = [
     'ALTER TABLE users ADD COLUMN email_alerts INTEGER NOT NULL DEFAULT 1',
     'ALTER TABLE users ADD COLUMN unsub_token TEXT',
     'ALTER TABLE users ADD COLUMN closed_at TEXT',
+    'ALTER TABLE users ADD COLUMN username TEXT',
+    'CREATE UNIQUE INDEX idx_users_username ON users (username)',
 ]
 
 

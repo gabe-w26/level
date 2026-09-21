@@ -17,7 +17,7 @@
         {% for a in admins %}
         <tr>
           <td><b>{{ a.name }}</b>{% if a.id == me.id %} <span class="pill active">You</span>{% endif %}</td>
-          <td class="small">{{ a.email }}</td>
+          <td class="small">{{ a.username ~ ' or ' ~ a.email if a.username else a.email }}</td>
           <td class="small">{{ a.created_at|day }}</td>
           <td class="small">{{ a.last_login_at|ago if a.last_login_at else 'Never' }}</td>
           <td>
@@ -44,12 +44,17 @@
         {{ m.err(errors, 'name') }}
       </div>
       <div class="{{ 'has-error' if errors.email }}">
-        <label for="email">Their email <span class="hint">This is what they log in with.</span></label>
+        <label for="email">Their email <span class="hint">For password resets and notifications.</span></label>
         <input id="email" name="email" type="email" value="{{ form.get('email', '') }}">
         {{ m.err(errors, 'email') }}
       </div>
     </div>
     <div class="row">
+      <div class="{{ 'has-error' if errors.username }}">
+        <label for="username">Username <span class="hint">Optional. They can log in with this instead of their email.</span></label>
+        <input id="username" name="username" type="text" value="{{ form.get('username', '') }}">
+        {{ m.err(errors, 'username') }}
+      </div>
       <div>
         <label for="phone">Their phone <span class="hint">Optional.</span></label>
         <input id="phone" name="phone" type="tel" value="{{ form.get('phone', '') }}">

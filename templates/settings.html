@@ -33,6 +33,11 @@
         {{ m.err(errors, 'phone') }}
       </div>
     </div>
+    <div class="{{ 'has-error' if errors.username }}">
+      <label for="username">Username <span class="hint">Optional. Lets you log in with this instead of your email.</span></label>
+      <input id="username" name="username" type="text" autocomplete="username" value="{{ form.get('username') if form.get('action') == 'details' else (me.username or '') }}">
+      {{ m.err(errors, 'username') }}
+    </div>
     <label class="check">
       <input type="checkbox" name="email_alerts" value="1" {{ 'checked' if me.email_alerts }}>
       <span>Email me about new jobs, quotes and messages<span class="hint">Password resets are always sent, whatever you choose here.</span></span>

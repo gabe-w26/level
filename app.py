@@ -310,6 +310,23 @@ def areas_by_region():
     return grouped
 
 
+def clean_username(value):
+    """Usernames are stored lower case, so 'Admin 2' and 'admin 2' are the same
+    login. Returns (username or None, error or None)."""
+    name = re.sub(r'\s+', ' ', (value or '').strip()).lower()
+    if not name:
+        return None, None
+    if not re.fullmatch(r'[a-z0-9 ._-]{3,30}', name):
+        return None, ('Usernames are 3 to 30 characters, using letters, numbers, spaces, '
+                      'dots, dashes or underscores.')
+    return name, None
+
+
+def username_taken(name, user_id=None):
+    return bool(db().execute('SELECT 1 FROM users WHERE (username = ? OR email = ?) AND id <> ?',
+                             (name, name, user_id or 0)).fetchone())
+
+
 def valid_nzbn(value):
     d = re.sub(r'\D', '', value or '')
     if len(d) != 13 or not d.startswith('94'):
@@ -429,8 +446,9 @@ def login():
         if _too_many_attempts(ip):
             error = 'Too many attempts. Wait 15 minutes, then try again.'
         else:
-            u = db().execute('SELECT * FROM users WHERE email = ?',
-                             (request.form.get('email', '').strip().lower(),)).fetchone()
+            # People can sign in with their email or their username.
+            ident = re.sub(r'\s+', ' ', request.form.get('email', '').strip()).lower()
+            u = db().execute('SELECT * FROM users WHERE email = ? OR username = ?', (ident, ident)).fetchone()
             if u and u['closed_at']:
                 error = 'That account has been closed. Sign up again if you’d like to come back.'
             elif u and check_password_hash(u['password_hash'], request.form.get('password', '')):
@@ -543,13 +561,18 @@ def settings():
 
         if action == 'details' and not errors:
             name, phone = f.get('name', '').strip(), f.get('phone', '').strip()
+            username, username_error = clean_username(f.get('username'))
             if len(name) < 2:
                 errors['name'] = 'Enter your name.'
             if len(re.sub(r'\D', '', phone)) < 8:
                 errors['phone'] = 'Enter a phone number.'
+            if username_error:
+                errors['username'] = username_error
+            elif username and username_taken(username, u['id']):
+                errors['username'] = 'Someone already uses that username.'
             if not errors:
-                db().execute('UPDATE users SET name = ?, phone = ?, email_alerts = ? WHERE id = ?',
-                             (name, phone, 1 if f.get('email_alerts') else 0, u['id']))
+                db().execute('UPDATE users SET name = ?, phone = ?, username = ?, email_alerts = ? WHERE id = ?',
+                             (name, phone, username, 1 if f.get('email_alerts') else 0, u['id']))
                 db().commit()
                 flash('Saved.')
                 return redirect(url_for('settings'))
@@ -1343,24 +1366,30 @@ def admin_team():
         f = request.form
         name, email = f.get('name', '').strip(), f.get('email', '').strip().lower()
         password = f.get('password', '')
+        username, username_error = clean_username(f.get('username'))
         if not check_password_hash(current_user()['password_hash'], f.get('current_password', '')):
             errors['current_password'] = 'That isn’t your password.'
         if len(name) < 2:
             errors['name'] = 'Enter their name.'
         if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
-            errors['email'] = 'Enter a valid email address — this is what they log in with.'
+            errors['email'] = 'Enter a valid email address.'
         elif db().execute('SELECT 1 FROM users WHERE email = ?', (email,)).fetchone():
             errors['email'] = 'There’s already an account with that email.'
+        if username_error:
+            errors['username'] = username_error
+        elif username and username_taken(username):
+            errors['username'] = 'Someone already uses that username.'
         if len(password) < 8:
             errors['password'] = 'Use at least 8 characters — 12 or more for an admin.'
         if not errors:
-            db().execute('INSERT INTO users (role, email, password_hash, name, phone, created_at) '
-                         "VALUES ('admin',?,?,?,?,?)",
-                         (email, hash_password(password), name, f.get('phone', '').strip() or None, ts(utcnow())))
+            db().execute('INSERT INTO users (role, email, username, password_hash, name, phone, created_at) '
+                         "VALUES ('admin',?,?,?,?,?,?)",
+                         (email, username, hash_password(password), name,
+                          f.get('phone', '').strip() or None, ts(utcnow())))
             db().commit()
             flash(f'{name} can now log in at /login with {email}. Ask them to change the password in Settings.')
             return redirect(url_for('admin_team'))
-    admins = db().execute("SELECT id, name, email, phone, created_at, last_login_at FROM users "
+    admins = db().execute("SELECT id, name, email, username, phone, created_at, last_login_at FROM users "
                           "WHERE role = 'admin' AND closed_at IS NULL ORDER BY id").fetchall()
     return render_template('admin/team.html', admins=admins, errors=errors, form=request.form)
 
