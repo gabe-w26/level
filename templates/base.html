@@ -95,6 +95,7 @@
           <a href="{{ url_for('admin_trades') }}">Trades</a>
           <a href="{{ url_for('admin_claims') }}">Refunds</a>
           <a href="{{ url_for('admin_reports') }}">Reports</a>
+          <a href="{{ url_for('admin_team') }}">Team</a>
           <a href="{{ url_for('settings') }}">Settings</a>
           <a class="bell" href="{{ url_for('notifications') }}" aria-label="Notifications{% if unread %}, {{ unread }} unread{% endif %}">
             {{ m.icon('bell') }}{% if unread %}<span class="dot">{{ unread if unread < 100 else '99+' }}</span>{% endif %}

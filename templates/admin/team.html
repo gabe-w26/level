@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Team — admin{% endblock %}
+{% block main %}
+<div class="wrap page narrow">
+  <div class="page-head">
+    <div>
+      <h1>Team</h1>
+      <p class="muted">Everyone who can run {{ cfg.BRAND }}. Admins can see every customer’s name, phone and address, approve refunds and remove trades — so only add people you'd trust with all of that.</p>
+    </div>
+  </div>
+
+  <div class="card table-wrap" style="padding:6px 10px">
+    <table>
+      <thead><tr><th>Name</th><th>Logs in with</th><th>Added</th><th>Last logged in</th><th></th></tr></thead>
+      <tbody>
+        {% for a in admins %}
+        <tr>
+          <td><b>{{ a.name }}</b>{% if a.id == me.id %} <span class="pill active">You</span>{% endif %}</td>
+          <td class="small">{{ a.email }}</td>
+          <td class="small">{{ a.created_at|day }}</td>
+          <td class="small">{{ a.last_login_at|ago if a.last_login_at else 'Never' }}</td>
+          <td>
+            {% if a.id != me.id and admins|length > 1 %}
+            <form method="post" action="{{ url_for('admin_team_remove', user_id=a.id) }}" data-confirm="Remove {{ a.name }}’s access? They won’t be able to log in again.">
+              {{ m.csrf() }}<button class="btn btn-quiet btn-sm" type="submit">Remove</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-title"><h2>Add someone</h2></div>
+  {% if errors %}<p class="notice error" role="alert">Check the highlighted fields below.</p>{% endif %}
+  <form method="post" class="form-step" novalidate>
+    {{ m.csrf() }}
+    <div class="row">
+      <div class="{{ 'has-error' if errors.name }}">
+        <label for="name">Their name</label>
+        <input id="name" name="name" type="text" value="{{ form.get('name', '') }}">
+        {{ m.err(errors, 'name') }}
+      </div>
+      <div class="{{ 'has-error' if errors.email }}">
+        <label for="email">Their email <span class="hint">This is what they log in with.</span></label>
+        <input id="email" name="email" type="email" value="{{ form.get('email', '') }}">
+        {{ m.err(errors, 'email') }}
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="phone">Their phone <span class="hint">Optional.</span></label>
+        <input id="phone" name="phone" type="tel" value="{{ form.get('phone', '') }}">
+      </div>
+      <div class="{{ 'has-error' if errors.password }}">
+        <label for="password">A starting password <span class="hint">Ask them to change it in Settings once they’re in.</span></label>
+        <input id="password" name="password" type="password" autocomplete="new-password">
+        {{ m.err(errors, 'password') }}
+      </div>
+    </div>
+    <div class="{{ 'has-error' if errors.current_password }}">
+      <label for="current_password">Your own password <span class="hint">Confirms it’s really you adding an admin.</span></label>
+      <input id="current_password" name="current_password" type="password" autocomplete="current-password">
+      {{ m.err(errors, 'current_password') }}
+    </div>
+    <div><button class="btn" type="submit">Add admin</button></div>
+  </form>
+</div>
+{% endblock %}

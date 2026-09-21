@@ -1333,6 +1333,53 @@ def admin_check(trade_id):
     return redirect(url_for('admin_trades') + f'#t{trade_id}')
 
 
+@app.route('/admin/team', methods=['GET', 'POST'])
+@requires('admin')
+def admin_team():
+    """Other people who can run the site. Admins see every customer's contact
+    details, so adding one asks for your own password first."""
+    errors = {}
+    if request.method == 'POST':
+        f = request.form
+        name, email = f.get('name', '').strip(), f.get('email', '').strip().lower()
+        password = f.get('password', '')
+        if not check_password_hash(current_user()['password_hash'], f.get('current_password', '')):
+            errors['current_password'] = 'That isn’t your password.'
+        if len(name) < 2:
+            errors['name'] = 'Enter their name.'
+        if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
+            errors['email'] = 'Enter a valid email address — this is what they log in with.'
+        elif db().execute('SELECT 1 FROM users WHERE email = ?', (email,)).fetchone():
+            errors['email'] = 'There’s already an account with that email.'
+        if len(password) < 8:
+            errors['password'] = 'Use at least 8 characters — 12 or more for an admin.'
+        if not errors:
+            db().execute('INSERT INTO users (role, email, password_hash, name, phone, created_at) '
+                         "VALUES ('admin',?,?,?,?,?)",
+                         (email, hash_password(password), name, f.get('phone', '').strip() or None, ts(utcnow())))
+            db().commit()
+            flash(f'{name} can now log in at /login with {email}. Ask them to change the password in Settings.')
+            return redirect(url_for('admin_team'))
+    admins = db().execute("SELECT id, name, email, phone, created_at, last_login_at FROM users "
+                          "WHERE role = 'admin' AND closed_at IS NULL ORDER BY id").fetchall()
+    return render_template('admin/team.html', admins=admins, errors=errors, form=request.form)
+
+
+@app.post('/admin/team/<int:user_id>/remove')
+@requires('admin')
+def admin_team_remove(user_id):
+    if user_id == current_user()['id']:
+        flash('You can’t remove your own access here.', 'error')
+    elif db().execute("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND closed_at IS NULL").fetchone()['n'] <= 1:
+        flash('There has to be at least one admin.', 'error')
+    else:
+        person = db().execute("SELECT * FROM users WHERE id = ? AND role = 'admin'", (user_id,)).fetchone()
+        if person:
+            accounts.close(db(), person)
+            flash(f'{person["name"]} no longer has access.')
+    return redirect(url_for('admin_team'))
+
+
 @app.route('/admin/claims')
 @requires('admin')
 def admin_claims():
