@@ -52,5 +52,14 @@
   </div>
 
   <div class="card" style="margin-top:16px"><h3>Description</h3><p class="desc" style="margin:0">{{ job.description }}</p></div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>Delete this job</h3>
+    <p class="small muted">For spam, duplicates or test posts. The job, its offers, quotes, messages, photos and reviews all go. This can’t be undone.</p>
+    <form method="post" action="{{ url_for('admin_job_delete', job_id=job.id) }}"
+          data-confirm="Delete “{{ job.title }}” and everything attached to it? This can’t be undone.">
+      {{ m.csrf() }}<button class="btn btn-danger btn-sm" type="submit">Delete job</button>
+    </form>
+  </div>
 </div>
 {% endblock %}

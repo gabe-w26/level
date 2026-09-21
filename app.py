@@ -1340,6 +1340,28 @@ def admin_inspect():
                            now=utcnow())
 
 
+@app.post('/admin/jobs/<int:job_id>/delete')
+@requires('admin')
+def admin_job_delete(job_id):
+    """Remove a job completely — for spam, duplicates and test posts."""
+    job = engine.get_job(db(), job_id)
+    if not job:
+        abort(404)
+    for photo in _photos(job_id):
+        if not db().execute('SELECT 1 FROM job_photos WHERE filename = ? AND job_id <> ?',
+                            (photo['filename'], job_id)).fetchone():
+            try:
+                os.remove(os.path.join(UPLOAD_DIR, photo['filename']))
+            except OSError:
+                pass
+    for table in ('messages', 'quotes', 'offers', 'job_reports', 'job_photos', 'reviews'):
+        db().execute(f'DELETE FROM {table} WHERE job_id = ?', (job_id,))
+    db().execute('DELETE FROM jobs WHERE id = ?', (job_id,))
+    db().commit()
+    flash(f'“{job["title"]}” and everything attached to it has been deleted.')
+    return redirect(url_for('admin_home'))
+
+
 @app.route('/admin/trades')
 @requires('admin')
 def admin_trades():
