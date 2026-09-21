@@ -1280,21 +1280,25 @@ def _count(sql, params=()):
 @app.route('/admin')
 @requires('admin')
 def admin_home():
+    live_trade = 'FROM trades t JOIN users u ON u.id = t.user_id WHERE u.closed_at IS NULL'
     stats = dict(
-        customers=_count("SELECT COUNT(*) AS n FROM users WHERE role = 'customer'"),
-        trades=_count("SELECT COUNT(*) AS n FROM trades"),
-        paying=_count("SELECT COUNT(*) AS n FROM trades WHERE sub_status = 'active' AND period_end > ?", (ts(utcnow()),)),
+        customers=_count("SELECT COUNT(*) AS n FROM users WHERE role = 'customer' AND closed_at IS NULL"),
+        trades=_count(f'SELECT COUNT(*) AS n {live_trade}'),
+        paying=_count(f"SELECT COUNT(*) AS n {live_trade} AND t.sub_status = 'active' AND t.period_end > ?",
+                      (ts(utcnow()),)),
         open_jobs=_count("SELECT COUNT(*) AS n FROM jobs WHERE status = 'open'"),
         quotes=_count('SELECT COUNT(*) AS n FROM quotes'),
         claims=_count("SELECT COUNT(*) AS n FROM guarantee_claims WHERE status = 'pending'"),
         reports=_count("SELECT COUNT(*) AS n FROM job_reports WHERE status = 'open'") +
                 _count('SELECT COUNT(*) AS n FROM quotes WHERE flagged = 1'),
-        unverified=_count("SELECT COUNT(*) AS n FROM trades WHERE (licence_type IS NOT NULL AND licence_type <> 'none' "
-                          'AND licence_checked_at IS NULL) OR (nzbn IS NOT NULL AND nzbn_checked_at IS NULL) '
-                          'OR (insurance_insurer IS NOT NULL AND insurance_checked_at IS NULL)'),
+        unverified=_count(f"SELECT COUNT(*) AS n {live_trade} AND ((t.licence_type IS NOT NULL "
+                          "AND t.licence_type <> 'none' AND t.licence_checked_at IS NULL) "
+                          'OR (t.nzbn IS NOT NULL AND t.nzbn_checked_at IS NULL) '
+                          'OR (t.insurance_insurer IS NOT NULL AND t.insurance_checked_at IS NULL))'),
     )
     by_tier = {r['tier']: r['n'] for r in db().execute(
-        "SELECT tier, COUNT(*) AS n FROM trades WHERE sub_status = 'active' GROUP BY tier").fetchall()}
+        'SELECT t.tier AS tier, COUNT(*) AS n FROM trades t JOIN users u ON u.id = t.user_id '
+        "WHERE t.sub_status = 'active' AND u.closed_at IS NULL GROUP BY t.tier").fetchall()}
     jobs = db().execute(
         'SELECT j.*, c.name AS category_name, a.name AS area_name, '
         "(SELECT COUNT(*) FROM offers o WHERE o.job_id = j.id) AS offers_total, "
