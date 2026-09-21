@@ -77,6 +77,17 @@ class AppTest(unittest.TestCase):
             description='Rotten boards on the back deck need replacing.', value_band=band,
             timing='weeks', property_type='house'), at=at)[0]
 
+    def test_cursors_can_be_looped_over(self):
+        """Postgres and SQLite cursors must behave the same. `for row in
+        db.execute(...)` is used all over the app; on Postgres it needs the
+        wrapper's __iter__, and without it trade sign-up broke in production."""
+        import db as dbmod_
+        self.user('customer', 'loop@test.nz')
+        rows = [r for r in self.db.execute('SELECT id FROM users')]
+        self.assertTrue(rows)
+        self.assertTrue(hasattr(dbmod_._PgCursor, '__iter__'),
+                        'the PostgreSQL cursor wrapper must be iterable')
+
     # ── password reset ──
     def test_reset_link_works_once(self):
         uid = self.user()

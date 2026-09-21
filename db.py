@@ -204,6 +204,13 @@ class _PgCursor:
             return []
         return [_pg_normalise(dict(r)) for r in rows]
 
+    def __iter__(self):
+        # sqlite3 cursors are iterable, so `for row in db.execute(...)` works
+        # there. Without this the same code raises TypeError on PostgreSQL —
+        # which took out trade sign-up in production while every local test
+        # (on SQLite) passed.
+        return iter(self.fetchall())
+
 
 class _PgConn:
     """PostgreSQL connection with a SQLite-compatible surface area.
