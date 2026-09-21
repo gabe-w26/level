@@ -6,12 +6,15 @@ Python — never with SQL date functions — so the same queries behave identica
 on SQLite (local) and PostgreSQL (production).
 """
 import os
+import re
 import sqlite3
 
 from werkzeug.security import generate_password_hash
 
 import config
 from db import get_db, _USE_PG
+
+BRAND_SLUG = re.sub(r'[^a-z0-9]+', '', config.BRAND.lower()) or 'level'
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -297,15 +300,43 @@ def init_db():
         db.execute('INSERT OR IGNORE INTO areas (slug, name, region) VALUES (?,?,?)',
                    (slug, name, region))
 
-    # Admin account. In production it only exists if ADMIN_EMAIL/ADMIN_PASSWORD
-    # are set; locally a default is created so the admin panel is reachable.
-    email = os.environ.get('ADMIN_EMAIL') or (None if _USE_PG else 'admin@level.local')
-    password = os.environ.get('ADMIN_PASSWORD') or (None if _USE_PG else 'admin123')
-    if email and password:
-        exists = db.execute('SELECT id FROM users WHERE email = ?', (email,)).fetchone()
-        if not exists:
-            db.execute('INSERT INTO users (role, email, password_hash, name, created_at) '
-                       'VALUES (?,?,?,?,?)',
-                       ('admin', email, hash_password(password), 'Admin', ts(utcnow())))
+    # Admin accounts, set from the hosting environment. This is the way in when
+    # nobody can log in yet — no email delivery needed.
+    _ensure_admin(db, 'ADMIN', default_email=None if _USE_PG else 'admin@level.local',
+                  default_password=None if _USE_PG else 'admin123')
+    _ensure_admin(db, 'ADMIN2')
     db.commit()
     db.close()
+
+
+def _ensure_admin(db, prefix, default_email=None, default_password=None):
+    """Create (or update) an admin from environment variables.
+
+    ADMIN_EMAIL / ADMIN_PASSWORD, and the same with an ADMIN2_ prefix, so a
+    second person can be given access from the hosting dashboard. Add
+    ADMIN_USERNAME to let them log in with a username instead of an email.
+    Existing accounts are left alone unless ADMIN_PASSWORD_RESET=1 is set,
+    which is the escape hatch for a forgotten password.
+    """
+    from engine import ts, utcnow
+    email = (os.environ.get(f'{prefix}_EMAIL') or default_email or '').strip().lower()
+    password = os.environ.get(f'{prefix}_PASSWORD') or default_password
+    username = re.sub(r'\s+', ' ', os.environ.get(f'{prefix}_USERNAME', '').strip()).lower() or None
+    name = os.environ.get(f'{prefix}_NAME', '').strip() or (username or 'Admin').title()
+    reset = os.environ.get(f'{prefix}_PASSWORD_RESET', '') == '1'
+    if not password or (not email and not username):
+        return
+    if not email:                       # a username is enough; the address is just a placeholder
+        email = re.sub(r'[^a-z0-9]+', '', username) + '@' + BRAND_SLUG + '.local'
+
+    row = db.execute('SELECT id FROM users WHERE email = ? OR (username IS NOT NULL AND username = ?)',
+                     (email, username or '\x00')).fetchone()
+    if row and reset:
+        db.execute('UPDATE users SET password_hash = ?, role = ?, closed_at = NULL WHERE id = ?',
+                   (hash_password(password), 'admin', row['id']))
+        print(f'[admin] password reset for {email} (unset {prefix}_PASSWORD_RESET now)', flush=True)
+    elif not row:
+        db.execute('INSERT INTO users (role, email, username, password_hash, name, created_at) '
+                   "VALUES ('admin',?,?,?,?,?)",
+                   (email, username, hash_password(password), name, ts(utcnow())))
+        print(f'[admin] created admin {username or email}', flush=True)
