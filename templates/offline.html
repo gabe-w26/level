@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}Offline — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page narrow">
+  <h1 style="font-size:38px">No connection</h1>
+  <p class="lede">You can still read pages you’ve already opened. Anything you send — a quote, a message, a job — needs a connection.</p>
+  <p class="muted">This page will work again as soon as you’re back online.</p>
+  <div class="actions"><button class="btn" type="button" onclick="location.reload()">Try again</button></div>
+</div>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Your quotes — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Your quotes</h1>
+      <p class="muted">{{ counts.sent }} waiting on a customer · {{ counts.accepted }} won · {{ counts.declined }} not this time</p>
+    </div>
+  </div>
+  {% if quotes %}
+  <div class="jobs">
+    {% for q in quotes %}
+    <a class="job-card" href="{{ url_for('trade_job', job_id=q.job_id) }}">
+      {{ m.stamp({'id': q.job_id, 'area_name': q.area_name, 'value_band': q.value_band, 'quote_count': q.quote_count, 'category_name': q.category_name, 'status': q.job_status}) }}
+      <div>
+        <h3>{{ q.title }}</h3>
+        <div class="job-meta"><span>{{ q.suburb }}</span><span>Quoted {{ q.created_at|day }}</span>{% if q.unread %}<span class="pill full">{{ q.unread }} new message{{ 's' if q.unread > 1 }}</span>{% endif %}</div>
+      </div>
+      <div class="job-side">
+        <b style="font-size:18px">{{ q|price }}</b>
+        {{ m.status_pill(q.status) }}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">
+    <h3>No quotes yet</h3>
+    <p style="margin:0">Jobs waiting on you show up under <a href="{{ url_for('trade_home') }}">Jobs</a>. Send a quote and it’ll appear here.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

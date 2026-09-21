@@ -10,6 +10,13 @@
     </div>
   </div>
 
+  <div class="form-step" style="margin-bottom:18px">
+    <h2 style="margin:0">Use {{ cfg.BRAND }} like an app</h2>
+    <p class="small muted" style="margin:0">Add it to your home screen and it opens full screen, with its own icon — no browser bars, and jobs are one tap away.</p>
+    <div><button class="btn btn-quiet install-btn" type="button" hidden>Add to home screen</button></div>
+    <p class="ios-install" hidden>On iPhone: tap <b>Share</b> at the bottom of Safari, then <b>Add to Home Screen</b>.</p>
+  </div>
+
   <form method="post" class="form-step" style="margin-bottom:18px" novalidate>
     {{ m.csrf() }}
     <input type="hidden" name="action" value="details">

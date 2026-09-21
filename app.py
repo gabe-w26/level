@@ -96,6 +96,7 @@ def _security_headers(resp):
                             "default-src 'self'; img-src 'self' data:; "
                             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                             "font-src 'self' https://fonts.gstatic.com; script-src 'self'; "
+                            "worker-src 'self'; manifest-src 'self'; "
                             "form-action 'self'; frame-ancestors 'none'; base-uri 'self'")
     if _USE_PG:                                  # production sits behind HTTPS
         resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
@@ -112,6 +113,26 @@ def health():
     except Exception as e:
         app.logger.exception('Health check failed')
         return {'status': 'error', 'detail': str(e)[:200]}, 500
+
+
+@app.route('/manifest.json')
+def manifest():
+    """Tells a phone how to install Level to the home screen."""
+    return send_from_directory(os.path.join(BASE, 'static'), 'manifest.json',
+                               mimetype='application/manifest+json')
+
+
+@app.route('/sw.js')
+def service_worker():
+    resp = send_from_directory(os.path.join(BASE, 'static'), 'sw.js', mimetype='application/javascript')
+    resp.headers['Service-Worker-Allowed'] = '/'        # must be served from the root to cover the whole site
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+
+@app.route('/offline')
+def offline():
+    return render_template('offline.html')
 
 
 @app.route('/robots.txt')
@@ -260,12 +281,22 @@ def price(q):
 @app.context_processor
 def _globals():
     u = current_user()
-    unread = 0
+    unread = unread_msgs = leads_waiting = 0
     if u:
         unread = db().execute('SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL',
                               (u['id'],)).fetchone()['n']
-    return dict(cfg=config, me=u, my_trade=current_trade(), unread=unread, csrf_token=_csrf_token,
-                demo_tools=DEMO_TOOLS, licences=LICENCES, bands=config.VALUE_BANDS, tiers=config.TIERS)
+        if u['role'] == 'customer':
+            unread_msgs = db().execute('SELECT COUNT(*) AS n FROM messages m JOIN jobs j ON j.id = m.job_id '
+                                       'WHERE j.customer_id = ? AND m.sender_id <> ? AND m.read_at IS NULL',
+                                       (u['id'], u['id'])).fetchone()['n']
+        elif u['role'] == 'trade':
+            unread_msgs = db().execute('SELECT COUNT(*) AS n FROM messages WHERE trade_id = ? AND sender_id <> ? '
+                                       'AND read_at IS NULL', (u['id'], u['id'])).fetchone()['n']
+            leads_waiting = db().execute("SELECT COUNT(*) AS n FROM offers WHERE trade_id = ? AND status = 'active' "
+                                         'AND expires_at > ?', (u['id'], ts(utcnow()))).fetchone()['n']
+    return dict(cfg=config, me=u, my_trade=current_trade(), unread=unread, unread_msgs=unread_msgs,
+                leads_waiting=leads_waiting, csrf_token=_csrf_token, demo_tools=DEMO_TOOLS, licences=LICENCES,
+                bands=config.VALUE_BANDS, tiers=config.TIERS)
 
 
 def all_categories():
@@ -872,6 +903,31 @@ def review(job_id):
 
 # ── Messages (customer ↔ trade, per job) ──────────────────────────────────────
 
+@app.route('/messages')
+def messages():
+    """Every conversation this person is part of, newest first."""
+    u = current_user()
+    if not u:
+        return redirect(url_for('login', next='/messages'))
+    if u['role'] == 'admin':
+        abort(404)
+    whose = 'j.customer_id = ?' if u['role'] == 'customer' else 'q.trade_id = ?'
+    threads = db().execute(
+        'SELECT q.job_id, q.trade_id, q.created_at, j.title, t.business_name, cu.name AS customer_name, '
+        '  (SELECT body FROM messages m WHERE m.job_id = q.job_id AND m.trade_id = q.trade_id '
+        '    ORDER BY m.id DESC LIMIT 1) AS last_body, '
+        '  (SELECT created_at FROM messages m WHERE m.job_id = q.job_id AND m.trade_id = q.trade_id '
+        '    ORDER BY m.id DESC LIMIT 1) AS last_at, '
+        '  (SELECT COUNT(*) FROM messages m WHERE m.job_id = q.job_id AND m.trade_id = q.trade_id '
+        '    AND m.sender_id <> ? AND m.read_at IS NULL) AS unread '
+        'FROM quotes q JOIN jobs j ON j.id = q.job_id JOIN trades t ON t.user_id = q.trade_id '
+        'JOIN users cu ON cu.id = j.customer_id '
+        f'WHERE {whose} '
+        'ORDER BY COALESCE((SELECT MAX(created_at) FROM messages m WHERE m.job_id = q.job_id '
+        '  AND m.trade_id = q.trade_id), q.created_at) DESC LIMIT 100', (u['id'], u['id'])).fetchall()
+    return render_template('messages.html', threads=threads)
+
+
 @app.route('/thread/<int:job_id>/<int:trade_id>', methods=['GET', 'POST'])
 def thread(job_id, trade_id):
     u = current_user()
@@ -938,6 +994,22 @@ def trade_home():
                            fair=engine.fairness_snapshot(db(), t['user_id'], t['tier'], now) if t['tier'] else None,
                            rating=engine.trade_rating(db(), t['user_id']),
                            subscribed=engine.is_subscribed(t, now))
+
+
+@app.route('/trade/quotes')
+@requires('trade')
+def trade_quotes():
+    t = current_trade()
+    quotes = db().execute(
+        'SELECT q.*, j.title, j.suburb, j.value_band, j.quote_count, j.status AS job_status, '
+        'c.name AS category_name, a.name AS area_name, '
+        '(SELECT COUNT(*) FROM messages m WHERE m.job_id = q.job_id AND m.trade_id = q.trade_id '
+        ' AND m.sender_id <> q.trade_id AND m.read_at IS NULL) AS unread '
+        'FROM quotes q JOIN jobs j ON j.id = q.job_id JOIN categories c ON c.id = j.category_id '
+        'JOIN areas a ON a.id = j.area_id WHERE q.trade_id = ? ORDER BY q.id DESC', (t['user_id'],)).fetchall()
+    counts = {key: sum(1 for q in quotes if q['status'] == key) for key in ('sent', 'shortlisted', 'accepted', 'declined')}
+    counts['sent'] += counts['shortlisted']
+    return render_template('trade/quotes.html', quotes=quotes, counts=counts)
 
 
 @app.route('/trade/setup', methods=['GET', 'POST'])

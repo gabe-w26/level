@@ -43,6 +43,41 @@ document.addEventListener('submit', (e) => {
   if (msg && !window.confirm(msg)) e.preventDefault();
 });
 
+// Installable app: service worker, offline banner, add-to-home-screen.
+(function () {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  }
+
+  const paintOffline = () => document.body.classList.toggle('is-offline', !navigator.onLine);
+  window.addEventListener('online', paintOffline);
+  window.addEventListener('offline', paintOffline);
+  paintOffline();
+
+  const buttons = () => Array.from(document.querySelectorAll('.install-btn'));
+  let installPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    installPrompt = e;
+    buttons().forEach((b) => { b.hidden = false; });
+  });
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest && e.target.closest('.install-btn');
+    if (!btn || !installPrompt) return;
+    installPrompt.prompt();
+    await installPrompt.userChoice;
+    installPrompt = null;
+    buttons().forEach((b) => { b.hidden = true; });
+  });
+
+  // iPhones don't offer a prompt, so show Safari's steps instead.
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if (isIOS && !installed) {
+    document.querySelectorAll('.ios-install').forEach((el) => { el.hidden = false; });
+  }
+})();
+
 // Landing page board: one job moving through the rules.
 (function () {
   const board = document.querySelector('[data-board]');

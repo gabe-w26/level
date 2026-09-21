@@ -433,6 +433,41 @@ details.more > summary { cursor: pointer; color: var(--ink-2); font-size: 14px; 
 @media (max-width: 820px) { .grid-3, .grid-2, .steps-2 { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 680px) { .job-card { grid-template-columns: minmax(0, 1fr); } .stamp { min-width: 0; } }
 
+/* ── App shell: what logged-in customers and trades see ───────────────────── */
+body.app { background: var(--slab); }
+.offline-banner { display: none; background: var(--paint-wash); color: var(--paint-ink); text-align: center; padding: 9px 14px; font-size: 14px; font-weight: 600; margin: 0; }
+body.is-offline .offline-banner { display: block; }
+.app-bar { position: sticky; top: 0; z-index: 30; background: var(--paper); border-bottom: 1px solid var(--rule); padding-top: env(safe-area-inset-top); }
+.app-bar-inner { max-width: var(--wrap); margin: 0 auto; padding: 10px 18px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.brand-sm { font-size: 21px; }
+.brand-sm svg { width: 36px; height: 16px; }
+.app-bar-actions { display: flex; align-items: center; gap: 18px; }
+.app-bar-actions .bell svg { width: 22px; height: 22px; }
+.app-body { max-width: var(--wrap); margin: 0 auto; display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: 26px; padding: 0 18px; align-items: start; }
+.app-side { position: sticky; top: 84px; padding: 22px 0; display: grid; gap: 2px; }
+.app-side a, .app-side .install-btn { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px; color: var(--ink); text-decoration: none; font: 600 15px var(--f-body); border: 0; background: none; cursor: pointer; text-align: left; width: 100%; }
+.app-side a:hover, .app-side .install-btn:hover { background: var(--paper); color: var(--ink); }
+.app-side a.on { background: var(--chalk-wash); color: var(--chalk-deep); }
+.app-side svg, .tabbar svg { width: 21px; height: 21px; flex: none; }
+.app-side .install-btn { color: var(--chalk-deep); margin-top: 10px; }
+.side-badge { margin-left: auto; background: var(--paint); color: #fff; border-radius: 10px; font: 700 11px/1 var(--f-body); padding: 4px 7px; }
+.app-body main .wrap { padding: 0; max-width: none; }
+.app-body .page { padding: 22px 0 40px; }
+.app-body .page-head { margin-bottom: 20px; }
+.tabbar { display: none; }
+@media (max-width: 880px) {
+  .app-body { grid-template-columns: minmax(0, 1fr); padding: 0 16px; }
+  .app-side { display: none; }
+  body.app { padding-bottom: 76px; }
+  .tabbar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--paper); border-top: 1px solid var(--rule); padding-bottom: env(safe-area-inset-bottom); }
+  .tabbar a { display: grid; justify-items: center; gap: 3px; padding: 9px 4px 8px; color: var(--ink-3); text-decoration: none; font: 600 11px var(--f-body); position: relative; }
+  .tabbar a.on { color: var(--chalk); }
+  .tab-dot { position: absolute; top: 4px; left: 50%; margin-left: 3px; min-width: 17px; height: 17px; border-radius: 9px; background: var(--paint); color: #fff; font: 700 10px/17px var(--f-body); text-align: center; padding: 0 4px; }
+}
+.thread-card { grid-template-columns: minmax(0, 1fr) auto; }
+.thread-last { margin: 6px 0 0; color: var(--ink-2); font-size: 14px; }
+.ios-install { border-left: 4px solid var(--chalk); background: var(--chalk-wash); padding: 12px 14px; border-radius: 6px; font-size: 14px; margin: 12px 0 0; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }

@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Messages — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Messages</h1>
+      <p class="muted">Every conversation about a job, in one place.</p>
+    </div>
+  </div>
+  {% if threads %}
+  <div class="jobs">
+    {% for t in threads %}
+    <a class="job-card thread-card" href="{{ url_for('thread', job_id=t.job_id, trade_id=t.trade_id) }}">
+      <div>
+        <h3>{{ t.business_name if me.role == 'customer' else t.customer_name.split(' ')[0] }}</h3>
+        <div class="job-meta"><span>{{ t.title }}</span></div>
+        <p class="thread-last">{{ t.last_body[:110] ~ '…' if t.last_body and t.last_body|length > 110 else (t.last_body or 'No messages yet — say hello.') }}</p>
+      </div>
+      <div class="job-side">
+        {% if t.unread %}<span class="pill full">{{ t.unread }} new</span>{% endif %}
+        <span class="small muted">{{ (t.last_at or t.created_at)|ago }}</span>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">
+    <h3>No messages yet</h3>
+    <p style="margin:0">{% if me.role == 'customer' %}Once a trade quotes on one of your jobs you can ask them questions here.{% else %}When you quote on a job, your conversation with the customer shows up here.{% endif %}</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

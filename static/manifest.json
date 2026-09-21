@@ -1,0 +1,23 @@
+{
+  "name": "Level — fair work for NZ trades",
+  "short_name": "Level",
+  "description": "Post a job and get up to six quotes, or find work in your trade and area.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#E6E9E4",
+  "theme_color": "#1F4FD1",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Post a job", "url": "/post" },
+    { "name": "Jobs waiting on you", "url": "/trade" },
+    { "name": "Messages", "url": "/messages" }
+  ]
+}
