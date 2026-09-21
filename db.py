@@ -310,12 +310,41 @@ class _PgConn:
         teardown_appcontext hook) or a standalone connection's close() should
         call this."""
         try:
-            _PG_POOL.putconn(self._conn)
+            # A connection that died mid-request is closed rather than pooled,
+            # so the next request doesn't pick up the corpse.
+            _PG_POOL.putconn(self._conn, close=bool(self._conn.closed))
         except Exception:
             try:
                 self._conn.close()
             except Exception:
                 pass
+
+
+def _checkout(tries=3):
+    """Take a connection from the pool that is actually alive.
+
+    Postgres (and anything between us and it) closes connections that have been
+    idle for a while. The pool doesn't notice, so without this check the next
+    request gets a dead connection and fails with "connection already closed".
+    """
+    last = None
+    for _ in range(tries):
+        conn = _PG_POOL.getconn()
+        try:
+            if conn.closed:
+                raise psycopg2.InterfaceError('connection already closed')
+            cur = conn.cursor()
+            cur.execute('SELECT 1')
+            cur.close()
+            conn.rollback()          # start clean, whatever the last user left behind
+            return conn
+        except psycopg2.Error as e:
+            last = e
+            try:
+                _PG_POOL.putconn(conn, close=True)   # bin it; the pool opens a fresh one
+            except Exception:
+                pass
+    raise last or psycopg2.OperationalError('could not get a working database connection')
 
 
 def get_db():
@@ -324,12 +353,12 @@ def get_db():
             # No request/app context to cache on (e.g. init_db() running at
             # import time, before the app has served anything) — hand back a
             # standalone connection; the caller's own close() releases it.
-            return _PgConn(_PG_POOL.getconn(), standalone=True)
+            return _PgConn(_checkout(), standalone=True)
 
         cached = getattr(g, '_db_conn', None)
         if cached is not None:
             return cached
-        conn = _PG_POOL.getconn()
+        conn = _checkout()
         wrapped = _PgConn(conn)
         g._db_conn = wrapped
         return wrapped
