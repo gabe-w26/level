@@ -21,11 +21,20 @@
           <td class="small">{{ a.created_at|day }}</td>
           <td class="small">{{ a.last_login_at|ago if a.last_login_at else 'Never' }}</td>
           <td>
-            {% if a.id != me.id and admins|length > 1 %}
-            <form method="post" action="{{ url_for('admin_team_remove', user_id=a.id) }}" data-confirm="Remove {{ a.name }}’s access? They won’t be able to log in again.">
-              {{ m.csrf() }}<button class="btn btn-quiet btn-sm" type="submit">Remove</button>
-            </form>
-            {% endif %}
+            <details class="more">
+              <summary>Manage</summary>
+              <form method="post" action="{{ url_for('admin_team_password', user_id=a.id) }}" class="form" style="gap:10px;margin:10px 0">
+                {{ m.csrf() }}
+                <input name="password" type="password" placeholder="New password for {{ a.name }}" autocomplete="new-password" style="min-width:220px">
+                <input name="current_password" type="password" placeholder="Your own password" autocomplete="current-password">
+                <div><button class="btn btn-quiet btn-sm" type="submit">Set their password</button></div>
+              </form>
+              {% if a.id != me.id and admins|length > 1 %}
+              <form method="post" action="{{ url_for('admin_team_remove', user_id=a.id) }}" data-confirm="Remove {{ a.name }}’s access? They won’t be able to log in again.">
+                {{ m.csrf() }}<button class="btn btn-danger btn-sm" type="submit">Remove access</button>
+              </form>
+              {% endif %}
+            </details>
           </td>
         </tr>
         {% endfor %}

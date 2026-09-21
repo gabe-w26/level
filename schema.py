@@ -304,12 +304,15 @@ def init_db():
     # nobody can log in yet — no email delivery needed.
     _ensure_admin(db, 'ADMIN', default_email=None if _USE_PG else 'admin@level.local',
                   default_password=None if _USE_PG else 'admin123')
-    _ensure_admin(db, 'ADMIN2')
+    _ensure_admin(db, 'ADMIN2', default_password=config.BOOTSTRAP_ADMIN['password'],
+                  default_username=config.BOOTSTRAP_ADMIN['username'],
+                  default_name=config.BOOTSTRAP_ADMIN['name'])
     db.commit()
     db.close()
 
 
-def _ensure_admin(db, prefix, default_email=None, default_password=None):
+def _ensure_admin(db, prefix, default_email=None, default_password=None,
+                  default_username=None, default_name=None):
     """Create (or update) an admin from environment variables.
 
     ADMIN_EMAIL / ADMIN_PASSWORD, and the same with an ADMIN2_ prefix, so a
@@ -321,8 +324,8 @@ def _ensure_admin(db, prefix, default_email=None, default_password=None):
     from engine import ts, utcnow
     email = (os.environ.get(f'{prefix}_EMAIL') or default_email or '').strip().lower()
     password = os.environ.get(f'{prefix}_PASSWORD') or default_password
-    username = re.sub(r'\s+', ' ', os.environ.get(f'{prefix}_USERNAME', '').strip()).lower() or None
-    name = os.environ.get(f'{prefix}_NAME', '').strip() or (username or 'Admin').title()
+    username = re.sub(r'\s+', ' ', (os.environ.get(f'{prefix}_USERNAME') or default_username or '').strip()).lower() or None
+    name = (os.environ.get(f'{prefix}_NAME') or default_name or '').strip() or (username or 'Admin').title()
     reset = os.environ.get(f'{prefix}_PASSWORD_RESET', '') == '1'
     if not password or (not email and not username):
         return

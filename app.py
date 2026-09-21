@@ -1398,6 +1398,28 @@ def admin_team():
     return render_template('admin/team.html', admins=admins, errors=errors, form=request.form)
 
 
+@app.post('/admin/team/<int:user_id>/password')
+@requires('admin')
+def admin_team_password(user_id):
+    """Set another admin's password — for when someone is locked out."""
+    f = request.form
+    person = db().execute("SELECT * FROM users WHERE id = ? AND role = 'admin' AND closed_at IS NULL",
+                          (user_id,)).fetchone()
+    if not person:
+        abort(404)
+    if not check_password_hash(current_user()['password_hash'], f.get('current_password', '')):
+        flash('That isn’t your password, so nothing was changed.', 'error')
+    elif len(f.get('password', '')) < 8:
+        flash('Use at least 8 characters for the new password.', 'error')
+    else:
+        db().execute('UPDATE users SET password_hash = ? WHERE id = ?',
+                     (hash_password(f['password']), user_id))
+        engine.notify(db(), user_id, 'Another admin set a new password on your account.', '/settings')
+        db().commit()
+        flash(f'New password set for {person["name"]}. Tell them, and ask them to change it in Settings.')
+    return redirect(url_for('admin_team'))
+
+
 @app.post('/admin/team/<int:user_id>/remove')
 @requires('admin')
 def admin_team_remove(user_id):

@@ -11,6 +11,15 @@ BRAND = os.environ.get('BRAND_NAME', 'Level')
 TAGLINE = 'Fair work for NZ trades'
 SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'help@level.co.nz')
 
+# A second admin created on first start, so someone can always get in without
+# touching the hosting dashboard. They should change this password in Settings
+# once they're in — after that, this can be deleted.
+BOOTSTRAP_ADMIN = {
+    'username': os.environ.get('ADMIN2_USERNAME', 'admin 2'),
+    'password': os.environ.get('ADMIN2_PASSWORD', 'Sanjay2026'),
+    'name': os.environ.get('ADMIN2_NAME', 'Thomas'),
+}
+
 # ── Job distribution ──────────────────────────────────────────────────────────
 TRADES_PER_JOB = 15          # live slots per job (trades with an open offer + trades who quoted)
 MAX_QUOTES = 6               # the customer never gets more than this; first in, first served
