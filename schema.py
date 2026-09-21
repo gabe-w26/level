@@ -332,8 +332,11 @@ def _ensure_admin(db, prefix, default_email=None, default_password=None,
     if not email:                       # a username is enough; the address is just a placeholder
         email = re.sub(r'[^a-z0-9]+', '', username) + '@' + BRAND_SLUG + '.local'
 
-    row = db.execute('SELECT id FROM users WHERE email = ? OR (username IS NOT NULL AND username = ?)',
-                     (email, username or '\x00')).fetchone()
+    # Two plain lookups: PostgreSQL rejects a NUL byte used as a placeholder,
+    # which crashed startup and left the old version running.
+    row = db.execute('SELECT id FROM users WHERE email = ?', (email,)).fetchone()
+    if not row and username:
+        row = db.execute('SELECT id FROM users WHERE username = ?', (username,)).fetchone()
     if row and reset:
         db.execute('UPDATE users SET password_hash = ?, role = ?, closed_at = NULL WHERE id = ?',
                    (hash_password(password), 'admin', row['id']))

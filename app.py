@@ -110,7 +110,8 @@ def health():
         try:
             db().execute('SELECT 1 FROM users LIMIT 1').fetchone()
             return {'status': 'ok', 'database': 'postgres' if _USE_PG else 'sqlite',
-                    'free_pilot': config.FREE_PILOT, 'charging': config.CHARGING, 'email': mailer.ENABLED}, 200
+                    'free_pilot': config.FREE_PILOT, 'charging': config.CHARGING, 'email': mailer.ENABLED,
+                    'version': os.environ.get('RENDER_GIT_COMMIT', 'local')[:7]}, 200
         except Exception as e:
             app.logger.warning('Health check attempt %s failed: %s', attempt, e)
             release_db()                        # drop it and take a fresh one
