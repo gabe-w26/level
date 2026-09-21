@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Customers — admin{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Customers</h1>
+      <p class="muted">People posting jobs. Click one to see their jobs and help them out.</p>
+    </div>
+    <form method="get" class="actions">
+      <label class="vh" for="q">Search</label>
+      <input id="q" name="q" type="search" placeholder="Name, email or phone" value="{{ search }}" style="width:auto;min-width:240px">
+      <button class="btn btn-quiet btn-sm" type="submit">Search</button>
+    </form>
+  </div>
+
+  <div class="card table-wrap" style="padding:6px 10px">
+    <table>
+      <thead><tr><th>Name</th><th>Contact</th><th>Jobs</th><th>Quotes received</th><th>Hired</th><th>Last job</th></tr></thead>
+      <tbody>
+        {% for c in rows %}
+        <tr>
+          <td><a href="{{ url_for('admin_customer', user_id=c.id) }}"><b>{{ c.name }}</b></a>{% if c.closed_at %} <span class="pill declined">Closed</span>{% endif %}</td>
+          <td class="small">{{ c.email }}{% if c.phone %}<div class="muted">{{ c.phone }}</div>{% endif %}</td>
+          <td class="num">{{ c.jobs }}</td>
+          <td class="num">{{ c.quotes }}</td>
+          <td class="num">{{ c.hired }}</td>
+          <td class="small">{{ c.last_job|ago if c.last_job else '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="muted">No customers match that.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="small muted" style="margin-top:12px">{{ rows|length }} shown.</p>
+</div>
+{% endblock %}

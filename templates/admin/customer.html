@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}{{ person.name }} — admin{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <p class="small"><a href="{{ url_for('admin_customers') }}">← Customers</a></p>
+  <div class="page-head">
+    <div>
+      <h1>{{ person.name }}</h1>
+      <p class="muted"><a href="mailto:{{ person.email }}">{{ person.email }}</a>{% if person.phone %} · <a href="tel:{{ person.phone }}">{{ person.phone }}</a>{% endif %}</p>
+      <p class="small muted" style="margin:4px 0 0">Joined {{ person.created_at|day }} · {{ 'last seen ' ~ person.last_login_at|ago if person.last_login_at else 'never logged in' }}{% if person.closed_at %} · <span class="pill declined">Account closed</span>{% endif %}</p>
+    </div>
+  </div>
+
+  <div class="admin-stats">
+    <div><b>{{ record.jobs }}</b><span class="small muted">jobs posted</span></div>
+    <div><b>{{ record.quotes }}</b><span class="small muted">quotes received</span></div>
+    <div><b>{{ record.answered }}</b><span class="small muted">replied to</span></div>
+    <div><b>{{ record.hired }}</b><span class="small muted">trades hired</span></div>
+  </div>
+
+  <div class="two" style="margin-top:24px">
+    <div>
+      <div class="section-title" style="margin-top:0"><h2>Their jobs</h2></div>
+      <div class="card table-wrap" style="padding:6px 10px">
+        <table>
+          <thead><tr><th>Job</th><th>Where</th><th>Quotes</th><th>Status</th><th>Posted</th></tr></thead>
+          <tbody>
+            {% for j in jobs %}
+            <tr>
+              <td><a href="{{ url_for('admin_job', job_id=j.id) }}">{{ j.title }}</a><div class="small muted">{{ j.category_name }} · {{ bands[j.value_band].short }}</div></td>
+              <td class="small">{{ j.suburb }}, {{ j.area_name }}</td>
+              <td>{{ m.meter(j.quote_count) }}</td>
+              <td>{{ m.status_pill(j.status) }}</td>
+              <td class="small">{{ j.created_at|day }}</td>
+            </tr>
+            {% else %}<tr><td colspan="5" class="muted">No jobs posted yet.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <aside class="stack">
+      <div class="card">
+        <h3>Send them a message</h3>
+        <form method="post" action="{{ url_for('admin_customer_action', user_id=person.id, action='message') }}" class="form" style="gap:10px">
+          {{ m.csrf() }}
+          <textarea name="body" style="min-height:80px" placeholder="Shows in their notifications" aria-label="Message"></textarea>
+          <div><button class="btn btn-quiet btn-sm" type="submit">Send</button></div>
+        </form>
+      </div>
+      <div class="card">
+        <h3>Set their password</h3>
+        <form method="post" action="{{ url_for('admin_customer_action', user_id=person.id, action='password') }}" class="form" style="gap:10px">
+          {{ m.csrf() }}
+          <input name="password" type="password" placeholder="New password" autocomplete="new-password">
+          <input name="current_password" type="password" placeholder="Your own password" autocomplete="current-password">
+          <div><button class="btn btn-quiet btn-sm" type="submit">Set password</button></div>
+        </form>
+      </div>
+      {% if not person.closed_at %}
+      <div class="card">
+        <h3>Close this account</h3>
+        <p class="small muted">Their open jobs close, and their name, phone and email are deleted. Can’t be undone.</p>
+        <form method="post" action="{{ url_for('admin_customer_action', user_id=person.id, action='remove') }}"
+              data-confirm="Close {{ person.name }}’s account for good?">
+          {{ m.csrf() }}<button class="btn btn-danger btn-sm" type="submit">Close account</button>
+        </form>
+      </div>
+      {% endif %}
+    </aside>
+  </div>
+</div>
+{% endblock %}

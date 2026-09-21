@@ -1343,22 +1343,209 @@ def admin_inspect():
 @app.route('/admin/trades')
 @requires('admin')
 def admin_trades():
-    rows = db().execute('SELECT t.*, u.email, u.phone, u.name FROM trades t JOIN users u ON u.id = t.user_id '
-                        'ORDER BY t.created_at DESC').fetchall()
-    return render_template('admin/trades.html', rows=rows)
+    """Every business on Level, with the numbers that matter for support."""
+    search = request.args.get('q', '').strip().lower()
+    show = request.args.get('show', 'all')
+    since = ts(utcnow() - timedelta(days=30))
+    where, args = ['1 = 1'], []
+    if search:
+        where.append('(LOWER(t.business_name) LIKE ? OR LOWER(u.email) LIKE ? OR LOWER(u.name) LIKE ? '
+                     'OR LOWER(COALESCE(t.licence_number, \'\')) LIKE ?)')
+        args += [f'%{search}%'] * 4
+    if show == 'active':
+        where.append("t.sub_status = 'active' AND t.paused = 0")
+    elif show == 'paused':
+        where.append('t.paused = 1')
+    elif show == 'inactive':
+        where.append("t.sub_status <> 'active'")
+    elif show == 'unchecked':
+        where.append("((t.licence_type IS NOT NULL AND t.licence_type <> 'none' AND t.licence_checked_at IS NULL) "
+                     'OR (t.nzbn IS NOT NULL AND t.nzbn_checked_at IS NULL) '
+                     'OR (t.insurance_insurer IS NOT NULL AND t.insurance_checked_at IS NULL))')
+
+    rows = db().execute(
+        'SELECT t.*, u.name, u.email, u.username, u.phone, u.closed_at, u.last_login_at, '
+        '  (SELECT COUNT(*) FROM offers o WHERE o.trade_id = t.user_id AND o.offered_at >= ?) AS offers30, '
+        '  (SELECT COUNT(*) FROM quotes q WHERE q.trade_id = t.user_id AND q.created_at >= ?) AS quotes30, '
+        "  (SELECT COUNT(*) FROM quotes q WHERE q.trade_id = t.user_id AND q.status = 'accepted') AS wins, "
+        '  (SELECT COUNT(*) FROM reviews r WHERE r.trade_id = t.user_id) AS reviews, '
+        '  (SELECT AVG(rating) FROM reviews r WHERE r.trade_id = t.user_id) AS rating '
+        'FROM trades t JOIN users u ON u.id = t.user_id '
+        f'WHERE {" AND ".join(where)} ORDER BY t.created_at DESC LIMIT 300', (since, since, *args)).fetchall()
+
+    work = {}
+    for r in db().execute('SELECT tc.trade_id, c.name FROM trade_categories tc '
+                          'JOIN categories c ON c.id = tc.category_id ORDER BY c.name').fetchall():
+        work.setdefault(r['trade_id'], []).append(r['name'])
+    places = {}
+    for r in db().execute('SELECT ta.trade_id, a.name FROM trade_areas ta '
+                          'JOIN areas a ON a.id = ta.area_id ORDER BY a.id').fetchall():
+        places.setdefault(r['trade_id'], []).append(r['name'])
+    return render_template('admin/trades.html', rows=rows, work=work, places=places,
+                           search=request.args.get('q', ''), show=show)
 
 
-@app.post('/admin/trades/<int:trade_id>/check')
+@app.route('/admin/trades/<int:trade_id>')
 @requires('admin')
-def admin_check(trade_id):
-    field = {'nzbn': 'nzbn_checked_at', 'licence': 'licence_checked_at',
-             'insurance': 'insurance_checked_at'}.get(request.form.get('what'))
-    if not field:
-        abort(400)
-    value = ts(utcnow()) if request.form.get('ok') == '1' else None
-    db().execute(f'UPDATE trades SET {field} = ? WHERE user_id = ?', (value, trade_id))
-    db().commit()
-    return redirect(url_for('admin_trades') + f'#t{trade_id}')
+def admin_trade(trade_id):
+    t = db().execute('SELECT t.*, u.name, u.email, u.username, u.phone, u.closed_at, u.created_at AS joined, '
+                     'u.last_login_at, u.email_verified_at FROM trades t JOIN users u ON u.id = t.user_id '
+                     'WHERE t.user_id = ?', (trade_id,)).fetchone()
+    if not t:
+        abort(404)
+    now = utcnow()
+    return render_template(
+        'admin/trade.html', t=t, now=now,
+        work=[r['name'] for r in db().execute('SELECT c.name FROM trade_categories tc JOIN categories c '
+                                              'ON c.id = tc.category_id WHERE tc.trade_id = ? ORDER BY c.name',
+                                              (trade_id,)).fetchall()],
+        places=[r['name'] for r in db().execute('SELECT a.name FROM trade_areas ta JOIN areas a ON a.id = ta.area_id '
+                                                'WHERE ta.trade_id = ? ORDER BY a.id', (trade_id,)).fetchall()],
+        offers=db().execute('SELECT o.*, j.title, j.value_band, a.name AS area_name FROM offers o '
+                            'JOIN jobs j ON j.id = o.job_id JOIN areas a ON a.id = j.area_id '
+                            'WHERE o.trade_id = ? ORDER BY o.id DESC LIMIT 20', (trade_id,)).fetchall(),
+        quotes=db().execute('SELECT q.*, j.title FROM quotes q JOIN jobs j ON j.id = q.job_id '
+                            'WHERE q.trade_id = ? ORDER BY q.id DESC LIMIT 20', (trade_id,)).fetchall(),
+        reviews=db().execute('SELECT r.*, j.title FROM reviews r JOIN jobs j ON j.id = r.job_id '
+                             'WHERE r.trade_id = ? ORDER BY r.id DESC LIMIT 10', (trade_id,)).fetchall(),
+        payments=db().execute('SELECT * FROM payments WHERE trade_id = ? ORDER BY period_start DESC LIMIT 12',
+                              (trade_id,)).fetchall(),
+        claims=db().execute('SELECT * FROM guarantee_claims WHERE trade_id = ? ORDER BY id DESC LIMIT 12',
+                            (trade_id,)).fetchall(),
+        reported=db().execute('SELECT r.*, j.title FROM job_reports r JOIN jobs j ON j.id = r.job_id '
+                              'WHERE r.trade_id = ? ORDER BY r.id DESC LIMIT 10', (trade_id,)).fetchall(),
+        rating=engine.trade_rating(db(), trade_id),
+        progress=engine.guarantee_progress(db(), trade_id, now),
+        subscribed=engine.is_subscribed(t, now))
+
+
+@app.post('/admin/trades/<int:trade_id>/<action>')
+@requires('admin')
+def admin_trade_action(trade_id, action):
+    t = db().execute('SELECT t.*, u.name, u.email FROM trades t JOIN users u ON u.id = t.user_id '
+                     'WHERE t.user_id = ?', (trade_id,)).fetchone()
+    if not t:
+        abort(404)
+    f = request.form
+    if action == 'check':
+        field = {'nzbn': 'nzbn_checked_at', 'licence': 'licence_checked_at',
+                 'insurance': 'insurance_checked_at'}.get(f.get('what'))
+        if not field:
+            abort(400)
+        db().execute(f'UPDATE trades SET {field} = ? WHERE user_id = ?',
+                     (ts(utcnow()) if f.get('ok') == '1' else None, trade_id))
+        db().commit()
+        flash('Checks updated.')
+    elif action == 'plan':
+        tier = f.get('tier')
+        if tier in config.TIERS:
+            billing.choose_plan(db(), t, t['email'], tier, '', '')
+            flash(f'{t["business_name"]} is now on {config.TIERS[tier]["name"]}.')
+        elif tier == 'stop':
+            db().execute("UPDATE trades SET sub_status = 'cancelled', cancel_at_period_end = 0 WHERE user_id = ?",
+                         (trade_id,))
+            db().commit()
+            flash(f'{t["business_name"]}’s plan has been stopped — they’ll get no new jobs.')
+    elif action == 'availability':
+        engine.set_pause(db(), trade_id, f.get('choice') == 'pause')
+        db().commit()
+        flash('Jobs paused for this trade.' if f.get('choice') == 'pause' else 'Jobs turned back on.')
+    elif action == 'suspend':
+        suspend = f.get('choice') == 'on'
+        db().execute('UPDATE trades SET sub_status = ?, paused = ? WHERE user_id = ?',
+                     ('suspended' if suspend else 'cancelled', 1 if suspend else 0, trade_id))
+        if suspend:
+            db().execute("UPDATE offers SET status = 'closed', resolved_at = ? WHERE trade_id = ? AND status = 'active'",
+                         (ts(utcnow()), trade_id))
+            engine.notify(db(), trade_id, 'Your account has been suspended. Get in touch if you think that’s wrong.',
+                          '/trade')
+        db().commit()
+        flash('Business suspended — no more jobs, and their live offers were closed.' if suspend
+              else 'Suspension lifted. They’ll need to choose a plan again.')
+    elif action == 'password':
+        if len(f.get('password', '')) < 8:
+            flash('Use at least 8 characters.', 'error')
+        elif not check_password_hash(current_user()['password_hash'], f.get('current_password', '')):
+            flash('That isn’t your password, so nothing changed.', 'error')
+        else:
+            db().execute('UPDATE users SET password_hash = ? WHERE id = ?', (hash_password(f['password']), trade_id))
+            db().commit()
+            flash(f'New password set for {t["name"]}. Tell them, and ask them to change it in Settings.')
+    elif action == 'message':
+        body = f.get('body', '').strip()
+        if body:
+            engine.notify(db(), trade_id, body, '/trade')
+            db().commit()
+            flash('Message sent. They’ll see it in their notifications' +
+                  (' and by email.' if mailer.ENABLED else ' (email isn’t set up yet).'))
+    elif action == 'remove':
+        person = db().execute('SELECT * FROM users WHERE id = ?', (trade_id,)).fetchone()
+        accounts.close(db(), person)
+        flash(f'{t["business_name"]} has been removed and their details deleted.')
+        return redirect(url_for('admin_trades'))
+    else:
+        abort(404)
+    return redirect(url_for('admin_trade', trade_id=trade_id))
+
+
+@app.route('/admin/customers')
+@requires('admin')
+def admin_customers():
+    search = request.args.get('q', '').strip().lower()
+    where, args = ["u.role = 'customer'"], []
+    if search:
+        where.append('(LOWER(u.name) LIKE ? OR LOWER(u.email) LIKE ? OR LOWER(COALESCE(u.phone, \'\')) LIKE ?)')
+        args += [f'%{search}%'] * 3
+    rows = db().execute(
+        'SELECT u.*, (SELECT COUNT(*) FROM jobs j WHERE j.customer_id = u.id) AS jobs, '
+        "  (SELECT COUNT(*) FROM jobs j WHERE j.customer_id = u.id AND j.status = 'hired') AS hired, "
+        '  (SELECT COUNT(*) FROM quotes q JOIN jobs j ON j.id = q.job_id WHERE j.customer_id = u.id) AS quotes, '
+        '  (SELECT MAX(j.created_at) FROM jobs j WHERE j.customer_id = u.id) AS last_job '
+        f'FROM users u WHERE {" AND ".join(where)} ORDER BY u.id DESC LIMIT 300', args).fetchall()
+    return render_template('admin/customers.html', rows=rows, search=request.args.get('q', ''))
+
+
+@app.route('/admin/customers/<int:user_id>')
+@requires('admin')
+def admin_customer(user_id):
+    person = db().execute("SELECT * FROM users WHERE id = ? AND role = 'customer'", (user_id,)).fetchone()
+    if not person:
+        abort(404)
+    jobs = db().execute('SELECT j.*, c.name AS category_name, a.name AS area_name FROM jobs j '
+                        'JOIN categories c ON c.id = j.category_id JOIN areas a ON a.id = j.area_id '
+                        'WHERE j.customer_id = ? ORDER BY j.id DESC LIMIT 50', (user_id,)).fetchall()
+    return render_template('admin/customer.html', person=person, jobs=jobs,
+                           record=engine.customer_record(db(), user_id))
+
+
+@app.post('/admin/customers/<int:user_id>/<action>')
+@requires('admin')
+def admin_customer_action(user_id, action):
+    person = db().execute("SELECT * FROM users WHERE id = ? AND role = 'customer'", (user_id,)).fetchone()
+    if not person:
+        abort(404)
+    f = request.form
+    if action == 'message':
+        if f.get('body', '').strip():
+            engine.notify(db(), user_id, f['body'].strip(), '/me')
+            db().commit()
+            flash('Message sent.')
+    elif action == 'password':
+        if len(f.get('password', '')) < 8:
+            flash('Use at least 8 characters.', 'error')
+        elif not check_password_hash(current_user()['password_hash'], f.get('current_password', '')):
+            flash('That isn’t your password, so nothing changed.', 'error')
+        else:
+            db().execute('UPDATE users SET password_hash = ? WHERE id = ?', (hash_password(f['password']), user_id))
+            db().commit()
+            flash(f'New password set for {person["name"]}.')
+    elif action == 'remove':
+        accounts.close(db(), person)
+        flash(f'{person["name"]}’s account has been closed and their details deleted.')
+        return redirect(url_for('admin_customers'))
+    else:
+        abort(404)
+    return redirect(url_for('admin_customer', user_id=user_id))
 
 
 @app.route('/admin/team', methods=['GET', 'POST'])

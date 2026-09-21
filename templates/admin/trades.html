@@ -1,49 +1,63 @@
 {% extends 'base.html' %}
 {% import '_macros.html' as m with context %}
-{% block title %}Trades — admin{% endblock %}
-{% macro check(t, what, when, token) %}
-<form method="post" action="{{ url_for('admin_check', trade_id=t.user_id) }}" class="inline">
-  <input type="hidden" name="_csrf" value="{{ token }}"><input type="hidden" name="what" value="{{ what }}"><input type="hidden" name="ok" value="{{ '0' if when else '1' }}">
-  {% if when %}<span class="badge" style="cursor:default">✓ {{ when|day }}</span> <button class="linkish small" type="submit">Undo</button>
-  {% else %}<button class="btn btn-quiet btn-sm" type="submit" style="margin-top:4px">Mark checked</button>{% endif %}
-</form>
-{% endmacro %}
+{% block title %}Businesses — admin{% endblock %}
+{% set filters = [('all', 'All'), ('active', 'Taking jobs'), ('paused', 'Paused'), ('inactive', 'No plan'), ('unchecked', 'Need checking')] %}
 {% block main %}
 <div class="wrap page">
   <div class="page-head">
     <div>
-      <h1>Trades</h1>
-      <p class="muted">Check each detail against its register or certificate, then mark it checked. Customers only ever see badges for checked details.</p>
+      <h1>Businesses</h1>
+      <p class="muted">Every trade on {{ cfg.BRAND }}. Click one to see their work, plan and history, or to make changes.</p>
     </div>
+    <form method="get" class="actions">
+      <label class="vh" for="q">Search</label>
+      <input id="q" name="q" type="search" placeholder="Name, email or licence number" value="{{ search }}" style="width:auto;min-width:240px">
+      <input type="hidden" name="show" value="{{ show }}">
+      <button class="btn btn-quiet btn-sm" type="submit">Search</button>
+    </form>
   </div>
+
+  <div class="actions" style="margin-bottom:16px">
+    {% for key, label in filters %}
+    <a class="btn btn-sm {{ 'btn-ghost' if show != key else '' }}" href="{{ url_for('admin_trades', show=key, q=search) }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+
   <div class="card table-wrap" style="padding:6px 10px">
     <table>
-      <thead><tr><th>Trade</th><th>Plan</th><th>Licence</th><th>NZBN</th><th>Insurance</th></tr></thead>
+      <thead>
+        <tr><th>Business</th><th>Trades &amp; areas</th><th>Plan</th><th>30 days</th><th>Won</th><th>Reviews</th><th>Checks</th></tr>
+      </thead>
       <tbody>
         {% for t in rows %}
-        <tr id="t{{ t.user_id }}">
-          <td><a href="{{ url_for('pro_profile', trade_id=t.user_id) }}"><b>{{ t.business_name }}</b></a><div class="small muted">{{ t.name }} · {{ t.email }}{% if t.phone %} · {{ t.phone }}{% endif %}</div></td>
-          <td class="small">{% if t.sub_status == 'active' %}{{ tiers[t.tier].name }}{% if t.paused %} · paused{% endif %}{% else %}<span class="muted">{{ t.sub_status }}</span>{% endif %}</td>
-          <td class="small">
-            {% if t.licence_type and t.licence_type != 'none' %}
-              {{ licences[t.licence_type][0] }}<div>{{ t.licence_number }}{% if licences[t.licence_type][1] %} · <a href="{{ licences[t.licence_type][1] }}" target="_blank" rel="noopener">register ↗</a>{% endif %}</div>
-              {{ check(t, 'licence', t.licence_checked_at, csrf_token()) }}
-            {% else %}<span class="muted">None needed</span>{% endif %}
+        <tr>
+          <td>
+            <a href="{{ url_for('admin_trade', trade_id=t.user_id) }}"><b>{{ t.business_name }}</b></a>
+            {% if t.closed_at %}<span class="pill declined">Closed</span>{% endif %}
+            <div class="small muted">{{ t.name }} · {{ t.email }}{% if t.username %} · {{ t.username }}{% endif %}</div>
           </td>
+          <td class="small">{{ (work.get(t.user_id, []))|join(', ') or '—' }}<div class="muted">{{ (places.get(t.user_id, []))|join(', ') or 'No areas' }}</div></td>
           <td class="small">
-            {% if t.nzbn %}{{ t.nzbn }}<div><a href="https://www.nzbn.govt.nz/" target="_blank" rel="noopener">NZBN register ↗</a></div>{{ check(t, 'nzbn', t.nzbn_checked_at, csrf_token()) }}
-            {% else %}<span class="muted">—</span>{% endif %}
+            {% if t.sub_status == 'active' %}{{ tiers[t.tier].name if t.tier else '—' }}{% if t.paused %} <span class="pill full">Paused</span>{% endif %}
+            {% elif t.sub_status == 'suspended' %}<span class="pill declined">Suspended</span>
+            {% else %}<span class="muted">{{ t.sub_status }}</span>{% endif %}
           </td>
+          <td class="small num">{{ t.offers30 }} offered<div class="muted">{{ t.quotes30 }} quoted</div></td>
+          <td class="num">{{ t.wins }}</td>
+          <td class="small">{% if t.reviews %}{{ '%.1f'|format(t.rating) }} ★ ({{ t.reviews }}){% else %}<span class="muted">None</span>{% endif %}</td>
           <td class="small">
-            {% if t.insurance_insurer %}{{ t.insurance_insurer }}<div class="muted">to {{ t.insurance_expiry or 'unknown' }}</div>{{ check(t, 'insurance', t.insurance_checked_at, csrf_token()) }}
-            {% else %}<span class="muted">—</span>{% endif %}
+            {% set done = [t.licence_checked_at, t.nzbn_checked_at, t.insurance_checked_at]|select|list|length %}
+            {% if done == 3 %}<span class="badge" style="cursor:default">All checked</span>
+            {% elif done %}<span class="badge wait">{{ done }} of 3</span>
+            {% else %}<span class="badge wait">Not checked</span>{% endif %}
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="5" class="muted">No trades yet.</td></tr>
+        <tr><td colspan="7" class="muted">No businesses match that.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  <p class="small muted" style="margin-top:12px">{{ rows|length }} shown{% if rows|length == 300 %} (first 300 — narrow it with search){% endif %}.</p>
 </div>
 {% endblock %}

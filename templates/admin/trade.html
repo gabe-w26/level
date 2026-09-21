@@ -1,0 +1,203 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}{{ t.business_name }} — admin{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <p class="small"><a href="{{ url_for('admin_trades') }}">← Businesses</a></p>
+  <div class="page-head">
+    <div>
+      <h1>{{ t.business_name }}</h1>
+      <p class="muted">{{ t.name }} · <a href="mailto:{{ t.email }}">{{ t.email }}</a>{% if t.phone %} · <a href="tel:{{ t.phone }}">{{ t.phone }}</a>{% endif %}{% if t.username %} · logs in as <b>{{ t.username }}</b>{% endif %}</p>
+      <p class="small muted" style="margin:4px 0 0">Joined {{ t.joined|day }} · {{ 'last seen ' ~ t.last_login_at|ago if t.last_login_at else 'never logged in' }}{% if t.closed_at %} · <span class="pill declined">Account closed</span>{% endif %}</p>
+    </div>
+    <a class="btn btn-quiet" href="{{ url_for('pro_profile', trade_id=t.user_id) }}">See public profile</a>
+  </div>
+
+  <div class="admin-stats">
+    <div><b>{{ subscribed and tiers[t.tier].name or '—' }}</b><span class="small muted">{% if t.sub_status == 'active' %}{{ 'paused' if t.paused else 'taking jobs' }}{% else %}{{ t.sub_status }}{% endif %}</span></div>
+    <div><b>{{ progress.offers if progress else 0 }}</b><span class="small muted">offered this month</span></div>
+    <div><b>{{ progress.quotes if progress else 0 }}</b><span class="small muted">quotes sent</span></div>
+    <div><b>{{ progress.won if progress else 0 }}</b><span class="small muted">jobs won</span></div>
+    <div><b>{% if rating.n %}{{ '%.1f'|format(rating.avg) }}{% else %}—{% endif %}</b><span class="small muted">{{ rating.n }} reviews</span></div>
+  </div>
+
+  <div class="two" style="margin-top:24px">
+    <div>
+      <div class="section-title" style="margin-top:0"><h2>Their details</h2></div>
+      <div class="card">
+        <dl class="kv">
+          <dt>About</dt><dd>{{ t.about or '—' }}</dd>
+          <dt>Trades</dt><dd>{{ work|join(', ') or 'None chosen' }}</dd>
+          <dt>Areas</dt><dd>{{ places|join(', ') or 'None chosen' }}</dd>
+          <dt>Years trading</dt><dd>{{ t.years_trading or '—' }}</dd>
+          <dt>Guarantee</dt><dd>{{ t.workmanship_guarantee or '—' }}</dd>
+          <dt>Email confirmed</dt><dd>{{ 'Yes, ' ~ t.email_verified_at|day if t.email_verified_at else 'Not yet' }}</dd>
+        </dl>
+      </div>
+
+      <div class="section-title"><h2>Checks</h2><span class="label">Badges only show what’s checked</span></div>
+      <div class="card">
+        <dl class="kv">
+          <dt>Licence</dt>
+          <dd>
+            {% if t.licence_type and t.licence_type != 'none' %}
+              {{ licences[t.licence_type][0] }} · {{ t.licence_number }}
+              {% if licences[t.licence_type][1] %}<a href="{{ licences[t.licence_type][1] }}" target="_blank" rel="noopener">check the register ↗</a>{% endif %}
+              <form method="post" action="{{ url_for('admin_trade_action', trade_id=t.user_id, action='check') }}" class="inline">
+                {{ m.csrf() }}<input type="hidden" name="what" value="licence"><input type="hidden" name="ok" value="{{ '0' if t.licence_checked_at else '1' }}">
+                {% if t.licence_checked_at %}<span class="badge" style="cursor:default">✓ {{ t.licence_checked_at|day }}</span> <button class="linkish small" type="submit">Undo</button>
+                {% else %}<button class="btn btn-quiet btn-sm" type="submit">Mark checked</button>{% endif %}
+              </form>
+            {% else %}<span class="muted">None needed</span>{% endif %}
+          </dd>
+          <dt>NZBN</dt>
+          <dd>
+            {% if t.nzbn %}{{ t.nzbn }} <a href="https://www.nzbn.govt.nz/" target="_blank" rel="noopener">register ↗</a>
+              <form method="post" action="{{ url_for('admin_trade_action', trade_id=t.user_id, action='check') }}" class="inline">
+                {{ m.csrf() }}<input type="hidden" name="what" value="nzbn"><input type="hidden" name="ok" value="{{ '0' if t.nzbn_checked_at else '1' }}">
+                {% if t.nzbn_checked_at %}<span class="badge" style="cursor:default">✓ {{ t.nzbn_checked_at|day }}</span> <button class="linkish small" type="submit">Undo</button>
+                {% else %}<button class="btn btn-quiet btn-sm" type="submit">Mark checked</button>{% endif %}
+              </form>
+            {% else %}<span class="muted">Not given</span>{% endif %}
+          </dd>
+          <dt>Insurance</dt>
+          <dd>
+            {% if t.insurance_insurer %}{{ t.insurance_insurer }}{% if t.insurance_expiry %} to {{ t.insurance_expiry|day }}{% endif %}
+              <form method="post" action="{{ url_for('admin_trade_action', trade_id=t.user_id, action='check') }}" class="inline">
+                {{ m.csrf() }}<input type="hidden" name="what" value="insurance"><input type="hidden" name="ok" value="{{ '0' if t.insurance_checked_at else '1' }}">
+                {% if t.insurance_checked_at %}<span class="badge" style="cursor:default">✓ {{ t.insurance_checked_at|day }}</span> <button class="linkish small" type="submit">Undo</button>
+                {% else %}<button class="btn btn-quiet btn-sm" type="submit">Mark checked</button>{% endif %}
+              </form>
+            {% else %}<span class="muted">Not given</span>{% endif %}
+          </dd>
+        </dl>
+      </div>
+
+      <div class="section-title"><h2>Jobs they were offered</h2></div>
+      <div class="card table-wrap" style="padding:6px 10px">
+        <table>
+          <thead><tr><th>Job</th><th>Offered</th><th>What happened</th></tr></thead>
+          <tbody>
+            {% for o in offers %}
+            <tr>
+              <td><a href="{{ url_for('admin_job', job_id=o.job_id) }}">{{ o.title }}</a><div class="small muted">{{ o.area_name }} · {{ bands[o.value_band].short }}</div></td>
+              <td class="small">{{ o.offered_at|ago }}</td>
+              <td><span class="pill {{ o.status }}">{{ o.status }}</span></td>
+            </tr>
+            {% else %}<tr><td colspan="3" class="muted">No jobs offered yet.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section-title"><h2>Their quotes</h2></div>
+      <div class="card table-wrap" style="padding:6px 10px">
+        <table>
+          <thead><tr><th>Job</th><th>Price</th><th>Status</th><th>Sent</th></tr></thead>
+          <tbody>
+            {% for q in quotes %}
+            <tr><td><a href="{{ url_for('admin_job', job_id=q.job_id) }}">{{ q.title }}</a></td><td class="num">{{ q|price }}</td><td>{{ m.status_pill(q.status) }}</td><td class="small">{{ q.created_at|day }}</td></tr>
+            {% else %}<tr><td colspan="4" class="muted">No quotes yet.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if reviews %}
+      <div class="section-title"><h2>Reviews</h2></div>
+      {% for r in reviews %}
+      <div class="card review">
+        <b>{{ '%.1f'|format(r.rating) }} ★ · {{ r.title }}</b>
+        <div class="scores"><span>Work {{ r.workmanship }}/5</span><span>Communication {{ r.communication }}/5</span><span>On time {{ r.timeliness }}/5</span><span>Value {{ r.value_for_money }}/5</span></div>
+        {% if r.body %}<p class="desc" style="margin:0">{{ r.body }}</p>{% endif %}
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      {% if reported %}
+      <div class="section-title"><h2>Jobs they reported</h2></div>
+      <div class="card table-wrap" style="padding:6px 10px">
+        <table><tbody>
+          {% for r in reported %}<tr><td><a href="{{ url_for('admin_job', job_id=r.job_id) }}">{{ r.title }}</a></td><td class="small">{{ r.reason|replace('_', ' ') }}{% if r.note %} — {{ r.note }}{% endif %}</td><td class="small muted">{{ r.created_at|ago }}</td></tr>{% endfor %}
+        </tbody></table>
+      </div>
+      {% endif %}
+    </div>
+
+    <aside class="stack">
+      <div class="card">
+        <h3>Their plan</h3>
+        <p class="small" style="margin:0">
+          {% if subscribed %}{{ tiers[t.tier].name }} · {{ 'ends' if t.cancel_at_period_end else 'renews' }} {{ t.period_end|day }}
+          {% else %}<span class="muted">No active plan ({{ t.sub_status }})</span>{% endif %}
+          {% if cfg.FREE_PILOT %}<br><span class="muted">Free pilot — nothing is charged.</span>{% endif %}
+        </p>
+        <form method="post" action="{{ url_for('admin_trade_action', trade_id=t.user_id, action='plan') }}" class="form" style="gap:10px;margin-top:12px">
+          {{ m.csrf() }}
+          <select name="tier" aria-label="Plan">
+            {% for key in cfg.TIER_ORDER %}<option value="{{ key }}" {{ 'selected' if t.tier == key }}>{{ tiers[key].name }} — ${{ tiers[key].price }}/mo</option>{% endfor %}
+            <option value="stop">Stop their plan</option>
+          </select>
+          <div><button class="btn btn-quiet btn-sm" type="submit">Set plan</button></div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Jobs</h3>
+        <p class="small muted" style="margin:0">{% if t.paused %}Paused — they’re being offered nothing{% if t.paused_until %} until {{ t.paused_until|day }}{% endif %}.{% else %}They’re being offered matching jobs.{% endif %}</p>
+        <form method="post" action="{{ url_for('admin_trade_action', trade_id=t.user_id, action='availability') }}" style="margin-top:10px">
+          {{ m.csrf() }}<input type="hidden" name="choice" value="{{ 'resume' if t.paused else 'pause' }}">
+          <button class="btn btn-quiet btn-sm" type="submit">{{ 'Turn jobs back on' if t.paused else 'Pause their jobs' }}</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Send them a message</h3>
+        <form method="post" action="{{ url_for('admin_trade_action', trade_id=t.user_id, action='message') }}" class="form" style="gap:10px">
+          {{ m.csrf() }}
+          <textarea name="body" style="min-height:80px" placeholder="Shows in their notifications{{ ' and inbox' if cfg.SUPPORT_EMAIL }}" aria-label="Message"></textarea>
+          <div><button class="btn btn-quiet btn-sm" type="submit">Send</button></div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Set their password</h3>
+        <form method="post" action="{{ url_for('admin_trade_action', trade_id=t.user_id, action='password') }}" class="form" style="gap:10px">
+          {{ m.csrf() }}
+          <input name="password" type="password" placeholder="New password" autocomplete="new-password">
+          <input name="current_password" type="password" placeholder="Your own password" autocomplete="current-password">
+          <div><button class="btn btn-quiet btn-sm" type="submit">Set password</button></div>
+        </form>
+      </div>
+
+      {% if payments %}
+      <div class="card">
+        <h3>Billing months</h3>
+        <table class="small">
+          <tbody>
+            {% for p in payments %}
+            {% set c = claims|selectattr('payment_id', 'equalto', p.id)|first %}
+            <tr><td>{{ p.period_start|day }}</td><td class="num">${{ '%.2f'|format(p.amount_cents / 100) }}</td><td>{{ m.status_pill(c.status) if c else p.status }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      <div class="card">
+        <h3>Trouble</h3>
+        <form method="post" action="{{ url_for('admin_trade_action', trade_id=t.user_id, action='suspend') }}" style="margin-bottom:10px"
+              data-confirm="{{ 'Lift the suspension?' if t.sub_status == 'suspended' else 'Suspend this business? Their live offers close and they get no more jobs.' }}">
+          {{ m.csrf() }}<input type="hidden" name="choice" value="{{ 'off' if t.sub_status == 'suspended' else 'on' }}">
+          <button class="btn btn-quiet btn-sm" type="submit">{{ 'Lift suspension' if t.sub_status == 'suspended' else 'Suspend this business' }}</button>
+        </form>
+        {% if not t.closed_at %}
+        <form method="post" action="{{ url_for('admin_trade_action', trade_id=t.user_id, action='remove') }}"
+              data-confirm="Remove {{ t.business_name }} for good? Their name, phone and email are deleted. Reviews customers left stay.">
+          {{ m.csrf() }}<button class="btn btn-danger btn-sm" type="submit">Remove from {{ cfg.BRAND }}</button>
+        </form>
+        <p class="small muted" style="margin:8px 0 0">Suspending is reversible. Removing deletes their details and can’t be undone.</p>
+        {% endif %}
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}
