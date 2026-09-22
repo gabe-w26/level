@@ -283,6 +283,132 @@ class ApiTest(unittest.TestCase):
         self.assertTrue(any(c['slug'] == 'builder' for c in body['categories']))
         self.assertNotIn('price', json.dumps(body).lower())          # nothing about paying in the app
 
+    # ── progress updates ──
+    def _hired(self, plan):
+        """A customer job posted and quoted through the API, then accepted. Returns tokens and ids."""
+        self.user('customer', 'c@test.nz')
+        trade_id = self.user('trade', 't@test.nz')
+        other_id = self.user('trade', 'o@test.nz')
+        customer, trade, other = self.login('c@test.nz'), self.login('t@test.nz'), self.login('o@test.nz')
+        job_id = self.call('post', '/customer/jobs', customer, json=JOB).get_json()['job_id']
+        r = self.call('post', f'/trade/jobs/{job_id}/quote', trade, json=dict(QUOTE, report_plan=plan))
+        self.assertEqual(r.status_code, 201, r.get_json())
+        self.call('post', f'/trade/jobs/{job_id}/quote', other, json=QUOTE)
+        return customer, trade, other, job_id, trade_id, other_id
+
+    def test_quote_promise_is_shown_and_carried_onto_the_hired_job(self):
+        customer, trade, other, job_id, trade_id, _ = self._hired(['weekly', 'daily'])
+        quotes = {q['trade_id']: q for q in self.call('get', f'/customer/jobs/{job_id}', customer).get_json()['quotes']}
+        self.assertEqual(quotes[trade_id]['report_plan'], ['daily', 'weekly'])
+        self.assertEqual(quotes[trade_id]['report_plan_text'], 'Daily and weekly updates')
+        self.assertIn('report_record', quotes[trade_id])
+        # Editing the quote can change the promise (comma string works too)
+        r = self.call('post', f'/trade/jobs/{job_id}/quote/edit', trade, json=dict(QUOTE, report_plan='weekly'))
+        self.assertEqual(r.status_code, 200, r.get_json())
+        self.assertEqual(self.row('SELECT report_plan FROM quotes WHERE trade_id = ?', trade_id)['report_plan'], 'weekly')
+        self.assertIsNone(self.call('get', f'/customer/jobs/{job_id}', customer).get_json()['progress'])
+
+        self.call('post', f'/customer/jobs/{job_id}/quotes/{quotes[trade_id]["id"]}/accept', customer)
+        progress = self.call('get', f'/customer/jobs/{job_id}', customer).get_json()['progress']
+        self.assertEqual(progress['report_plan'], ['weekly'])
+        self.assertTrue(progress['work_started_on'])
+        self.assertIn('weekly', progress['score'])
+        self.assertEqual(self.call('get', f'/trade/jobs/{job_id}', trade).get_json()['progress']['report_plan'], ['weekly'])
+        self.assertIsNone(self.call('get', f'/trade/jobs/{job_id}', other).get_json()['progress'])
+
+    def test_hired_trade_posts_updates_with_photos_and_either_side_can_finish(self):
+        customer, trade, other, job_id, trade_id, _ = self._hired('daily,weekly')
+        quotes = {q['trade_id']: q for q in self.call('get', f'/customer/jobs/{job_id}', customer).get_json()['quotes']}
+        self.call('post', f'/customer/jobs/{job_id}/quotes/{quotes[trade_id]["id"]}/accept', customer)
+
+        update = lambda **kw: dict(dict(body='Framing is up and the roof is on. Cladding starts Monday.', kinds='daily',
+                                        photos=(io.BytesIO(b'fake image'), 'site.jpg')), **kw)
+        r = self.call('post', f'/trade/jobs/{job_id}/updates', other, data=update(),
+                      content_type='multipart/form-data')
+        self.assertEqual(r.status_code, 404)                            # only the hired trade
+        self.assertEqual(self.call('post', f'/trade/jobs/{job_id}/updates', customer, data={}).status_code, 403)
+        r = self.call('post', f'/trade/jobs/{job_id}/updates', trade, data=update(body='short'),
+                      content_type='multipart/form-data')
+        self.assertEqual(r.status_code, 400)                            # reporting's rules apply
+        r = self.call('post', f'/trade/jobs/{job_id}/updates', trade, data=update(), content_type='multipart/form-data')
+        self.assertEqual(r.status_code, 201, r.get_json())
+
+        progress = self.call('get', f'/customer/jobs/{job_id}', customer).get_json()['progress']
+        self.assertEqual(len(progress['updates']), 1)
+        self.assertEqual(progress['updates'][0]['kinds'], ['daily'])
+        self.assertEqual(len(progress['updates'][0]['photos']), 1)
+        self.assertTrue(progress['updates'][0]['photos'][0].startswith('http'))
+
+        r = self.call('post', f'/trade/jobs/{job_id}/start', trade, json={'start': 'not a date'})
+        self.assertEqual(r.status_code, 400)
+        r = self.call('post', f'/trade/jobs/{job_id}/start', trade, json={'start': progress['today']})
+        self.assertEqual(r.status_code, 200, r.get_json())
+
+        self.assertEqual(self.call('post', f'/customer/jobs/{job_id}/finish', customer).status_code, 200)
+        done = self.call('get', f'/trade/jobs/{job_id}', trade).get_json()['progress']
+        self.assertTrue(done['work_done_on'])
+        self.assertEqual(done['due'], [])
+        self.assertEqual(self.call('post', f'/trade/jobs/{job_id}/finish', trade).status_code, 200)
+
+    def test_trade_profile_has_the_default_promise(self):
+        uid = self.user('trade', 't@test.nz')
+        self.db.execute("UPDATE trades SET report_plan = 'weekly' WHERE user_id = ?", (uid,))
+        self.db.commit()
+        profile = self.call('get', '/trade/profile', self.login('t@test.nz')).get_json()['profile']
+        self.assertEqual(profile['report_plan'], ['weekly'])
+
+    # ── referrals ──
+    def test_trade_referrals_show_the_invite_link_and_free_months(self):
+        inviter = self.user('trade', 't@test.nz')
+        token = self.login('t@test.nz')
+        r = self.call('get', '/trade/referrals', token)
+        self.assertEqual(r.status_code, 200)
+        body = r.get_json()
+        self.assertIn('/join/', body['invite_url'])
+        self.assertEqual(body['months']['earned'], 0)
+        self.assertNotIn('$', json.dumps(body))                          # months, never money
+
+        newbie = self.user('trade', 'new@test.nz')
+        self.db.execute('UPDATE users SET referred_by = ? WHERE id = ?', (inviter, newbie))
+        self.db.commit()
+        customer_id = self.user('customer', 'c@test.nz')
+        job_id = engine.post_job(self.db, customer_id, dict(
+            category_id=self.cat, area_id=self.area, suburb='Ponsonby', title='Fix deck',
+            description='Rotten boards on the back deck need replacing.', value_band='small',
+            timing='weeks', property_type='house'))[0]
+        r = self.call('post', f'/trade/jobs/{job_id}/quote', self.login('new@test.nz'), json=QUOTE)
+        self.assertEqual(r.status_code, 201, r.get_json())
+        body = self.call('get', '/trade/referrals', token).get_json()
+        self.assertEqual(body['months']['earned'], 1)
+        self.assertEqual([j['quoted'] for j in body['joined']], [True])
+        self.assertEqual(self.call('get', '/trade/referrals', self.login('c@test.nz')).status_code, 403)
+
+    def test_customer_share_link_and_recommending_a_tradie(self):
+        self.user('customer', 'c@test.nz')
+        existing = self.user('trade', 'known@test.nz')
+        token = self.login('c@test.nz')
+        share = self.call('get', '/customer/share', token).get_json()
+        self.assertIn('/r/', share['share_url'])
+        self.assertEqual(share['share_url'], self.call('get', '/customer/share', token).get_json()['share_url'])
+
+        r = self.call('post', '/customer/recommend', token, json={'name': 'Hemi', 'category_id': self.cat,
+                                                                  'area_id': self.area})
+        self.assertEqual(r.status_code, 400)                            # needs an email or mobile
+        with mock.patch('referrals.threading.Thread') as thread, mock.patch('mailer.enabled', return_value=True):
+            r = self.call('post', '/customer/recommend', token, json={
+                'name': 'Hemi Walker', 'business_name': 'Walker Plumbing', 'email': 'hemi@test.nz',
+                'category_id': self.cat, 'area_id': self.area, 'email_them': True})
+            self.assertEqual(r.status_code, 201, r.get_json())
+            self.assertTrue(r.get_json()['emailed'])
+            thread.assert_called_once()
+        self.assertIn('/o/', r.get_json()['join_url'])
+        self.assertEqual(self.call('get', '/customer/share', token).get_json()['recommended'][0]['business_name'],
+                         'Walker Plumbing')
+        r = self.call('post', '/customer/recommend', token, json={
+            'name': 'Known', 'email': 'known@test.nz', 'category_id': self.cat, 'area_id': self.area})
+        self.assertTrue(r.get_json()['already_on_level'])
+        self.assertIn(f'/pros/{existing}', r.get_json()['profile_url'])
+
     def row(self, sql, *args):
         return self.db.execute(sql, args).fetchone()
 

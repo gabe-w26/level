@@ -45,6 +45,13 @@ export function AccountScreen() {
         <TradeSection profile={data.profile} status={data.status} onChanged={() => { reload(); refresh(); }} />
       ) : null}
 
+      <Label style={{ marginTop: space.md, marginBottom: 8 }}>Spread the word</Label>
+      <View style={{ borderRadius: 10, overflow: 'hidden', marginBottom: space.md }}>
+        {isTrade
+          ? <LinkRow icon="gift-outline" title="Invite a mate" detail="Earn a free month" onPress={() => router.push('/referrals')} />
+          : <LinkRow icon="share-social-outline" title="Share & recommend" onPress={() => router.push('/share')} />}
+      </View>
+
       <Label style={{ marginTop: space.md, marginBottom: 8 }}>Notifications</Label>
       <View style={{ borderRadius: 10, overflow: 'hidden', marginBottom: space.md }}>
         <LinkRow icon="notifications-outline" title="All notifications" onPress={() => router.push('/notifications')} />
@@ -96,6 +103,8 @@ function TradeSection({ profile, status, onChanged }: { profile: TradeProfile; s
         <Row label="Trades" value={profile.categories.join(', ') || 'None yet'} />
         <Row label="Areas" value={profile.areas.join(', ') || 'None yet'} />
         <Row label="Reviews" value={rating.n ? `${(rating.avg || 0).toFixed(1)} ★ from ${rating.n}` : 'No reviews yet'} />
+        <Row label="Usual updates" value={profile.report_plan.length ? profile.report_plan.map((k) => k[0].toUpperCase() + k.slice(1)).join(', ') : 'None'} />
+        <Row label="Updates on time" value={profile.report_record ? `${profile.report_record.pct}% across ${profile.report_record.jobs} job${profile.report_record.jobs === 1 ? '' : 's'}` : 'Not enough jobs yet'} />
         <Row label="Checked" value={[profile.licence_checked && 'Licence', profile.insurance_checked && 'Insurance',
           profile.nzbn_checked && 'NZBN'].filter(Boolean).join(', ') || 'Nothing checked yet'} />
         <Row label="New jobs" value={status.paused ? (status.paused_until ? `Paused until ${day(status.paused_until)}` : 'Paused') : 'On'} />

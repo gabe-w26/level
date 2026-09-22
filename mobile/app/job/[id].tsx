@@ -7,6 +7,7 @@ import { useLoad } from '../../lib/useLoad';
 import { ago, day, JOB_STATUS, QUOTE_STATUS } from '../../lib/format';
 import { Body, Button, Card, Empty, ErrorText, Label, Loading, Notice, Pill, QuoteMeter, Row, Screen, Title } from '../../components/ui';
 import { colors, radius, space } from '../../lib/theme';
+import { PromiseLine, ProgressSection } from '../../components/Progress';
 
 export default function CustomerJob() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -114,6 +115,8 @@ export default function CustomerJob() {
           onMessage={() => router.push(`/thread/${jobId}/${q.trade_id}`)} />
       ))}
 
+      {data.progress ? <ProgressSection progress={data.progress} role="customer" jobId={jobId} onChanged={reload} /> : null}
+
       {data.can_review ? (
         <Button title="Leave a review" icon="star-outline" variant="pine" onPress={() => router.push(`/review/${jobId}`)} />
       ) : data.reviewed ? <Notice tone="pine">Thanks — you’ve reviewed this job.</Notice> : null}
@@ -174,6 +177,7 @@ function QuoteCard({ q, n, jobOpen, busy, onShare, onAccept, onDecline, onMessag
           {badges.map((b) => <Pill key={b} label={b} tone="pine" />)}
         </View>
       ) : null}
+      <PromiseLine text={q.report_plan_text} record={q.report_record} />
       <Body style={{ marginTop: 10 }} selectable>{q.message}</Body>
       <View style={{ height: 6 }} />
       <Row label="Includes" value={q.inclusions || ''} />

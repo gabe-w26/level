@@ -4,6 +4,7 @@ import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { api, QuoteInput, TradeJobDetail } from '../../lib/api';
 import { Button, Check, Choice, ErrorText, Field, Loading, Notice, Screen } from '../../components/ui';
 import { colors, radius, space } from '../../lib/theme';
+import { PlanPicker } from '../../components/Progress';
 
 type PriceType = QuoteInput['price_type'];
 
@@ -15,7 +16,7 @@ export default function QuoteForm() {
   const router = useRouter();
   const navigation = useNavigation();
   const [detail, setDetail] = useState<TradeJobDetail | null>(null);
-  const [f, setF] = useState<QuoteInput>({ price_type: 'fixed', gst: 'incl', message: '' });
+  const [f, setF] = useState<QuoteInput>({ price_type: 'fixed', gst: 'incl', message: '', report_plan: [] });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (k: keyof QuoteInput) => (v: any) => setF((old) => ({ ...old, [k]: v }));
@@ -24,6 +25,8 @@ export default function QuoteForm() {
     navigation.setOptions({ title: editing ? 'Edit your quote' : 'Send a quote' });
     api.tradeJob(jobId).then((d) => {
       setDetail(d);
+      // New quotes start from the trade's usual promise (set on the website profile)
+      if (!editing) setF((old) => ({ ...old, report_plan: d.default_report_plan || [] }));
       if (editing && d.quote) {
         const q = d.quote;
         setF({
@@ -31,6 +34,7 @@ export default function QuoteForm() {
           amount_low: q.amount_low ? String(q.amount_low) : '', amount_high: q.amount_high ? String(q.amount_high) : '',
           inclusions: q.inclusions || '', exclusions: q.exclusions || '', warranty: q.warranty || '',
           available_from: q.available_from || '', duration: q.duration || '', act_docs_promised: q.act_docs_promised,
+          report_plan: q.report_plan || [],
         });
       }
     }).catch((e) => setError(e.message));
@@ -111,6 +115,7 @@ export default function QuoteForm() {
         <View style={{ flex: 1 }}><Field label="Can start (optional)" value={f.available_from} onChangeText={set('available_from')} placeholder="e.g. next week" /></View>
         <View style={{ flex: 1 }}><Field label="Takes about (optional)" value={f.duration} onChangeText={set('duration')} placeholder="e.g. 2 days" /></View>
       </View>
+      <PlanPicker value={f.report_plan || []} onChange={set('report_plan')} />
       {needsAct ? (
         <Notice tone="chalk" title="$30,000 or more">
           <Text style={{ fontSize: 15, marginBottom: 6 }}>

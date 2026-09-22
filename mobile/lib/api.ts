@@ -104,8 +104,8 @@ export interface Counts { notifications: number; messages: number; offers: numbe
 export interface Option { key: string; label: string; }
 export interface AppConfig {
   brand: string;
-  categories: { slug: string; name: string; licence_note: string | null }[];
-  regions: { region: string; areas: { slug: string; name: string }[] }[];
+  categories: { id: number; slug: string; name: string; licence_note: string | null }[];
+  regions: { region: string; areas: { id: number; slug: string; name: string }[] }[];
   value_bands: (Option & { short: string })[];
   timing: Option[];
   property_types: Option[];
@@ -144,6 +144,24 @@ export interface Job {
 
 export interface Rating { n: number; avg: number | null; }
 
+export type ReportKind = 'daily' | 'weekly' | 'monthly';
+/** How often a trade keeps its progress-update promises, across hired jobs. null until there's enough to judge. */
+export interface ReportRecord { pct: number; kept: number; expected: number; jobs: number; }
+
+export interface ProgressUpdate { id: number; body: string; kinds: ReportKind[]; local_date: string; created_at: string; photos: string[]; }
+
+export interface Progress {
+  report_plan: ReportKind[];
+  report_plan_text: string;
+  work_started_on: string | null;
+  work_done_on: string | null;
+  score: Partial<Record<ReportKind, { kept: number; expected: number; due: boolean; label: string; word: string }>>;
+  due: ReportKind[];
+  updates: ProgressUpdate[];
+  today: string;
+  max_photos: number;
+}
+
 export interface Quote {
   id: number;
   job_id: number;
@@ -173,6 +191,9 @@ export interface Quote {
   rating?: Rating;
   needs_act?: boolean;
   contact?: { name: string; phone: string | null; email: string };
+  report_plan?: ReportKind[];
+  report_plan_text?: string;
+  report_record?: ReportRecord | null;
   // On a trade's own list
   title?: string;
   suburb?: string;
@@ -192,6 +213,7 @@ export interface CustomerJobDetail {
   can_review: boolean;
   can_close: boolean;
   held: boolean;
+  progress: Progress | null;
 }
 
 export interface Offer extends Job {
@@ -218,6 +240,8 @@ export interface TradeJobDetail {
   photos: string[];
   templates: QuoteTemplate[];
   contract_threshold: number;
+  default_report_plan: ReportKind[];
+  progress: Progress | null;
 }
 
 export interface Thread {
@@ -235,6 +259,7 @@ export interface TradeProfile {
   licence_checked: boolean; insurance_checked: boolean; nzbn_checked: boolean;
   workmanship_guarantee: string | null; categories: string[]; areas: string[];
   rating: Rating; public_url: string; edit_url: string | null;
+  report_plan: ReportKind[]; report_record: ReportRecord | null;
 }
 
 export interface QuoteInput {
@@ -249,6 +274,7 @@ export interface QuoteInput {
   available_from?: string;
   duration?: string;
   act_docs_promised?: boolean;
+  report_plan?: ReportKind[];
 }
 
 export interface JobInput {
@@ -259,6 +285,25 @@ export interface JobInput {
 export interface PhotoInput { uri: string; name: string; type: string; }
 
 type Ok = { ok: true; message?: string };
+
+export interface TradeReferrals {
+  invite_url: string;
+  months: { waiting: number; used: number; earned: number; cap: number };
+  rewards: { business_name: string | null; months: number; earned_at: string; used: boolean }[];
+  joined: { business_name: string; joined_at: string; quoted: boolean }[];
+}
+
+export interface CustomerShare {
+  share_url: string;
+  friends: number;
+  email_on: boolean;
+  recommended: { business_name: string; category_name: string; joined: boolean }[];
+}
+
+export interface RecommendInput {
+  name: string; business_name?: string; email?: string; phone?: string; note?: string;
+  category_id: number | ''; area_id: number | ''; email_them?: boolean;
+}
 
 // ── Calls ─────────────────────────────────────────────────────────────────────
 
@@ -303,6 +348,10 @@ export const api = {
     post<Ok>(`/customer/jobs/${jobId}/quotes/${quoteId}/${action}`, { act_ack: actAck }),
   closeJob: (jobId: number, outcome: 'elsewhere' | 'not_going_ahead') =>
     post<Ok>(`/customer/jobs/${jobId}/close`, { outcome }),
+  customerFinish: (jobId: number) => post<Ok>(`/customer/jobs/${jobId}/finish`),
+  customerShare: () => get<CustomerShare>('/customer/share'),
+  recommend: (fields: RecommendInput) =>
+    post<Ok & { already_on_level: boolean; emailed?: boolean; join_url?: string; profile_url?: string }>('/customer/recommend', fields),
   reviewParts: () => get<{ parts: Option[] }>('/review-parts'),
   review: (jobId: number, scores: Record<string, number>, body: string) =>
     post<Ok>(`/customer/jobs/${jobId}/review`, { ...scores, body }),
@@ -316,6 +365,16 @@ export const api = {
   passJob: (jobId: number) => post<Ok>(`/trade/jobs/${jobId}/pass`),
   myQuotes: () => get<{ quotes: Quote[] }>('/trade/quotes'),
   tradeProfile: () => get<{ profile: TradeProfile; status: TradeStatus }>('/trade/profile'),
+  postUpdate: (jobId: number, body: string, kinds: ReportKind[], photos: PhotoInput[]) => {
+    const form = new FormData();
+    form.append('body', body);
+    kinds.forEach((k) => form.append('kinds', k));
+    photos.forEach((p) => form.append('photos', p as unknown as Blob));
+    return post<Ok & { id: number; progress: Progress }>(`/trade/jobs/${jobId}/updates`, form);
+  },
+  setStart: (jobId: number, start: string) => post<Ok & { progress: Progress }>(`/trade/jobs/${jobId}/start`, { start }),
+  tradeFinish: (jobId: number) => post<Ok>(`/trade/jobs/${jobId}/finish`),
+  tradeReferrals: () => get<TradeReferrals>('/trade/referrals'),
   setAvailability: (choice: 'on' | 'off' | '1w' | '2w' | '4w') =>
     post<Ok & { status: TradeStatus }>('/trade/availability', { choice }),
 };

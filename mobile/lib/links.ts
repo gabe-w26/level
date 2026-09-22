@@ -13,6 +13,8 @@ export function appRouteFor(link: string | null | undefined, role: Role | undefi
   if ((m = path.match(/^\/me\/jobs\/(\d+)/))) return `/job/${m[1]}`;
   if ((m = path.match(/^\/thread\/(\d+)\/(\d+)/))) return `/thread/${m[1]}/${m[2]}`;
   if (path === '/trade/quotes') return '/(trade)/quotes';
+  if (path === '/trade/referrals') return '/referrals';
+  if (path === '/me/share') return '/share';
   if (path === '/trade' || path === '/trade/') return '/(trade)';
   if (path === '/me' || path === '/me/') return '/(customer)';
   if (path === '/messages') return role === 'trade' ? '/(trade)/messages' : '/(customer)/messages';

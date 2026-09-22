@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { api, JobInput, PhotoInput } from '../../lib/api';
+import { pickPhotos } from '../../lib/photos';
 import { useAppConfig } from '../../lib/auth';
 import { Button, Choice, ErrorText, Field, Loading, Notice, Screen } from '../../components/ui';
 import { PickerField } from '../../components/PickerField';
@@ -29,30 +29,8 @@ export default function PostJob() {
   if (!config) return <Loading />;
 
   async function addPhoto(source: 'camera' | 'library') {
-    if (photos.length >= maxPhotos) {
-      Alert.alert('That’s the limit', `You can add up to ${maxPhotos} photos.`);
-      return;
-    }
-    const perm = source === 'camera'
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('Permission needed', source === 'camera'
-        ? 'Allow camera access in Settings to take photos of the job.'
-        : 'Allow photo access in Settings to add photos of the job.');
-      return;
-    }
-    const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.6, exif: false };
-    const result = source === 'camera'
-      ? await ImagePicker.launchCameraAsync(options)
-      : await ImagePicker.launchImageLibraryAsync({ ...options, allowsMultipleSelection: true, selectionLimit: maxPhotos - photos.length });
-    if (result.canceled) return;
-    const added = result.assets.map((a, i) => {
-      const ext = (a.fileName?.split('.').pop() || a.uri.split('.').pop() || 'jpg').toLowerCase();
-      const safeExt = ['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(ext) ? ext : 'jpg';
-      return { uri: a.uri, name: `photo-${Date.now()}-${i}.${safeExt}`, type: a.mimeType || `image/${safeExt === 'jpg' ? 'jpeg' : safeExt}` };
-    });
-    setPhotos((old) => [...old, ...added].slice(0, maxPhotos));
+    const added = await pickPhotos(source, maxPhotos - photos.length);
+    if (added.length) setPhotos((old) => [...old, ...added].slice(0, maxPhotos));
   }
 
   async function submit() {

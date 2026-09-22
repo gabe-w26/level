@@ -52,6 +52,8 @@ function RootGuard() {
       <Stack.Screen name="notifications" options={{ ...header, title: 'Notifications' }} />
       <Stack.Screen name="verify-phone" options={{ ...header, title: 'Confirm your phone' }} />
       <Stack.Screen name="delete-account" options={{ ...header, title: 'Delete account' }} />
+      <Stack.Screen name="referrals" options={{ ...header, title: 'Invite a mate' }} />
+      <Stack.Screen name="share" options={{ ...header, title: 'Share & recommend' }} />
     </Stack>
   );
 }

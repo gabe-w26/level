@@ -35,6 +35,8 @@ import config
 import engine
 import integrations
 import mailer
+import referrals
+import reporting
 import sms
 from engine import RuleError, parse_ts, ts, utcnow
 
@@ -248,9 +250,32 @@ def quote_json(q, with_contact=False):
         out['licence_checked'] = bool(q['licence_checked_at'])
         out['insurance_checked'] = bool(q['insurance_checked_at'])
         out['nzbn_checked'] = bool(q['nzbn_checked_at'])
+    if 'report_plan' in keys:
+        out['report_plan'] = reporting.parse(q['report_plan'])
+        out['report_plan_text'] = reporting.describe(q['report_plan'])
+    if 'report_record' in keys:
+        out['report_record'] = q['report_record']
     if with_contact and q['status'] in ('shortlisted', 'accepted'):
         out['contact'] = {'name': q['contact_name'], 'phone': q['phone'], 'email': q['email']}
     return out
+
+
+def progress_json(job):
+    """The progress-updates section of a hired job, from the same helper the web pages use."""
+    p = web._progress(job)
+    if not p:
+        return None
+    return {
+        'report_plan': p['report_plan'], 'report_plan_text': p['report_plan_text'],
+        'work_started_on': job['work_started_on'], 'work_done_on': job['work_done_on'],
+        'score': p['report_score'],
+        'due': [k for k, v in p['report_score'].items() if v['due']],
+        'updates': [{'id': u['id'], 'body': u['body'], 'kinds': reporting.parse(u['kinds']),
+                     'local_date': u['local_date'], 'created_at': u['created_at'],
+                     'photos': [photo_url(ph['filename']) for ph in p['update_photos'].get(u['id'], [])]}
+                    for u in p['updates']],
+        'today': p['nz_today'].isoformat(), 'max_photos': reporting.MAX_PHOTOS,
+    }
 
 
 def notification_json(n):
@@ -264,10 +289,10 @@ def notification_json(n):
 def app_config():
     regions = {}
     for a in db().execute('SELECT * FROM areas ORDER BY id').fetchall():
-        regions.setdefault(a['region'], []).append({'slug': a['slug'], 'name': a['name']})
+        regions.setdefault(a['region'], []).append({'id': a['id'], 'slug': a['slug'], 'name': a['name']})
     return {
         'brand': config.BRAND,
-        'categories': [{'slug': c['slug'], 'name': c['name'], 'licence_note': c['licence_note']}
+        'categories': [{'id': c['id'], 'slug': c['slug'], 'name': c['name'], 'licence_note': c['licence_note']}
                        for c in web.all_categories()],
         'regions': [{'region': r, 'areas': areas} for r, areas in regions.items()],
         'value_bands': [{'key': k, 'label': v['label'], 'short': v['short']} for k, v in config.VALUE_BANDS.items()],
@@ -653,7 +678,7 @@ def customer_job(job_id):
             'photos': [photo_url(p['filename']) for p in web._photos(job_id)],
             'reviewed': reviewed, 'can_review': job['status'] == 'hired' and not reviewed,
             'can_close': job['status'] in ('open', 'full', 'expired'),
-            'held': job['status'] == 'held'}
+            'held': job['status'] == 'held', 'progress': progress_json(job)}
 
 
 @bp.post('/customer/jobs/<int:job_id>/quotes/<int:quote_id>/<action>')
@@ -780,18 +805,29 @@ def trade_job(job_id):
             'templates': [{'id': t['id'], 'name': t['name'], 'price_type': t['price_type'], 'message': t['message'],
                            'inclusions': t['inclusions'], 'exclusions': t['exclusions'],
                            'warranty': t['warranty'], 'duration': t['duration']} for t in templates],
-            'contract_threshold': config.CONTRACT_THRESHOLD, 'server_time': ts(now)}
+            'contract_threshold': config.CONTRACT_THRESHOLD, 'server_time': ts(now),
+            'default_report_plan': _default_plan(uid),
+            'progress': progress_json(job) if job['hired_trade_id'] == uid else None}
+
+
+def _default_plan(uid):
+    t = db().execute('SELECT report_plan FROM trades WHERE user_id = ?', (uid,)).fetchone()
+    return reporting.parse(t['report_plan']) if t else []
 
 
 def _quote_fields(f):
     """The same fields the web quote form sends. engine._clean_quote does the checking."""
-    return dict(price_type=text(f, 'price_type') or None, amount_low=web._money_field(text(f, 'amount_low')),
+    q = dict(price_type=text(f, 'price_type') or None, amount_low=web._money_field(text(f, 'amount_low')),
                 amount_high=web._money_field(text(f, 'amount_high')),
                 gst_included=text(f, 'gst', 'incl') == 'incl' if 'gst' in f else truthy(f.get('gst_included', True)),
                 message=text(f, 'message'), inclusions=text(f, 'inclusions').strip() or None,
                 exclusions=text(f, 'exclusions').strip() or None, warranty=text(f, 'warranty').strip() or None,
                 available_from=text(f, 'available_from').strip() or None,
                 duration=text(f, 'duration').strip() or None, act_docs_promised=truthy(f.get('act_docs_promised')))
+    if 'report_plan' in f:              # a list or 'daily,weekly'; engine turns it into the stored plan
+        plan = f.get('report_plan')
+        q['report_plan'] = plan if isinstance(plan, (list, tuple)) else str(plan or '').split(',')
+    return q
 
 
 @bp.post('/trade/jobs/<int:job_id>/quote')
@@ -862,7 +898,8 @@ def trade_profile():
         'categories': [c['name'] for c in cats], 'areas': [a['name'] for a in areas],
         'rating': engine.trade_rating(db(), uid), 'public_url': f'{site_url()}/pros/{uid}',
         # Saving the profile sends a trade without a plan on to the plan page, so no link once charging starts.
-        'edit_url': None if config.CHARGING and not engine.is_subscribed(t) else f'{site_url()}/trade/setup'},
+        'edit_url': None if config.CHARGING and not engine.is_subscribed(t) else f'{site_url()}/trade/setup',
+        'report_plan': reporting.parse(t['report_plan']), 'report_record': reporting.trade_record(db(), uid)},
         'status': trade_status(uid)}
 
 
@@ -882,3 +919,136 @@ def trade_availability():
         message = 'New jobs are paused.' + (f' They’ll turn back on in {days} days.' if days else '')
     db().commit()
     return {'ok': True, 'message': message, 'status': trade_status(uid)}
+
+
+# ── Progress updates ──────────────────────────────────────────────────────────
+
+def _kinds():
+    """'kinds' as repeated multipart fields, a JSON list, or a comma string."""
+    if request.is_json:
+        v = payload().get('kinds') or []
+        return v if isinstance(v, list) else str(v).split(',')
+    return ','.join(request.form.getlist('kinds')).split(',')
+
+
+def _hired_job(job_id):
+    job = engine.get_job(db(), job_id)
+    return job if job and job['hired_trade_id'] == me()['id'] else None
+
+
+@bp.post('/trade/jobs/<int:job_id>/updates')
+@auth('trade')
+def post_update(job_id):
+    """Post a progress update (multipart: body, kinds, photos). Hired trade only."""
+    job = _hired_job(job_id)
+    if not job:
+        return fail('Not found. It may have closed or been removed.', 404)
+    names, error = web._save_photos(request.files.getlist('photos'), reporting.MAX_PHOTOS)
+    if error:
+        return fail(error, 400, {'photos': error})
+    try:
+        uid = reporting.post_update(db(), job, me()['id'], text(payload(), 'body'), _kinds(), names)
+    except reporting.ReportError as e:
+        return fail(str(e))
+    return {'ok': True, 'id': uid, 'message': 'Update posted. The customer has been told.',
+            'progress': progress_json(engine.get_job(db(), job_id))}, 201
+
+
+@bp.post('/trade/jobs/<int:job_id>/start')
+@auth('trade')
+def set_start(job_id):
+    job = _hired_job(job_id)
+    if not job:
+        return fail('Not found. It may have closed or been removed.', 404)
+    try:
+        reporting.set_start(db(), job, me()['id'], text(payload(), 'start'))
+    except reporting.ReportError as e:
+        return fail(str(e))
+    return {'ok': True, 'message': 'Start date saved.', 'progress': progress_json(engine.get_job(db(), job_id))}
+
+
+@bp.post('/trade/jobs/<int:job_id>/finish')
+@auth('trade')
+def trade_finish(job_id):
+    job = _hired_job(job_id)
+    if not job:
+        return fail('Not found. It may have closed or been removed.', 404)
+    try:
+        reporting.finish(db(), job, me()['id'])
+    except reporting.ReportError as e:
+        return fail(str(e))
+    return {'ok': True, 'message': 'Marked as finished. Updates are no longer due.'}
+
+
+@bp.post('/customer/jobs/<int:job_id>/finish')
+@auth('customer')
+def customer_finish(job_id):
+    job = _my_job(job_id)
+    if not job:
+        return fail('Not found. It may have closed or been removed.', 404)
+    try:
+        reporting.finish(db(), job, me()['id'])
+    except reporting.ReportError as e:
+        return fail(str(e))
+    return {'ok': True, 'message': 'Marked as finished.'}
+
+
+# ── Referrals ─────────────────────────────────────────────────────────────────
+
+@bp.get('/trade/referrals')
+@auth('trade')
+def trade_referrals():
+    """A trade's invite link and the free months it has earned. No prices: months, not money."""
+    uid = me()['id']
+    t = db().execute('SELECT * FROM trades WHERE user_id = ?', (uid,)).fetchone()
+    bank = referrals.banked(db(), uid)
+    joined = db().execute("SELECT u.created_at, tr.business_name, "
+                          "(SELECT COUNT(*) FROM quotes q WHERE q.trade_id = u.id) AS quotes "
+                          "FROM users u JOIN trades tr ON tr.user_id = u.id WHERE u.referred_by = ? "
+                          "ORDER BY u.id DESC", (uid,)).fetchall()
+    return {'invite_url': f'{site_url()}/join/{web._invite_code(t)}',
+            'months': {'waiting': bank['waiting'], 'used': bank['used'], 'earned': bank['earned'], 'cap': bank['cap']},
+            'rewards': [{'business_name': r['business_name'], 'months': r['months'], 'earned_at': r['earned_at'],
+                         'used': bool(r['applied_at'])} for r in bank['rows']],
+            'joined': [{'business_name': j['business_name'], 'joined_at': j['created_at'], 'quoted': j['quotes'] > 0}
+                       for j in joined]}
+
+
+def _share_state(u):
+    mine = db().execute("SELECT p.business_name, p.status, c.name AS category_name FROM prospects p "
+                        "JOIN categories c ON c.id = p.category_id WHERE p.recommended_by = ? ORDER BY p.id DESC",
+                        (u['id'],)).fetchall()
+    friends = db().execute("SELECT COUNT(*) AS n FROM users WHERE referred_by = ? AND role = 'customer'",
+                           (u['id'],)).fetchone()['n']
+    return {'share_url': f'{site_url()}/r/{referrals.ref_code(db(), u)}', 'friends': friends,
+            'email_on': mailer.enabled(),
+            'recommended': [{'business_name': p['business_name'], 'category_name': p['category_name'],
+                             'joined': p['status'] == 'signed_up'} for p in mine]}
+
+
+@bp.get('/customer/share')
+@auth('customer')
+def customer_share():
+    return _share_state(me())
+
+
+@bp.post('/customer/recommend')
+@auth('customer')
+def customer_recommend():
+    """Recommend a tradie. With email_them, we email them once on the customer's behalf."""
+    f = payload()
+    fields = {k: text(f, k) for k in ('name', 'business_name', 'email', 'phone', 'note', 'category_id', 'area_id')}
+    u = db().execute('SELECT * FROM users WHERE id = ?', (me()['id'],)).fetchone()
+    try:
+        prospect, existing = referrals.recommend(db(), u, fields)
+    except referrals.RecommendError as e:
+        return fail(str(e))
+    if existing:
+        return {'ok': True, 'already_on_level': True, 'profile_url': f'{site_url()}/pros/{existing["id"]}',
+                'message': 'They’re already on Level — thanks!'}
+    # Only say we emailed them if email is actually set up (otherwise it's just written to the log)
+    emailed = bool(truthy(f.get('email_them')) and referrals.send_invite(db(), prospect, u) and mailer.enabled())
+    return {'ok': True, 'already_on_level': False, 'emailed': emailed,
+            'join_url': f'{site_url()}/o/{prospect["token"]}',
+            'message': (f'Thanks! We’ve emailed {prospect["business_name"]} an invite.' if emailed else
+                        f'Thanks! Send {prospect["business_name"]} this link so they can join.')}, 201

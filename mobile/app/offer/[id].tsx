@@ -7,6 +7,7 @@ import { day, QUOTE_STATUS } from '../../lib/format';
 import { Body, Button, Card, ErrorText, Label, Loading, Notice, Pill, QuoteMeter, Row, Screen, Title } from '../../components/ui';
 import { Countdown } from '../../components/Countdown';
 import { colors, radius, space } from '../../lib/theme';
+import { ProgressSection } from '../../components/Progress';
 
 export default function TradeJob() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -64,6 +65,9 @@ export default function TradeJob() {
             {quote.price_text}{quote.price_type !== 'site_visit' ? <Text style={{ fontSize: 14, fontWeight: '400', color: colors.ink2 }}>  {quote.gst_included ? 'incl. GST' : 'plus GST'}</Text> : null}
           </Text>
           <Body style={{ marginTop: 8 }}>{quote.message}</Body>
+          <Text style={{ fontSize: 14, color: colors.ink2, marginTop: 6 }}>
+            Progress updates: {quote.report_plan_text || 'none promised'}
+          </Text>
           <View style={{ height: 10 }} />
           {quote.status === 'shortlisted' ? <Notice tone="paint" title="The customer shared their details">Give them a call.</Notice> : null}
           {quote.status === 'accepted' ? <Notice tone="pine" title="You won this job">The customer’s details are below.</Notice> : null}
@@ -88,6 +92,8 @@ export default function TradeJob() {
           </View>
         </Card>
       ) : null}
+
+      {data.progress ? <ProgressSection progress={data.progress} role="trade" jobId={jobId} onChanged={reload} /> : null}
 
       {lostSlot ? (
         <Notice tone="muted">
