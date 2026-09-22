@@ -22,3 +22,16 @@ index c6bd62c..d2ddf3c 100755
 -  $1
 +  "$1"
  fi
+diff --git a/node_modules/react-native/sdks/hermes-engine/utils/replace_hermes_version.js b/node_modules/react-native/sdks/hermes-engine/utils/replace_hermes_version.js
+index f727aeb..49bceae 100644
+--- a/node_modules/react-native/sdks/hermes-engine/utils/replace_hermes_version.js
++++ b/node_modules/react-native/sdks/hermes-engine/utils/replace_hermes_version.js
+@@ -61,7 +61,7 @@ function replaceHermesConfiguration(configuration, version, podsRoot) {
+   fs.mkdirSync(finalLocation, {recursive: true});
+ 
+   console.log('Extracting the tarball');
+-  execSync(`tar -xf ${tarballURLPath} -C ${finalLocation}`);
++  execSync(`tar -xf "${tarballURLPath}" -C "${finalLocation}"`);
+ }
+ 
+ function updateLastBuildConfiguration(configuration) {

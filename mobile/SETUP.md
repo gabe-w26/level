@@ -101,3 +101,24 @@ registered; tapping one opens the matching screen (`lib/links.ts`).
 | `lib/auth.tsx` | Token storage (Keychain via expo-secure-store) and the signed-in person |
 | `lib/push.ts` | Push registration and tap routing |
 | `lib/theme.ts` | Colours from the website's `static/style.css` |
+
+## Native iOS build (a real app, not Expo Go)
+
+Tested 2026-09-23: a Release build installs and runs on the iPhone Simulator against the live site.
+
+```bash
+export PATH="$HOME/.level-node:$HOME/.rbenv/shims:$PATH" LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+cd mobile && CI=1 npx expo prebuild --platform ios --clean
+```
+
+After every `prebuild --clean`, fix one line in `ios/Level.xcodeproj/project.pbxproj`
+(the space in "Claude - PT Software" breaks it): in the "Bundle React Native code and
+images" script, the last line runs `` `"$NODE_BINARY" --print "...react-native-xcode.sh"` ``
+in backticks — wrap it as `"$("$NODE_BINARY" --print "...react-native-xcode.sh")"`.
+The other three path-with-spaces fixes are applied automatically from `patches/`.
+
+```bash
+cd ios && xcodebuild -workspace Level.xcworkspace -scheme Level -configuration Release \
+  -destination "id=<simulator udid>" -derivedDataPath /tmp/level_dd build
+xcrun simctl install booted /tmp/level_dd/Build/Products/Release-iphonesimulator/Level.app
+```
