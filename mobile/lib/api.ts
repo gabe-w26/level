@@ -137,6 +137,7 @@ export interface Job {
   closes_at: string;
   closed_at: string | null;
   close_reason: string | null;
+  work_done_on?: string | null;
   category_name?: string;
   area_name?: string;
   licence_note?: string | null;

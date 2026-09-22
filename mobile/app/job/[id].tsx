@@ -106,6 +106,9 @@ export default function CustomerJob() {
         </Card>
       ) : null}
 
+      {/* Once someone's hired, their updates matter more than the quotes, so they come first. */}
+      {data.progress ? <ProgressSection progress={data.progress} role="customer" jobId={jobId} onChanged={reload} /> : null}
+
       <Label style={{ marginTop: space.md, marginBottom: 8 }}>Quotes ({quotes.length})</Label>
       {quotes.length === 0 ? (
         <Card><Empty icon="hourglass-outline" title="No quotes yet" body="We’ll let you know the moment one arrives." /></Card>
@@ -114,8 +117,6 @@ export default function CustomerJob() {
           onShare={() => share(q)} onAccept={() => accept(q)} onDecline={() => decline(q)}
           onMessage={() => router.push(`/thread/${jobId}/${q.trade_id}`)} />
       ))}
-
-      {data.progress ? <ProgressSection progress={data.progress} role="customer" jobId={jobId} onChanged={reload} /> : null}
 
       {data.can_review ? (
         <Button title="Leave a review" icon="star-outline" variant="pine" onPress={() => router.push(`/review/${jobId}`)} />

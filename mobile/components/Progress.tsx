@@ -212,7 +212,7 @@ function UpdateForm({ jobId, progress, onPosted }: { jobId: number; progress: Pr
       const res = await api.postUpdate(jobId, body.trim(), kinds, photos);
       setBody('');
       setPhotos([]);
-      Alert.alert('Update posted', res.message || 'The customer has been told.');
+      Alert.alert('Update posted', 'The customer has been told.');
       onPosted();
     } catch (e: any) {
       setError(e.message);

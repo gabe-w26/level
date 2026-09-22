@@ -13,7 +13,10 @@ export async function pickPhotos(source: 'camera' | 'library', remaining: number
     Alert.alert('That’s the limit', 'Remove a photo to add another.');
     return [];
   }
-  const perm = source === 'camera'
+  const before = source === 'camera'
+    ? await ImagePicker.getCameraPermissionsAsync()
+    : await ImagePicker.getMediaLibraryPermissionsAsync();
+  const perm = before.granted ? before : source === 'camera'
     ? await ImagePicker.requestCameraPermissionsAsync()
     : await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!perm.granted) {
@@ -22,6 +25,8 @@ export async function pickPhotos(source: 'camera' | 'library', remaining: number
       : 'Allow photo access for Level in Settings to add photos.');
     return [];
   }
+  // iOS won't present the picker while the permission dialog is still closing, so give it a moment.
+  if (!before.granted) await new Promise((resolve) => setTimeout(resolve, 600));
   const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.6, exif: false };
   const result = source === 'camera'
     ? await ImagePicker.launchCameraAsync(options)

@@ -219,7 +219,7 @@ def job_json(j, include_address=False):
     keys = j.keys()
     out = {k: j[k] for k in ('id', 'title', 'description', 'suburb', 'value_band', 'timing', 'property_type',
                              'status', 'quote_count', 'created_at', 'closes_at', 'closed_at', 'close_reason',
-                             'category_id', 'area_id', 'hired_trade_id') if k in keys}
+                             'category_id', 'area_id', 'hired_trade_id', 'work_done_on') if k in keys}
     for k in ('category_name', 'area_name', 'region', 'licence_note'):
         if k in keys:
             out[k] = j[k]

@@ -19,7 +19,9 @@ export default function MyJobs() {
   if (!data && !error) return <Loading />;
   const jobs = data?.jobs || [];
   const live = jobs.filter((j) => ['open', 'full', 'held'].includes(j.status));
-  const done = jobs.filter((j) => !['open', 'full', 'held'].includes(j.status));
+  // Hired but not yet marked finished: the work is still going.
+  const underway = jobs.filter((j) => j.status === 'hired' && !j.work_done_on);
+  const done = jobs.filter((j) => !live.includes(j) && !underway.includes(j));
 
   return (
     <Screen refreshing={refreshing} onRefresh={refresh}>
@@ -32,6 +34,8 @@ export default function MyJobs() {
       ) : null}
       {live.length ? <Label style={{ marginBottom: 8 }}>Live jobs</Label> : null}
       {live.map((j) => <JobCard key={j.id} job={j} onPress={() => router.push(`/job/${j.id}`)} />)}
+      {underway.length ? <Label style={{ marginBottom: 8, marginTop: 16 }}>Underway</Label> : null}
+      {underway.map((j) => <JobCard key={j.id} job={j} onPress={() => router.push(`/job/${j.id}`)} />)}
       {done.length ? <Label style={{ marginBottom: 8, marginTop: 16 }}>Finished</Label> : null}
       {done.map((j) => <JobCard key={j.id} job={j} onPress={() => router.push(`/job/${j.id}`)} />)}
     </Screen>
