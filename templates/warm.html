@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}{{ cfg.BRAND }} — good tradies, fair quotes{% endblock %}
+{% block head_extra %}
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..900,0..100&family=Figtree:wght@400..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='warm.css') }}">
+{% endblock %}
+{% block body_class %}theme-warm{% endblock %}
+{% block main %}
+<div class="compare-bar">You’re looking at the warmer design. <a href="{{ url_for('index') }}">Compare with the current one →</a></div>
+
+<section class="w-hero">
+  <div class="wrap w-hero-grid">
+    <div>
+      <p class="w-kicker">For homes right across Aotearoa</p>
+      <h1>A few good quotes. <span>Not fifty phone calls.</span></h1>
+      <p class="w-lede">Tell us what needs doing. Up to six local tradies get back to you with a proper quote — licences checked, prices in writing. Free for you, fair for them.</p>
+      <form class="w-start" action="{{ url_for('post_job') }}" method="get">
+        <select name="category" aria-label="What kind of tradie do you need?">
+          <option value="">What needs doing?</option>
+          {% for c in categories %}<option value="{{ c.slug }}">{{ c.name }}</option>{% endfor %}
+        </select>
+        <button class="btn" type="submit">Get quotes — it’s free</button>
+      </form>
+      <a class="w-trade-link" href="{{ url_for('pricing') }}">I’m a tradie — how does it work for me? →</a>
+    </div>
+
+    <div>
+      <div class="w-phone" role="img" aria-label="Example: two quotes arriving for a deck job, with more on the way">
+        <div class="w-phone-head"><b>Your deck job</b><span>Grey Lynn · posted this morning</span></div>
+        <div class="w-msg" style="--d:.3s">
+          <div class="w-who"><span class="w-av">A</span><div><b>Aroha</b> · Kōwhai Builders <span class="w-tick">✓ Licence checked</span></div></div>
+          <p>Kia ora Sam — had a look at your photos. I can replace the boards and sort that wobbly rail the week of the 6th.</p>
+          <span class="w-price">$2,000 incl. GST</span>
+        </div>
+        <div class="w-msg" style="--d:1.5s">
+          <div class="w-who"><span class="w-av w-av2">B</span><div><b>Ben</b> · Harbourline Carpentry <span class="w-tick">✓ Insured</span></div></div>
+          <p>Happy to take this on. I’ll check the joists once the old boards are up, and tell you before doing anything extra.</p>
+          <span class="w-price">$1,850 – $2,300</span>
+        </div>
+        <div class="w-msg w-typing" style="--d:2.7s" aria-hidden="true"><span></span><span></span><span></span></div>
+        <p class="w-phone-foot">2 of 6 quotes in · 13 local tradies still deciding</p>
+      </div>
+      <p class="w-example">Example conversation</p>
+    </div>
+  </div>
+</section>
+
+<section class="w-section w-paper">
+  <div class="wrap">
+    <h2>What we promise you</h2>
+    <div class="w-promises">
+      <div class="w-promise">
+        <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 36s11-10.2 11-18a11 11 0 0 0-22 0c0 7.8 11 18 11 18z"/><circle cx="20" cy="18" r="4"/></svg>
+        <h3>Only local tradies</h3>
+        <p>Your job goes to {{ cfg.TRADES_PER_JOB }} tradies who do that work near you — not everyone in the country.</p>
+      </div>
+      <div class="w-promise">
+        <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="20" cy="21" r="14"/><path d="M20 13v8l5 3M15 4h10"/></svg>
+        <h3>Quick replies, or someone else gets a go</h3>
+        <p>If a tradie hasn’t got back to you within a day, their spot goes to someone who will.</p>
+      </div>
+      <div class="w-promise">
+        <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="5" width="26" height="31" rx="5"/><path d="M13 14l3 3 5-6M13 25l3 3 5-6M24 15h4M24 26h4"/></svg>
+        <h3>{{ cfg.MAX_QUOTES }} quotes, tops</h3>
+        <p>Enough to compare properly. Then your job closes and your phone stays quiet.</p>
+      </div>
+      <div class="w-promise">
+        <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6v28M8 34h24M8 12h24M8 12l-4 11a5 5 0 0 0 8 0zM32 12l-4 11a5 5 0 0 0 8 0z"/></svg>
+        <h3>A fair go for everyone</h3>
+        <p>New tradies get the same turn as old hands. Reviews help you choose — they don’t decide who sees your job.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="w-level">
+  <div class="wrap">
+    <div class="w-level-inner">
+      <p class="w-big">On the level <span>adj.</span></p>
+      <p class="w-def">Honest. Straight up. Doing what you said you would.</p>
+      <p>That’s the whole idea. Tradies get a fair shot at work without paying for leads that go nowhere. You get a handful of real quotes from people whose licences we’ve actually checked. Nobody gets mucked around.</p>
+    </div>
+  </div>
+</section>
+
+<section class="w-section w-paper" id="how">
+  <div class="wrap">
+    <h2>How it works</h2>
+    <ol class="w-steps">
+      <li><b>Tell us what needs doing</b><span>About five minutes. Chuck in a couple of photos if you’ve got them.</span></li>
+      <li><b>Quotes come to you</b><span>The price, what’s included and when they can start — all in one place, easy to compare.</span></li>
+      <li><b>Pick who you like</b><span>Only share your number with the tradies you actually want to talk to.</span></li>
+    </ol>
+  </div>
+</section>
+
+<section class="w-sun">
+  <div class="wrap w-sun-inner">
+    <div>
+      <h2>Tradies: one price a month. That’s it.</h2>
+      <p>No tokens, no paying per lead, no lock-in contract. Pick the size of jobs you want — ${{ tiers.small.price }}, ${{ tiers.medium.price }} or ${{ tiers.large.price }} a month. Quote on five jobs and don’t land one? That month’s on us.</p>
+      {% if cfg.FREE_PILOT %}<p class="w-note">Free while we get going.</p>{% endif %}
+    </div>
+    <div class="actions">
+      <a class="btn btn-ink" href="{{ url_for('signup') }}">Join as a tradie</a>
+      <a class="btn btn-ghost" href="{{ url_for('pricing') }}">How it works for tradies</a>
+    </div>
+  </div>
+</section>
+
+<section class="w-section w-faq">
+  <div class="wrap narrow">
+    <h2>Good questions</h2>
+    <div class="faq">
+      <details><summary>Does it cost me anything?</summary><p>No. Posting a job, getting quotes and messaging tradies is free for you.</p></details>
+      <details><summary>Will I get hounded with calls?</summary><p>No. Tradies see your suburb and the job — not your name, number or address. You share your details only with the ones you want to talk to.</p></details>
+      <details><summary>What if nobody quotes?</summary><p>Every day, spots that weren’t used go to other local tradies. That keeps going for {{ cfg.JOB_OPEN_DAYS }} days, or until you’ve got six quotes.</p></details>
+      <details><summary>How do I know they’re legit?</summary><p>Tradies give us their licence, NZBN and insurance details and we check them. You’ll only see a tick once we have — and it tells you what we checked and when.</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="w-end">
+  <div class="wrap narrow">
+    <h2>Got a job that needs doing?</h2>
+    <p>Tell us about it. Good local tradies will get back to you.</p>
+    <a class="btn" href="{{ url_for('post_job') }}">Get quotes — it’s free</a>
+  </div>
+</section>
+{% endblock %}

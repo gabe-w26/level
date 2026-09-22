@@ -143,7 +143,7 @@ def offline():
 @app.route('/robots.txt')
 def robots():
     body = '\n'.join(['User-agent: *'] + [f'Disallow: {p}' for p in
-                     ('/me', '/trade', '/admin', '/thread', '/settings', '/uploads', '/demo')] + ['Allow: /', ''])
+                     ('/me', '/trade', '/admin', '/thread', '/settings', '/uploads', '/demo', '/warm')] + ['Allow: /', ''])
     return body, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
 
@@ -354,6 +354,12 @@ def upload(name):
 @app.route('/')
 def index():
     return render_template('index.html', categories=all_categories())
+
+
+@app.route('/warm')
+def warm():
+    """A warmer, friendlier take on the homepage, to compare against the current one."""
+    return render_template('warm.html', categories=all_categories())
 
 
 @app.route('/pricing')
