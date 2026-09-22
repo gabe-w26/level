@@ -42,7 +42,7 @@
                  'sent': 'Sent', 'shortlisted': 'Contact shared', 'accepted': 'Won', 'declined': 'Not chosen',
                  'pending': 'Refund due', 'approved': 'Refund due', 'refunded': 'Refunded', 'denied': 'Declined',
                  'not_eligible': 'Didn’t qualify', 'active': 'Waiting on you', 'quoted': 'Quoted',
-                 'expired_offer': 'Ran out of time'} -%}
+                 'expired_offer': 'Ran out of time', 'held': 'Waiting for phone check'} -%}
 <span class="pill {{ status }}">{{ words.get(status, status|replace('_', ' ')) }}</span>
 {% endmacro %}
 

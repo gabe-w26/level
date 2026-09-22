@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Setup — admin{% endblock %}
+{% block main %}
+<div class="wrap page narrow">
+  <div class="page-head">
+    <div>
+      <h1>Setup</h1>
+      <p class="muted">Connect email, text messages and the describe helper. Paste the details in and save — no need to touch Render.</p>
+    </div>
+  </div>
+
+  <div class="admin-stats" style="margin-bottom:22px">
+    <div><b>{{ '✓' if status.email else '—' }}</b><span class="small muted">Email {{ 'on' if status.email else 'not set up' }}</span></div>
+    <div><b>{{ '✓' if status.texts else '—' }}</b><span class="small muted">Texts {{ 'on' if status.texts else 'not set up' }}</span></div>
+    <div><b>{{ '✓' if status.ai else '—' }}</b><span class="small muted">Describe helper {{ 'on' if status.ai else 'not set up' }}</span></div>
+  </div>
+
+  <form method="post" class="form" autocomplete="off">
+    {{ m.csrf() }}<input type="hidden" name="action" value="save">
+    {% for title, why, fields in groups %}
+    <fieldset class="form-step">
+      <legend>{{ title }}</legend>
+      <p class="small muted" style="margin:0">{{ why }}</p>
+      {% for name, label, example in fields %}
+      <div>
+        <label for="{{ name }}">{{ label }}
+          {% if integrations.from_env(name) %}<span class="hint">Set in Render’s environment — change it there.</span>
+          {% elif integrations.get(name) %}<span class="hint" style="color:var(--pine)">✓ Saved: {{ integrations.masked(name) }}</span>{% endif %}
+        </label>
+        <input id="{{ name }}" name="{{ name }}" type="{{ 'password' if name in integrations.SECRET else 'text' }}"
+               placeholder="{{ 'Leave blank to keep what’s saved' if integrations.get(name) else example }}"
+               {{ 'disabled' if integrations.from_env(name) }} autocomplete="off">
+        {% if integrations.get(name) and not integrations.from_env(name) %}
+        <label class="check small" style="margin-top:6px;font-weight:500"><input type="checkbox" name="clear_{{ name }}" value="1"> Remove this</label>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </fieldset>
+    {% endfor %}
+    <div><button class="btn" type="submit">Save</button></div>
+  </form>
+
+  <div class="section-title"><h2>Try it</h2></div>
+  <div class="grid-3">
+    <form method="post" class="card form" style="gap:10px">
+      {{ m.csrf() }}<input type="hidden" name="action" value="test_email">
+      <h3 style="margin:0">Test email</h3>
+      <input name="to" type="email" placeholder="{{ me.email }}" aria-label="Send the test email to">
+      <div><button class="btn btn-quiet btn-sm" type="submit" {{ 'disabled' if not status.email }}>Send test email</button></div>
+    </form>
+    <form method="post" class="card form" style="gap:10px">
+      {{ m.csrf() }}<input type="hidden" name="action" value="test_text">
+      <h3 style="margin:0">Test text</h3>
+      <input name="to" type="tel" placeholder="{{ me.phone or '021 123 4567' }}" aria-label="Send the test text to">
+      <div><button class="btn btn-quiet btn-sm" type="submit" {{ 'disabled' if not status.texts }}>Send test text</button></div>
+    </form>
+    <form method="post" class="card form" style="gap:10px">
+      {{ m.csrf() }}<input type="hidden" name="action" value="test_ai">
+      <h3 style="margin:0">Test the helper</h3>
+      <p class="small muted" style="margin:0">Rewrites a sample deck job.</p>
+      <div><button class="btn btn-quiet btn-sm" type="submit" {{ 'disabled' if not status.ai }}>Run a test</button></div>
+    </form>
+  </div>
+
+  <div class="section-title"><h2>Where to get these</h2></div>
+  <div class="card faq" style="padding:6px 20px">
+    <details><summary>Email with Gmail (free, about 5 minutes)</summary>
+      <p>Use a Gmail account you’ll send from. Turn on 2-Step Verification in your Google Account → Security, then search “App passwords”, create one called {{ cfg.BRAND }}, and copy the 16-letter password. Here: server <code>smtp.gmail.com</code>, port <code>587</code>, username = the Gmail address, password = the app password. Gmail allows about 500 emails a day — plenty to start.</p></details>
+    <details><summary>Text messages with Twilio (about $0.10–0.15 a text)</summary>
+      <p>Sign up at twilio.com, add about $20 credit, and buy a number that can send SMS to New Zealand. From the Twilio console copy the Account SID and Auth Token, and the number in +64 format (or the number Twilio gives you). Until the account is upgraded from trial, it can only text numbers you’ve verified in Twilio.</p></details>
+    <details><summary>The describe helper (an Anthropic API key)</summary>
+      <p>Create a key at console.anthropic.com → API keys and add a little credit. Each “help me describe it” costs roughly a cent or two.</p></details>
+    <details><summary>Your own web address</summary>
+      <p>Buy the name (e.g. through GoDaddy), add it in Render under the <b>level</b> service → Settings → Custom Domains, then add the DNS records Render shows you at GoDaddy. Once it’s working, put the full address here, like <code>https://level.co.nz</code>.</p></details>
+  </div>
+</div>
+{% endblock %}

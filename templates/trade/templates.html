@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Quote templates — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Quote templates</h1>
+      <p class="muted">Save the wording you use most, then pick it at the top of any quote form. You still set the price each time.</p>
+    </div>
+  </div>
+  <div class="two">
+    <div>
+      {% if templates %}
+      <div class="jobs">
+        {% for tpl in templates %}
+        <div class="card">
+          <div class="actions" style="justify-content:space-between">
+            <h3 style="margin:0">{{ tpl.name }}</h3>
+            <form method="post" action="{{ url_for('delete_template', template_id=tpl.id) }}" data-confirm="Delete the “{{ tpl.name }}” template?">{{ m.csrf() }}<button class="btn btn-quiet btn-sm" type="submit">Delete</button></form>
+          </div>
+          <p class="desc small" style="margin:10px 0 0">{{ tpl.message }}</p>
+          <dl class="kv small" style="margin-top:10px">
+            {% if tpl.inclusions %}<dt>Includes</dt><dd>{{ tpl.inclusions }}</dd>{% endif %}
+            {% if tpl.exclusions %}<dt>Doesn’t include</dt><dd>{{ tpl.exclusions }}</dd>{% endif %}
+            {% if tpl.warranty %}<dt>Warranty</dt><dd>{{ tpl.warranty }}</dd>{% endif %}
+            {% if tpl.duration %}<dt>Takes</dt><dd>{{ tpl.duration }}</dd>{% endif %}
+          </dl>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty"><h3>No templates yet</h3><p style="margin:0">Make one here, or tick “Save as a template” next time you send a quote.</p></div>
+      {% endif %}
+    </div>
+    <form method="post" class="card form">
+      {{ m.csrf() }}
+      <h3 style="margin:0">New template</h3>
+      <div class="{{ 'has-error' if errors.name }}"><label for="name">Name</label><input id="name" name="name" type="text" placeholder="e.g. Deck repair" value="{{ form.get('name', '') }}">{{ m.err(errors, 'name') }}</div>
+      <div class="{{ 'has-error' if errors.message }}"><label for="message">Message to the customer</label><textarea id="message" name="message">{{ form.get('message', '') }}</textarea>{{ m.err(errors, 'message') }}</div>
+      <div><label for="inclusions">What’s included</label><textarea id="inclusions" name="inclusions" style="min-height:70px">{{ form.get('inclusions', '') }}</textarea></div>
+      <div><label for="exclusions">What’s not included</label><textarea id="exclusions" name="exclusions" style="min-height:70px">{{ form.get('exclusions', '') }}</textarea></div>
+      <div><label for="warranty">Warranty</label><input id="warranty" name="warranty" type="text" value="{{ form.get('warranty', '') }}"></div>
+      <div><label for="duration">Takes about</label><input id="duration" name="duration" type="text" value="{{ form.get('duration', '') }}"></div>
+      <div><button class="btn" type="submit">Save template</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}What do trades cost in NZ? — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Price guides</h1>
+      <p class="muted">What jobs really cost, worked out from quotes tradies have sent on {{ cfg.BRAND }} — plus what to check before you hire.</p>
+    </div>
+  </div>
+  <div class="jobs" style="grid-template-columns:repeat(auto-fill,minmax(250px,1fr))">
+    {% for c in categories %}
+    <a class="card" href="{{ url_for('guide', slug=c.slug) }}" style="text-decoration:none;color:inherit">
+      <h3 style="margin:0 0 4px">{{ c.name }}</h3>
+      <span class="small muted">{% if counts.get(c.id, 0) >= need %}Prices from {{ counts[c.id] }} real quotes{% else %}Hiring tips and what to check{% endif %}</span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

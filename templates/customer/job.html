@@ -31,6 +31,11 @@
   <p class="notice ok">You have all {{ cfg.MAX_QUOTES }} quotes and the job is closed to other trades. Compare them below, then accept one or close the job. You can still <a href="{{ url_for('edit_job', job_id=job.id) }}">edit the details</a>.</p>
   {% elif job.status == 'hired' %}
   <p class="notice ok">You hired {{ hired.business_name if hired else 'a trade' }}.{% if not reviewed %} <a href="{{ url_for('review', job_id=job.id) }}">Review the work</a> once it’s done.{% else %} Thanks for your review.{% endif %}</p>
+  {% elif job.status == 'held' %}
+  <div class="notice warn">
+    <p><b>Confirm your phone number to send this job out.</b> It’s a quick text code — it keeps fake jobs away from tradies.</p>
+    <p><a class="btn btn-sm" href="{{ url_for('verify_phone', next=url_for('customer_job', job_id=job.id)) }}">Confirm my phone</a></p>
+  </div>
   {% else %}
   <div class="notice">
     <p>This job is closed{% if job.close_reason == 'time' %} after {{ cfg.JOB_OPEN_DAYS }} days{% endif %}.</p>
@@ -131,9 +136,9 @@
     </div>
 
     <aside class="stack">
-      {% if job.status in ('open', 'full') %}
+      {% if job.status in ('open', 'full') or (job.status == 'expired' and quotes) %}
       <div class="card">
-        <h3>Close this job</h3>
+        <h3>{{ 'Did you hire anyone?' if job.status == 'expired' else 'Close this job' }}</h3>
         <form method="post" action="{{ url_for('close_job', job_id=job.id) }}" class="form" style="gap:12px" data-confirm="Close this job? Trades still deciding will be told.">
           {{ m.csrf() }}
           <fieldset>

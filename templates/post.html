@@ -35,6 +35,13 @@
         <label for="description">Describe the job <span class="hint">What needs doing, sizes or quantities, materials you’ve chosen, access, and anything you’ve already tried.</span></label>
         <textarea id="description" name="description">{{ form.get('description', '') }}</textarea>
         {{ m.err(errors, 'description') }}
+        {% if ai_on %}
+        <div class="ai-help" data-ai-help data-url="{{ url_for('describe_help') }}" data-csrf="{{ csrf_token() }}">
+          <button class="btn btn-quiet btn-sm" type="button" data-ai-go>✨ Help me describe it</button>
+          <span class="small muted" data-ai-status>Write a few rough words, then tap — we’ll turn it into a clear brief you can edit.</span>
+          <div class="notice small" data-ai-questions hidden><b>Worth adding, if you know:</b><ul></ul></div>
+        </div>
+        {% endif %}
       </div>
       <div class="{{ 'has-error' if errors.photos }}">
         <label for="photos">Photos <span class="hint">Optional, up to 6. Photos help trades quote without a site visit.</span></label>

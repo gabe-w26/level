@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}How much does a {{ cat.name|lower }} cost in NZ? — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page narrow">
+  <p class="small"><a href="{{ url_for('guides') }}">← All price guides</a></p>
+  <h1 style="font-size:clamp(30px,4vw,44px)">How much does a {{ cat.name|lower }} cost?</h1>
+  <p class="lede">Real prices from quotes {{ cat.name|lower }} tradies have sent on {{ cfg.BRAND }}, and the questions worth asking before you say yes.</p>
+
+  <div class="section-title"><h2>Typical quotes</h2><span class="label">incl. GST</span></div>
+  {% set any_prices = bands.values()|select|list %}
+  {% if any_prices %}
+  <div class="card table-wrap" style="padding:6px 10px">
+    <table>
+      <thead><tr><th>Size of job</th><th>Most quotes between</th><th>Middle quote</th><th>Based on</th></tr></thead>
+      <tbody>
+        {% for key, b in bands.items() %}{% if b %}
+        <tr><td>{{ cfg.VALUE_BANDS[key].label }}</td><td class="num">{{ b.low|money }} – {{ b.high|money }}</td><td class="num"><b>{{ b.mid|money }}</b></td><td class="small muted">{{ b.n }} quotes</td></tr>
+        {% endif %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="small muted">The middle half of quotes sent on {{ cfg.BRAND }}. Every job is different — the only way to know yours is to get quotes.</p>
+  {% else %}
+  <div class="empty" style="text-align:left">
+    <p style="margin:0">We don’t have enough {{ cat.name|lower }} quotes yet to show fair prices — we only publish once there are at least {{ need }}, so one odd quote can’t skew it. {% if total %}{{ total }} so far.{% endif %} The quickest way to know what yours costs is to get quotes.</p>
+  </div>
+  {% endif %}
+
+  <div class="section-title"><h2>What changes the price</h2></div>
+  <ul class="checklist" style="margin:0">
+    <li>How big the job is, and how much of it has to be pulled out first</li>
+    <li>Access — stairs, tight spaces, height and parking all add time</li>
+    <li>Materials you choose, and whether they’re in stock</li>
+    <li>Surprises once work starts, like rot or old wiring — ask how they’re priced</li>
+    <li>How soon you need it done</li>
+  </ul>
+
+  {% if cat.licence_note %}
+  <div class="section-title"><h2>Licences</h2></div>
+  <p class="notice">{{ cat.licence_note }} Look for the licence tick on quotes — we only show it once we’ve checked the public register.</p>
+  {% endif %}
+
+  <div class="section-title"><h2>Before you say yes</h2></div>
+  <ul class="checklist" style="margin:0">
+    <li>Get the price, what’s included and what isn’t, in writing</li>
+    <li>Ask about the warranty on their workmanship</li>
+    <li>Agree when payments are due — pay as work is done, not a large deposit up front</li>
+    <li>For residential work of {{ cfg.CONTRACT_THRESHOLD|money }} or more, you’re owed a written contract, a disclosure statement and MBIE’s checklist</li>
+  </ul>
+
+  <div class="card" style="margin-top:32px;text-align:center">
+    <h2 style="margin-bottom:8px">Get real quotes for your job</h2>
+    <p class="muted">Free. Up to {{ cfg.MAX_QUOTES }} quotes from local {{ cat.name|lower }} tradies.</p>
+    <a class="btn" href="{{ url_for('post_job', category=cat.slug) }}">Post a job — it’s free</a>
+  </div>
+</div>
+{% endblock %}

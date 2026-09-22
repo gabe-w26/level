@@ -167,3 +167,83 @@ document.addEventListener('submit', (e) => {
   }, { threshold: 0.35 });
   io.observe(board);
 })();
+
+// Quote templates: fill the quote form from the chosen template. Prices stay
+// blank on purpose — every job is priced fresh.
+document.querySelectorAll('[data-template-select]').forEach((select) => {
+  select.addEventListener('change', () => {
+    const option = select.selectedOptions[0];
+    if (!option || !option.dataset.fields) return;
+    const fields = JSON.parse(option.dataset.fields);
+    const form = select.closest('form');
+    Object.entries(fields).forEach(([name, value]) => {
+      if (!value) return;
+      if (name === 'price_type') {
+        const radio = form.querySelector(`input[name=price_type][value="${value}"]`);
+        if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change', { bubbles: true })); }
+        return;
+      }
+      const field = form.querySelector(`[name="${name}"]`);
+      if (field) field.value = value;
+    });
+  });
+});
+
+// Copy an invite link.
+document.addEventListener('click', async (e) => {
+  const button = e.target.closest && e.target.closest('[data-copy]');
+  if (!button) return;
+  const source = button.parentElement.querySelector('[data-copy-source]');
+  if (!source) return;
+  try {
+    await navigator.clipboard.writeText(source.value);
+  } catch (err) {
+    source.select();
+    document.execCommand('copy');
+  }
+  const label = button.textContent;
+  button.textContent = 'Copied';
+  setTimeout(() => { button.textContent = label; }, 1500);
+});
+
+// "Help me describe it": send the rough notes, get back a clear brief to edit.
+document.querySelectorAll('[data-ai-help]').forEach((box) => {
+  const form = box.closest('form');
+  const go = box.querySelector('[data-ai-go]');
+  const status = box.querySelector('[data-ai-status]');
+  const questions = box.querySelector('[data-ai-questions]');
+  go.addEventListener('click', async () => {
+    const body = new FormData();
+    body.append('_csrf', box.dataset.csrf);
+    ['category', 'title', 'description'].forEach((name) => {
+      const field = form.querySelector(`[name="${name}"]`);
+      body.append(name, field ? field.value : '');
+    });
+    go.disabled = true;
+    status.textContent = 'Working on it…';
+    try {
+      const resp = await fetch(box.dataset.url, { method: 'POST', body, credentials: 'same-origin' });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Something went wrong. Try again.');
+      if (data.title) form.querySelector('[name=title]').value = data.title;
+      if (data.description) form.querySelector('[name=description]').value = data.description;
+      if (data.value_band) {
+        const radio = form.querySelector(`input[name=value_band][value="${data.value_band}"]`);
+        if (radio) radio.checked = true;
+      }
+      const list = questions.querySelector('ul');
+      list.innerHTML = '';
+      (data.questions || []).forEach((q) => {
+        const li = document.createElement('li');
+        li.textContent = q;
+        list.appendChild(li);
+      });
+      questions.hidden = !(data.questions || []).length;
+      status.textContent = 'Done — have a read and change anything that isn’t quite right.';
+    } catch (err) {
+      status.textContent = err.message;
+    } finally {
+      go.disabled = false;
+    }
+  });
+});

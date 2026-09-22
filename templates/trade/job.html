@@ -63,6 +63,17 @@
         {{ m.csrf() }}
         <h2 style="margin:0">Your quote</h2>
         {% if error %}<p class="notice error" role="alert" style="margin:0">{{ error }}</p>{% endif %}
+        {% if templates %}
+        <div>
+          <label for="tpl">Start from a template</label>
+          <select id="tpl" data-template-select>
+            <option value="">Choose one…</option>
+            {% for tpl in templates %}
+            <option value="{{ tpl.id }}" data-fields='{{ {"price_type": tpl.price_type or "", "message": tpl.message or "", "inclusions": tpl.inclusions or "", "exclusions": tpl.exclusions or "", "warranty": tpl.warranty or "", "duration": tpl.duration or ""}|tojson|forceescape }}'>{{ tpl.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
         {% set pt = form.get('price_type', 'fixed') %}
         <div>
           <span class="lbl" id="pt-lbl">How are you pricing it?</span>
@@ -108,6 +119,10 @@
           <span>If my price is {{ threshold|money }} or more including GST, I’ll give the customer a written contract, a disclosure statement and MBIE’s checklist before work starts.<span class="hint">The Building Act requires these for residential work of this size.</span></span>
         </label>
         {% endif %}
+        <div class="row" style="align-items:end">
+          <label class="check" style="margin:0"><input type="checkbox" name="save_template" value="1" {{ 'checked' if form.get('save_template') }}> <span>Save this wording as a template</span></label>
+          <input name="template_name" type="text" placeholder="Template name, e.g. Deck repair" value="{{ form.get('template_name', '') }}" aria-label="Template name">
+        </div>
         <div class="form-foot">
           <p class="privacy">The customer sees your business name, badges, reviews and this quote. Your phone and email are shared only if they choose you.</p>
           <button class="btn" type="submit">Send quote</button>

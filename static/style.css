@@ -471,3 +471,7 @@ body.is-offline .offline-banner { display: block; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+.ai-help { display: grid; gap: 8px; margin-top: 10px; justify-items: start; }
+.ai-help .notice { margin: 0; justify-self: stretch; }
+.ai-help ul { margin: 6px 0 0; padding-left: 18px; }

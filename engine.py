@@ -68,9 +68,10 @@ def is_subscribed(trade, at=None):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def notify(db, user_id, body, link=None, at=None):
-    db.execute('INSERT INTO notifications (user_id, body, link, created_at) VALUES (?,?,?,?)',
-               (user_id, body, link, ts(at or utcnow())))
+def notify(db, user_id, body, link=None, at=None, sms=False):
+    """In-app notice, emailed by the sweep; `sms=True` also texts it (new jobs)."""
+    db.execute('INSERT INTO notifications (user_id, body, link, created_at, sms) VALUES (?,?,?,?,?)',
+               (user_id, body, link, ts(at or utcnow()), 1 if sms else 0))
 
 
 def get_job(db, job_id):
@@ -156,23 +157,38 @@ def fill_slots(db, job, at=None):
         db.execute('UPDATE trades SET last_offered_at = ? WHERE user_id = ?', (now_s, trade_id))
         notify(db, trade_id,
                f'New {band} job in {area}: “{job["title"]}”. You have {config.OFFER_WINDOW_HOURS} hours to quote.',
-               f'/trade/jobs/{job["id"]}', at)
+               f'/trade/jobs/{job["id"]}', at, sms=True)
     return len(picks)
 
 
-def post_job(db, customer_id, f, at=None):
+def post_job(db, customer_id, f, at=None, hold=False):
+    """Create a job and offer it out. With `hold`, it waits (status 'held') until
+    the customer confirms their phone number — see release_held()."""
     at = at or utcnow()
     cur = db.execute(
         'INSERT INTO jobs (customer_id, category_id, area_id, suburb, address, title, description, '
         'value_band, timing, property_type, status, quote_count, created_at, closes_at) '
-        "VALUES (?,?,?,?,?,?,?,?,?,?,'open',0,?,?)",
+        'VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,?)',
         (customer_id, f['category_id'], f['area_id'], f.get('suburb'), f.get('address'),
          f['title'], f['description'], f['value_band'], f.get('timing'), f.get('property_type'),
-         ts(at), ts(at + timedelta(days=config.JOB_OPEN_DAYS))))
+         'held' if hold else 'open', ts(at), ts(at + timedelta(days=config.JOB_OPEN_DAYS))))
     job_id = cur.lastrowid
-    offered = fill_slots(db, get_job(db, job_id), at)
+    offered = 0 if hold else fill_slots(db, get_job(db, job_id), at)
     db.commit()
     return job_id, offered
+
+
+def release_held(db, customer_id, at=None):
+    """Send out a customer's held jobs once their phone is confirmed. The 14-day
+    clock starts now, not when they first typed the job in."""
+    at = at or utcnow()
+    offered = 0
+    for row in db.execute("SELECT id FROM jobs WHERE customer_id = ? AND status = 'held'", (customer_id,)).fetchall():
+        db.execute("UPDATE jobs SET status = 'open', created_at = ?, closes_at = ? WHERE id = ?",
+                   (ts(at), ts(at + timedelta(days=config.JOB_OPEN_DAYS)), row['id']))
+        offered += fill_slots(db, get_job(db, row['id']), at)
+    db.commit()
+    return offered
 
 
 # ── Trade actions ─────────────────────────────────────────────────────────────
@@ -370,7 +386,7 @@ def _close_offers_and_quotes(db, job, keep_quote_id, at):
 
 def accept_quote(db, job, quote_id, act_ack=False, at=None):
     at = at or utcnow()
-    if job['status'] not in ('open', 'full'):
+    if job['status'] not in ('open', 'full', 'expired'):
         raise RuleError('This job is already closed.')
     q = _quote_for(db, job, quote_id)
     if q['status'] not in ('sent', 'shortlisted'):
@@ -392,7 +408,7 @@ def accept_quote(db, job, quote_id, act_ack=False, at=None):
 def close_job(db, job, outcome, at=None):
     """Customer closes a job. `outcome` is a quote id (hired that trade), 'elsewhere' or 'not_going_ahead'."""
     at = at or utcnow()
-    if job['status'] not in ('open', 'full'):
+    if job['status'] not in ('open', 'full', 'expired'):
         raise RuleError('This job is already closed.')
     if str(outcome).isdigit():
         return accept_quote(db, job, int(outcome), act_ack=True, at=at)
@@ -535,6 +551,8 @@ def sweep(db, at=None):
         report['slots_filled'] += fill_slots(db, get_job(db, row['id']), at)
 
     _renewal_reminders(db, at)
+    _nudge_quiet_customers(db, at)
+    _ask_who_they_hired(db, at)
     db.commit()
     report['months_settled'] = evaluate_guarantees(db, at)
     return report
@@ -580,6 +598,36 @@ def fairness_snapshot(db, trade_id, tier, at=None):
     return {'mine': mine, 'peer_avg': avg, 'peers': len(ids)}
 
 
+def _nudge_quiet_customers(db, at):
+    """Tradies' biggest complaint is customers who never reply. Three days after
+    a quote arrives unanswered, give the customer one friendly push."""
+    cutoff = ts(at - timedelta(days=3))
+    rows = db.execute(
+        'SELECT j.id, j.customer_id, j.title, '
+        "  (SELECT COUNT(*) FROM quotes q WHERE q.job_id = j.id AND q.status = 'sent' AND q.created_at <= ?) AS waiting "
+        "FROM jobs j WHERE j.status IN ('open', 'full') AND j.nudged_at IS NULL", (cutoff,)).fetchall()
+    for r in rows:
+        if r['waiting']:
+            who = 'tradie is' if r['waiting'] == 1 else 'tradies are'
+            notify(db, r['customer_id'],
+                   f'{r["waiting"]} {who} waiting to hear back about “{r["title"]}”. Share your details, accept a '
+                   'quote, or close the job — it lets them know where they stand.', f'/me/jobs/{r["id"]}', at)
+            db.execute('UPDATE jobs SET nudged_at = ? WHERE id = ?', (ts(at), r['id']))
+
+
+def _ask_who_they_hired(db, at):
+    """Once a job winds down without an accepted quote, ask who got the work —
+    the trade who did it should get the credit (and it keeps refunds honest)."""
+    week_ago = ts(at - timedelta(days=7))
+    rows = db.execute(
+        'SELECT id, customer_id, title FROM jobs WHERE followup_at IS NULL AND quote_count > 0 '
+        "AND (status = 'expired' OR (status = 'full' AND created_at <= ?))", (week_ago,)).fetchall()
+    for r in rows:
+        notify(db, r['customer_id'], f'Did you end up hiring someone for “{r["title"]}”? Let us know — it takes '
+                                     'ten seconds and helps the tradies who quoted.', f'/me/jobs/{r["id"]}', at)
+        db.execute('UPDATE jobs SET followup_at = ? WHERE id = ?', (ts(at), r['id']))
+
+
 def customer_record(db, customer_id):
     """What trades see about a customer before quoting — their track record of replying."""
     r = db.execute(
@@ -588,10 +636,11 @@ def customer_record(db, customer_id):
         'FROM quotes q JOIN jobs j ON j.id = q.job_id WHERE j.customer_id = ?', (customer_id,)).fetchone()
     jobs = db.execute("SELECT COUNT(*) AS n, SUM(CASE WHEN status = 'hired' THEN 1 ELSE 0 END) AS hired "
                       'FROM jobs WHERE customer_id = ?', (customer_id,)).fetchone()
-    user = db.execute('SELECT created_at FROM users WHERE id = ?', (customer_id,)).fetchone()
+    user = db.execute('SELECT created_at, phone_verified_at FROM users WHERE id = ?', (customer_id,)).fetchone()
     return {'quotes': r['quotes'] or 0, 'answered': r['answered'] or 0,
             'jobs': jobs['n'] or 0, 'hired': jobs['hired'] or 0,
-            'since': user['created_at'][:7] if user else None}
+            'since': user['created_at'][:7] if user else None,
+            'phone_verified': bool(user and user['phone_verified_at'])}
 
 
 def price_text(q):

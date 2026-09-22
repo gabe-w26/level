@@ -42,6 +42,11 @@
       <input type="checkbox" name="email_alerts" value="1" {{ 'checked' if me.email_alerts }}>
       <span>Email me about new jobs, quotes and messages<span class="hint">Password resets are always sent, whatever you choose here.</span></span>
     </label>
+    <label class="check">
+      <input type="checkbox" name="text_alerts" value="1" {{ 'checked' if me.text_alerts }}>
+      <span>Text me when there’s a new job for me<span class="hint">Texts only go out for new jobs, which you have 24 hours to quote on.</span></span>
+    </label>
+    <p class="small" style="margin:0">Phone: {% if me.phone_verified_at %}<span class="badge" style="cursor:default">✓ Confirmed</span>{% else %}<span class="badge wait">Not confirmed</span> <a href="{{ url_for('verify_phone', next=url_for('settings')) }}">Confirm it</a>{% endif %}</p>
     <div><button class="btn" type="submit">Save details</button></div>
   </form>
 

@@ -5,6 +5,7 @@
 <div class="wrap page">
   <div class="auth">
     <h1 style="font-size:38px">Join as a trade</h1>
+    {% if inviter %}<p class="notice ok small"><b>{{ inviter.business_name }}</b> invited you to {{ cfg.BRAND }}.</p>{% endif %}
     <p class="muted">Two minutes. Next you’ll pick your trades and areas, then a plan.</p>
     <form method="post" class="form card" novalidate>
       {{ m.csrf() }}

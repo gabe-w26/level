@@ -6,6 +6,7 @@ Reset and verification links are random one-use tokens. Only a hash of each one
 is stored, so a copy of the database doesn't hand anyone a way into an account.
 """
 import hashlib
+import hmac
 import secrets
 from datetime import timedelta
 
@@ -104,3 +105,46 @@ def welcome(db, user, base_url, at=None):
     notify(db, user['id'], f'Welcome to {config.BRAND}. Check your email to confirm your address.', where, at)
     db.commit()
     return link
+
+
+PHONE_CODE_MINUTES = 15
+PHONE_CODE_TRIES = 5
+
+
+def _phone_hash(user_id, code):
+    # Scoped to the user so two people who happen to get the same code never clash.
+    return _hash(f'phone:{user_id}:{code}')
+
+
+def send_phone_code(db, user, at=None):
+    """Text a 6-digit code. Returns (code, sent) — the code is only for the log
+    when texts aren't set up yet."""
+    import sms
+    at = at or utcnow()
+    code = f'{secrets.randbelow(1000000):06d}'
+    db.execute("DELETE FROM tokens WHERE user_id = ? AND purpose = 'phone'", (user['id'],))
+    db.execute('INSERT INTO tokens (user_id, purpose, token_hash, created_at, expires_at) VALUES (?,?,?,?,?)',
+               (user['id'], 'phone', _phone_hash(user['id'], code), ts(at),
+                ts(at + timedelta(minutes=PHONE_CODE_MINUTES))))
+    db.commit()
+    sent = sms.send(user['phone'], f'Your {config.BRAND} code is {code}. It expires in {PHONE_CODE_MINUTES} minutes.')
+    return code, sent
+
+
+def check_phone_code(db, user, code, at=None):
+    """Returns 'ok', 'wrong', 'expired' or 'locked'."""
+    at = at or utcnow()
+    row = db.execute("SELECT * FROM tokens WHERE user_id = ? AND purpose = 'phone' AND used_at IS NULL "
+                     'ORDER BY id DESC LIMIT 1', (user['id'],)).fetchone()
+    if not row or row['expires_at'] <= ts(at):
+        return 'expired'
+    if row['attempts'] >= PHONE_CODE_TRIES:
+        return 'locked'
+    if not hmac.compare_digest(row['token_hash'], _phone_hash(user['id'], (code or '').strip())):
+        db.execute('UPDATE tokens SET attempts = attempts + 1 WHERE id = ?', (row['id'],))
+        db.commit()
+        return 'wrong'
+    db.execute('UPDATE tokens SET used_at = ? WHERE id = ?', (ts(at), row['id']))
+    db.execute('UPDATE users SET phone_verified_at = ? WHERE id = ?', (ts(at), user['id']))
+    db.commit()
+    return 'ok'

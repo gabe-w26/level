@@ -39,6 +39,7 @@
                    ('Messages', url_for('messages'), 'chat', unread_msgs),
                    ('Account', url_for('settings'), 'person', 0)] %}
     {% set side_extra = [('Your profile', url_for('trade_setup'), 'profile'),
+                         ('Quote templates', url_for('trade_templates'), 'list'),
                          ('Plan', url_for('trade_plan'), 'card')] %}
   {% endif %}
 
@@ -98,6 +99,7 @@
           <a href="{{ url_for('admin_claims') }}">Refunds</a>
           <a href="{{ url_for('admin_reports') }}">Reports</a>
           <a href="{{ url_for('admin_team') }}">Team</a>
+          <a href="{{ url_for('admin_setup') }}">Setup</a>
           <a href="{{ url_for('settings') }}">Settings</a>
           <a class="bell" href="{{ url_for('notifications') }}" aria-label="Notifications{% if unread %}, {{ unread }} unread{% endif %}">
             {{ m.icon('bell') }}{% if unread %}<span class="dot">{{ unread if unread < 100 else '99+' }}</span>{% endif %}
@@ -122,6 +124,7 @@
         <li><a href="{{ url_for('post_job') }}">Post a job</a></li>
         <li><a href="{{ url_for('index') }}#how">How it works</a></li>
         <li><a href="{{ url_for('pricing') }}">Pricing for trades</a></li>
+        <li><a href="{{ url_for('guides') }}">Price guides</a></li>
         <li><a href="{{ url_for('pricing') }}#guarantee">No-job guarantee</a></li>
       </ul>
       <ul>

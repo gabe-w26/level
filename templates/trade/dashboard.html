@@ -109,6 +109,17 @@
       </div>
       {% endif %}
 
+      <div class="card">
+        <h3>Invite a mate</h3>
+        <p class="small muted" style="margin:0 0 10px">Know a good tradie? Send them your link. {% if invited %}<b>{{ invited }}</b> joined from your invites so far.{% else %}More good tradies here means more customers trust {{ cfg.BRAND }}.{% endif %}</p>
+        <div class="actions" style="gap:8px">
+          <input type="text" value="{{ invite_url }}" readonly aria-label="Your invite link" data-copy-source style="flex:1 1 180px;font-size:13px;padding:8px 10px">
+          <button class="btn btn-quiet btn-sm" type="button" data-copy>Copy</button>
+        </div>
+        {% set pitch = 'I’m on ' ~ cfg.BRAND ~ ' for jobs — flat monthly price, no paying per lead. Join here: ' ~ invite_url %}
+        <p class="small" style="margin:10px 0 0"><a href="sms:?&body={{ pitch|urlencode }}">Text it</a> · <a href="https://wa.me/?text={{ pitch|urlencode }}" target="_blank" rel="noopener">WhatsApp</a> · <a href="mailto:?subject={{ ('Join me on ' ~ cfg.BRAND)|urlencode }}&body={{ pitch|urlencode }}">Email</a></p>
+      </div>
+
       <div class="card" id="availability">
         <h3>Availability</h3>
         {% if t.paused %}

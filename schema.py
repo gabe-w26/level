@@ -242,6 +242,19 @@ CREATE TABLE IF NOT EXISTS notifications (
     emailed_at      TEXT
 );
 
+CREATE TABLE IF NOT EXISTS quote_templates (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    trade_id        INTEGER NOT NULL,
+    name            TEXT NOT NULL,
+    price_type      TEXT,
+    message         TEXT,
+    inclusions      TEXT,
+    exclusions      TEXT,
+    warranty        TEXT,
+    duration        TEXT,
+    created_at      TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key             TEXT PRIMARY KEY,
     value           TEXT
@@ -275,6 +288,16 @@ MIGRATIONS = [
     'ALTER TABLE users ADD COLUMN closed_at TEXT',
     'ALTER TABLE users ADD COLUMN username TEXT',
     'CREATE UNIQUE INDEX idx_users_username ON users (username)',
+    'ALTER TABLE users ADD COLUMN text_alerts INTEGER NOT NULL DEFAULT 1',
+    'ALTER TABLE users ADD COLUMN phone_verified_at TEXT',
+    'ALTER TABLE users ADD COLUMN referred_by INTEGER',
+    'ALTER TABLE trades ADD COLUMN invite_code TEXT',
+    'CREATE UNIQUE INDEX idx_trades_invite ON trades (invite_code)',
+    'ALTER TABLE notifications ADD COLUMN sms INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE notifications ADD COLUMN texted_at TEXT',
+    'ALTER TABLE jobs ADD COLUMN nudged_at TEXT',
+    'ALTER TABLE jobs ADD COLUMN followup_at TEXT',
+    'ALTER TABLE tokens ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0',
 ]
 
 

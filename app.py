@@ -8,6 +8,7 @@ sees a job, the quote cap, redistribution, the guarantee) and billing.py
 import functools
 import os
 import re
+import json
 import secrets
 import sqlite3
 import threading
@@ -21,10 +22,13 @@ from flask import (Flask, abort, flash, g, redirect, render_template, request,
 from werkzeug.security import check_password_hash
 
 import accounts
+import ai
 import billing
 import config
 import engine
+import integrations
 import mailer
+import sms
 from db import _USE_PG, get_db, release_db
 from engine import RuleError, parse_ts, ts, utcnow
 from schema import hash_password, init_db
@@ -110,7 +114,7 @@ def health():
         try:
             db().execute('SELECT 1 FROM users LIMIT 1').fetchone()
             return {'status': 'ok', 'database': 'postgres' if _USE_PG else 'sqlite',
-                    'free_pilot': config.FREE_PILOT, 'charging': config.CHARGING, 'email': mailer.ENABLED,
+                    'free_pilot': config.FREE_PILOT, 'charging': config.CHARGING, 'email': mailer.enabled(), 'texts': sms.enabled(), 'ai': ai.enabled(),
                     'version': os.environ.get('RENDER_GIT_COMMIT', 'local')[:7]}, 200
         except Exception as e:
             app.logger.warning('Health check attempt %s failed: %s', attempt, e)
@@ -161,6 +165,7 @@ def _before():
         return
     if DEMO_TOOLS:
         _load_clock(db())
+    integrations.refresh(db())
     if request.method == 'POST' and request.endpoint != 'stripe_webhook':
         sent = request.form.get('_csrf', '')
         if not sent or not secrets.compare_digest(sent, session.get('_csrf', '')):
@@ -422,6 +427,7 @@ def signup():
     if role == 'customer' and request.method == 'GET':
         return redirect(url_for('post_job'))
     errors = {}
+    inviter = _inviter()
     if request.method == 'POST':
         errors = validate_account(request.form)
         business = request.form.get('business_name', '').strip()
@@ -435,12 +441,16 @@ def signup():
             else:
                 db().execute('INSERT INTO trades (user_id, business_name, created_at) VALUES (?,?,?)',
                              (uid, business, ts(utcnow())))
+                if inviter:
+                    db().execute('UPDATE users SET referred_by = ? WHERE id = ?', (inviter['user_id'], uid))
+                    engine.notify(db(), inviter['user_id'], f'{business} joined {config.BRAND} from your invite. Cheers!',
+                                  url_for('trade_home'))
                 db().commit()
                 login_user(uid)
                 accounts.welcome(db(), db().execute('SELECT * FROM users WHERE id = ?', (uid,)).fetchone(),
                                  request.url_root.rstrip('/'))
                 return redirect(url_for('trade_setup'))
-    return render_template('signup.html', errors=errors, form=request.form)
+    return render_template('signup.html', errors=errors, form=request.form, inviter=inviter)
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -497,7 +507,7 @@ def forgot():
         u = db().execute('SELECT * FROM users WHERE email = ? AND closed_at IS NULL', (email,)).fetchone()
         if u and not _too_many_attempts(ip):
             link = accounts.send_reset(db(), u, request.url_root.rstrip('/'))
-            if not mailer.ENABLED:
+            if not mailer.enabled():
                 app.logger.warning('Email is not set up. Reset link for %s: %s', email, link)
         _login_failures[ip].append(time.time())
         sent = True
@@ -576,8 +586,10 @@ def settings():
             elif username and username_taken(username, u['id']):
                 errors['username'] = 'Someone already uses that username.'
             if not errors:
-                db().execute('UPDATE users SET name = ?, phone = ?, username = ?, email_alerts = ? WHERE id = ?',
-                             (name, phone, username, 1 if f.get('email_alerts') else 0, u['id']))
+                db().execute('UPDATE users SET name = ?, phone = ?, username = ?, email_alerts = ?, text_alerts = ?, '
+                             'phone_verified_at = CASE WHEN phone = ? THEN phone_verified_at END WHERE id = ?',
+                             (name, phone, username, 1 if f.get('email_alerts') else 0,
+                              1 if f.get('text_alerts') else 0, phone, u['id']))
                 db().commit()
                 flash('Saved.')
                 return redirect(url_for('settings'))
@@ -608,7 +620,7 @@ def settings():
 
         elif action == 'verify':
             accounts.send_verify(db(), u, request.url_root.rstrip('/'))
-            flash('Confirmation email sent.' if mailer.ENABLED else
+            flash('Confirmation email sent.' if mailer.enabled() else
                   'Email isn’t set up yet, so the link was written to the server log.')
             return redirect(url_for('settings'))
 
@@ -697,24 +709,32 @@ def post_job():
                 uid = create_user('customer', f)
                 db().commit()
                 login_user(uid)
-                u = current_user()
+                accounts.welcome(db(), db().execute('SELECT * FROM users WHERE id = ?', (uid,)).fetchone(),
+                                 request.url_root.rstrip('/'))
+            poster = db().execute('SELECT * FROM users WHERE id = ?', (session['uid'],)).fetchone()
+            # With texts switched on, a job only goes out once the phone number is confirmed —
+            # that's what stops fake and dead jobs reaching tradies.
+            hold = sms.enabled() and not poster['phone_verified_at']
             job_id, offered = engine.post_job(db(), session['uid'], dict(
                 category_id=cat['id'], area_id=area['id'], suburb=f['suburb'].strip(),
                 address=f.get('address', '').strip() or None, title=f['title'].strip(),
                 description=f['description'].strip(), value_band=f['value_band'], timing=f['timing'],
-                property_type=f['property_type']))
+                property_type=f['property_type']), hold=hold)
             for p in photos:
                 name = f'{uuid.uuid4().hex}.{p.filename.rsplit(".", 1)[-1].lower()}'
                 p.save(os.path.join(UPLOAD_DIR, name))
                 db().execute('INSERT INTO job_photos (job_id, filename, created_at) VALUES (?,?,?)',
                              (job_id, name, ts(utcnow())))
             db().commit()
+            if hold:
+                accounts.send_phone_code(db(), poster)
+                return redirect(url_for('verify_phone', next=url_for('customer_job', job_id=job_id)))
             if offered:
                 flash(f'Job posted. {offered} local {cat["name"].lower()} trades can see it now.')
             else:
                 flash('Job posted. No trades cover this area yet — we’ll offer it the moment one joins.')
             return redirect(url_for('customer_job', job_id=job_id))
-    return render_template('post.html', form=form, errors=errors, categories=all_categories(),
+    return render_template('post.html', form=form, errors=errors, categories=all_categories(), ai_on=ai.enabled(),
                            regions=areas_by_region())
 
 
@@ -1021,7 +1041,10 @@ def trade_home():
                            progress=engine.guarantee_progress(db(), t['user_id'], now),
                            fair=engine.fairness_snapshot(db(), t['user_id'], t['tier'], now) if t['tier'] else None,
                            rating=engine.trade_rating(db(), t['user_id']),
-                           subscribed=engine.is_subscribed(t, now))
+                           subscribed=engine.is_subscribed(t, now),
+                           invite_url=f'{integrations.site_url()}/join/{_invite_code(t)}',
+                           invited=db().execute('SELECT COUNT(*) AS n FROM users WHERE referred_by = ?',
+                                                (t['user_id'],)).fetchone()['n'])
 
 
 @app.route('/trade/quotes')
@@ -1122,7 +1145,7 @@ def _render_trade_job(job_id, form=None, error=None):
     return render_template('trade/job.html', t=t, job=job, offer=offer, quote=quote, contact=contact,
                            record=engine.customer_record(db(), job['customer_id']), photos=_photos(job_id),
                            can_quote=can_quote, reported=bool(reported), form=form or {}, error=error,
-                           threshold=config.CONTRACT_THRESHOLD)
+                           threshold=config.CONTRACT_THRESHOLD, templates=_templates(t['user_id']))
 
 
 @app.route('/trade/jobs/<int:job_id>')
@@ -1153,6 +1176,8 @@ def trade_quote(job_id):
         n = engine.submit_quote(db(), job_id, current_trade()['user_id'], q)
     except RuleError as e:
         return _render_trade_job(job_id, form=f, error=str(e))
+    if f.get('save_template') and f.get('template_name', '').strip():
+        _save_template(current_trade()['user_id'], f.get('template_name'), q)
     flash(f'Quote sent. It’s quote {n} of {config.MAX_QUOTES} for this job.')
     return redirect(url_for('trade_job', job_id=job_id))
 
@@ -1275,6 +1300,263 @@ def resume_plan():
 
 def _count(sql, params=()):
     return db().execute(sql, params).fetchone()['n']
+
+
+
+# ── Phone check ───────────────────────────────────────────────────────────────
+
+@app.route('/verify-phone', methods=['GET', 'POST'])
+def verify_phone():
+    u = current_user()
+    if not u:
+        return redirect(url_for('login', next=request.full_path))
+    nxt = _safe_next() or home_for(u)
+    if u['phone_verified_at']:
+        return redirect(nxt)
+    error = None
+    if request.method == 'POST':
+        if request.form.get('action') == 'resend':
+            code, sent = accounts.send_phone_code(db(), u)
+            flash('New code sent.' if sent else 'Couldn’t send a text just now — try again shortly.')
+            return redirect(url_for('verify_phone', next=nxt))
+        result = accounts.check_phone_code(db(), u, request.form.get('code'))
+        if result == 'ok':
+            released = engine.release_held(db(), u['id'])
+            if released:
+                flash(f'Phone confirmed. Your job has gone out to {released} local trades.')
+            elif u['role'] == 'customer':
+                flash('Phone confirmed. Your job is live — we’ll offer it as matching trades join.')
+            else:
+                flash('Phone confirmed.')
+            return redirect(nxt)
+        error = {'wrong': 'That code isn’t right. Check the text and try again.',
+                 'expired': 'That code has run out. Send yourself a new one.',
+                 'locked': 'Too many wrong tries. Send yourself a new code.'}[result]
+    return render_template('verify_phone.html', error=error, nxt=nxt, texts_on=sms.enabled())
+
+
+# ── Describe helper ───────────────────────────────────────────────────────────
+
+_ai_calls = defaultdict(list)
+
+
+@app.post('/post/help')
+def describe_help():
+    """Rewrites a customer's rough notes into a clear brief. JSON in, JSON out."""
+    if not ai.enabled():
+        return {'error': 'The describe helper isn’t switched on.'}, 404
+    ip = (request.headers.get('X-Forwarded-For') or request.remote_addr or '').split(',')[0].strip()
+    now = time.time()
+    _ai_calls[ip] = [t for t in _ai_calls[ip] if now - t < 3600]
+    if len(_ai_calls[ip]) >= 20:
+        return {'error': 'That’s a lot of help for one hour — try again later.'}, 429
+    notes = request.form.get('description', '').strip()
+    if len(notes) < 8:
+        return {'error': 'Write a few words about the job first, then I can tidy it up.'}, 400
+    _ai_calls[ip].append(now)
+    cat = db().execute('SELECT name FROM categories WHERE slug = ?', (request.form.get('category'),)).fetchone()
+    try:
+        result = ai.describe_job(cat['name'] if cat else '', request.form.get('title', '')[:120], notes[:4000])
+    except ai.AIError as e:
+        return {'error': str(e)}, 502
+    return result
+
+
+# ── Quote templates ───────────────────────────────────────────────────────────
+
+def _templates(trade_id):
+    return db().execute('SELECT * FROM quote_templates WHERE trade_id = ? ORDER BY name', (trade_id,)).fetchall()
+
+
+def _save_template(trade_id, name, q):
+    db().execute('INSERT INTO quote_templates (trade_id, name, price_type, message, inclusions, exclusions, '
+                 'warranty, duration, created_at) VALUES (?,?,?,?,?,?,?,?,?)',
+                 (trade_id, name.strip()[:60], q.get('price_type'), q.get('message'), q.get('inclusions'),
+                  q.get('exclusions'), q.get('warranty'), q.get('duration'), ts(utcnow())))
+    db().commit()
+
+
+@app.route('/trade/templates', methods=['GET', 'POST'])
+@requires('trade')
+def trade_templates():
+    t = current_trade()
+    errors = {}
+    if request.method == 'POST':
+        f = request.form
+        if len(f.get('name', '').strip()) < 2:
+            errors['name'] = 'Give it a short name, like “Deck repair” or “Hot water cylinder”.'
+        if len(f.get('message', '').strip()) < 20:
+            errors['message'] = 'Write the message you usually send — at least a sentence.'
+        if not errors:
+            _save_template(t['user_id'], f['name'], dict(
+                price_type=f.get('price_type') or None, message=f['message'].strip(),
+                inclusions=f.get('inclusions', '').strip() or None, exclusions=f.get('exclusions', '').strip() or None,
+                warranty=f.get('warranty', '').strip() or None, duration=f.get('duration', '').strip() or None))
+            flash('Template saved. Pick it from the top of any quote form.')
+            return redirect(url_for('trade_templates'))
+    return render_template('trade/templates.html', templates=_templates(t['user_id']), errors=errors,
+                           form=request.form)
+
+
+@app.post('/trade/templates/<int:template_id>/delete')
+@requires('trade')
+def delete_template(template_id):
+    db().execute('DELETE FROM quote_templates WHERE id = ? AND trade_id = ?', (template_id, current_trade()['user_id']))
+    db().commit()
+    flash('Template deleted.')
+    return redirect(url_for('trade_templates'))
+
+
+# ── Invite a mate ─────────────────────────────────────────────────────────────
+
+def _invite_code(trade):
+    if trade['invite_code']:
+        return trade['invite_code']
+    for _ in range(5):
+        code = secrets.token_urlsafe(5).replace('-', '').replace('_', '')[:7].lower()
+        try:
+            db().execute('UPDATE trades SET invite_code = ? WHERE user_id = ?', (code, trade['user_id']))
+            db().commit()
+            return code
+        except sqlite3.IntegrityError:
+            continue
+    return ''
+
+
+def _inviter():
+    code = session.get('invite')
+    if not code:
+        return None
+    return db().execute('SELECT t.user_id, t.business_name FROM trades t JOIN users u ON u.id = t.user_id '
+                        'WHERE t.invite_code = ? AND u.closed_at IS NULL', (code,)).fetchone()
+
+
+@app.route('/join/<code>')
+def join(code):
+    trade = db().execute('SELECT business_name FROM trades WHERE invite_code = ?', (code.lower(),)).fetchone()
+    if trade:
+        session['invite'] = code.lower()
+    return redirect(url_for('signup'))
+
+
+# ── Price guides ──────────────────────────────────────────────────────────────
+
+def _price_points(category_id, band=None):
+    """Mid-point of every priced quote in a trade (and band), GST-inclusive."""
+    sql = ("SELECT q.amount_low, q.amount_high, q.gst_included FROM quotes q JOIN jobs j ON j.id = q.job_id "
+           "WHERE j.category_id = ? AND q.price_type <> 'site_visit' AND q.flagged = 0")
+    args = [category_id]
+    if band:
+        sql += ' AND j.value_band = ?'
+        args.append(band)
+    points = []
+    for r in db().execute(sql, args).fetchall():
+        low, high = r['amount_low'], r['amount_high'] or r['amount_low']
+        if not low:
+            continue
+        mid = (low + high) / 2
+        points.append(mid if r['gst_included'] else mid * 1.15)
+    return sorted(points)
+
+
+def _spread(points):
+    if len(points) < GUIDE_MIN_QUOTES:
+        return None
+    pick = lambda f: points[min(len(points) - 1, int(f * (len(points) - 1) + .5))]
+    return {'n': len(points), 'low': pick(.25), 'mid': pick(.5), 'high': pick(.75)}
+
+
+GUIDE_MIN_QUOTES = 5
+
+
+@app.route('/guides')
+def guides():
+    counts = {r['category_id']: r['n'] for r in db().execute(
+        "SELECT j.category_id AS category_id, COUNT(*) AS n FROM quotes q JOIN jobs j ON j.id = q.job_id "
+        "WHERE q.price_type <> 'site_visit' GROUP BY j.category_id").fetchall()}
+    return render_template('guides.html', categories=all_categories(), counts=counts, need=GUIDE_MIN_QUOTES)
+
+
+@app.route('/guides/<slug>')
+def guide(slug):
+    cat = db().execute('SELECT * FROM categories WHERE slug = ?', (slug,)).fetchone()
+    if not cat:
+        abort(404)
+    bands = {key: _spread(_price_points(cat['id'], key)) for key in config.VALUE_BANDS}
+    return render_template('guide.html', cat=cat, bands=bands, need=GUIDE_MIN_QUOTES,
+                           total=len(_price_points(cat['id'])))
+
+
+@app.route('/sitemap.xml')
+def sitemap():
+    base = integrations.site_url()
+    pages = ['/', '/pricing', '/post', '/signup', '/guides', '/terms', '/privacy'] + \
+            [f'/guides/{c["slug"]}' for c in all_categories()]
+    body = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + \
+           ''.join(f'  <url><loc>{base}{p}</loc></url>\n' for p in pages) + '</urlset>\n'
+    return body, 200, {'Content-Type': 'application/xml'}
+
+
+# ── Admin: setup (email, texts, AI, site address) ─────────────────────────────
+
+SETUP_GROUPS = [
+    ('Email', 'So customers and tradies get alerts, and people can reset their passwords.',
+     [('smtp_host', 'Email server', 'smtp.gmail.com'), ('smtp_port', 'Port', '587'),
+      ('smtp_user', 'Username (your email address)', 'you@gmail.com'),
+      ('smtp_pass', 'Password (for Gmail, an App Password)', ''),
+      ('mail_from', 'Send from (optional)', f'{config.BRAND} <you@gmail.com>')]),
+    ('Text messages', 'So tradies hear about new jobs straight away, and customers can confirm their phone.',
+     [('twilio_sid', 'Twilio Account SID', 'AC…'), ('twilio_token', 'Twilio Auth Token', ''),
+      ('twilio_from', 'Twilio phone number', '+6421…')]),
+    ('“Help me describe it”', 'Turns a customer’s rough notes into a clear job description.',
+     [('anthropic_key', 'Anthropic API key', 'sk-ant-…')]),
+    ('Your web address', 'Used in every link we email or text. Set it once your own domain is connected.',
+     [('site_url', 'Site address', 'https://level.co.nz')]),
+]
+
+
+@app.route('/admin/setup', methods=['GET', 'POST'])
+@requires('admin')
+def admin_setup():
+    integrations.refresh(db(), force=True)
+    if request.method == 'POST':
+        f = request.form
+        action = f.get('action', 'save')
+        if action == 'save':
+            changes = {}
+            for _, _, fields in SETUP_GROUPS:
+                for name, _, _ in fields:
+                    if integrations.from_env(name):
+                        continue
+                    if f.get(f'clear_{name}'):
+                        changes[name] = ''
+                    elif f.get(name, '').strip():
+                        changes[name] = f[name].strip()
+            if changes.get('site_url'):
+                changes['site_url'] = changes['site_url'].rstrip('/')
+            integrations.save(db(), changes)
+            flash('Saved.' if changes else 'Nothing changed.')
+        elif action == 'test_email':
+            to = f.get('to', '').strip() or current_user()['email']
+            ok = mailer.send(to, current_user()['name'], f'Test email from {config.BRAND}',
+                             f'This is a test from {config.BRAND}. If you can read it, email is working.')
+            flash(f'Test email sent to {to}. Check the inbox (and spam).' if ok else
+                  'The email didn’t send. Check the server, username and password — for Gmail it must be an '
+                  'App Password, not your normal password.', 'message' if ok else 'error')
+        elif action == 'test_text':
+            to = f.get('to', '').strip() or (current_user()['phone'] or '')
+            ok = sms.send(to, f'Test text from {config.BRAND}. Texts are working.')
+            flash(f'Test text sent to {to}.' if ok else 'The text didn’t send. ' + sms.last_error_hint(),
+                  'message' if ok else 'error')
+        elif action == 'test_ai':
+            try:
+                result = ai.describe_job('Builder', '', 'back deck is rotten in places, about 4x5m, the rail wobbles')
+                flash(f'The helper works. It suggested: “{result["title"]}”.')
+            except ai.AIError as e:
+                flash(str(e), 'error')
+        return redirect(url_for('admin_setup'))
+    status = {'email': mailer.enabled(), 'texts': sms.enabled(), 'ai': ai.enabled()}
+    return render_template('admin/setup.html', groups=SETUP_GROUPS, status=status, integrations=integrations)
 
 
 @app.route('/admin')
@@ -1503,7 +1785,7 @@ def admin_trade_action(trade_id, action):
             engine.notify(db(), trade_id, body, '/trade')
             db().commit()
             flash('Message sent. They’ll see it in their notifications' +
-                  (' and by email.' if mailer.ENABLED else ' (email isn’t set up yet).'))
+                  (' and by email.' if mailer.enabled() else ' (email isn’t set up yet).'))
     elif action == 'remove':
         person = db().execute('SELECT * FROM users WHERE id = ?', (trade_id,)).fetchone()
         accounts.close(db(), person)
@@ -1777,8 +2059,10 @@ def sweep_once():
             if DEMO_TOOLS:
                 _load_clock(conn)
             if engine.try_lock(conn, 'sweep', max(30, SWEEP_SECONDS // 2)):
+                integrations.refresh(conn, force=True)
                 engine.sweep(conn)
                 mailer.flush(conn)
+                sms.flush(conn)
         finally:
             if not _USE_PG:
                 conn.close()
