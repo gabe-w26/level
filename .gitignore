@@ -6,3 +6,10 @@ __pycache__/
 .env
 static/uploads/*
 !static/uploads/.gitkeep
+
+# Phone app (mobile/)
+mobile/node_modules/
+mobile/.expo/
+mobile/ios/
+mobile/android/
+mobile/dist/
