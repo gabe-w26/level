@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% import '_macros.html' as m with context %}
+{% import '_progress.html' as rp with context %}
 {% block title %}{{ job.title }} — {{ cfg.BRAND }}{% endblock %}
 {% set hired = quotes|selectattr('status', 'equalto', 'accepted')|first %}
 {% block main %}
@@ -43,6 +44,10 @@
   </div>
   {% endif %}
 
+  {% if job.status == 'hired' and updates is defined %}
+  <div style="margin-top:20px">{{ rp.section('customer', job, updates, update_photos, report_score, report_plan, report_plan_text, nz_today) }}</div>
+  {% endif %}
+
   <div class="two" style="margin-top:28px">
     <div>
       <div class="section-title" style="margin-top:0"><h2>Quotes</h2><span class="label">In the order they arrived</span></div>
@@ -69,6 +74,7 @@
             {% if q.warranty %}<dt>Warranty</dt><dd>{{ q.warranty }}</dd>{% endif %}
             {% if q.available_from %}<dt>Can start</dt><dd>{{ q.available_from }}</dd>{% endif %}
             {% if q.duration %}<dt>Takes about</dt><dd>{{ q.duration }}</dd>{% endif %}
+            <dt>Progress updates</dt><dd>{{ rp.promise(q.report_plan, q.report_record) }}</dd>
           </dl>
           {% if q.needs_act %}
           <div class="notice act" style="margin:14px 0 0">
@@ -126,6 +132,7 @@
             <tr><th>Warranty</th>{% for q in quotes %}<td>{{ q.warranty or '—' }}</td>{% endfor %}</tr>
             <tr><th>Can start</th>{% for q in quotes %}<td>{{ q.available_from or '—' }}</td>{% endfor %}</tr>
             <tr><th>Takes</th>{% for q in quotes %}<td>{{ q.duration or '—' }}</td>{% endfor %}</tr>
+            <tr><th>Progress updates</th>{% for q in quotes %}<td>{{ rp.promise(q.report_plan, q.report_record) }}</td>{% endfor %}</tr>
             <tr><th>Licence</th>{% for q in quotes %}<td>{% if q.licence_checked_at %}✓ {{ licences[q.licence_type][0] }}{% elif q.licence_type and q.licence_type != 'none' %}Given, not yet checked{% else %}—{% endif %}</td>{% endfor %}</tr>
             <tr><th>Insurance</th>{% for q in quotes %}<td>{% if q.insurance_checked_at %}✓ Checked{% elif q.insurance_insurer %}Given, not yet checked{% else %}—{% endif %}</td>{% endfor %}</tr>
             <tr><th>Reviews</th>{% for q in quotes %}<td>{{ m.stars(q.rating) }}</td>{% endfor %}</tr>

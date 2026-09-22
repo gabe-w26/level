@@ -239,6 +239,7 @@ def submit_quote(db, job_id, trade_id, q, at=None):
         raise RuleError(f'This job already has its {config.MAX_QUOTES} quotes.')
     if offer['status'] != 'active' or parse_ts(offer['expires_at']) <= at:
         raise RuleError(f'Your {config.OFFER_WINDOW_HOURS} hours to quote have passed, so this job went to another trade.')
+    plan = _report_plan(q)
     q = _clean_quote(job, q)
 
     # The cap: only succeeds while the job is open and under MAX_QUOTES.
@@ -251,11 +252,11 @@ def submit_quote(db, job_id, trade_id, q, at=None):
     now_s = ts(at)
     db.execute('INSERT INTO quotes (job_id, trade_id, price_type, amount_low, amount_high, gst_included, '
                'message, inclusions, exclusions, warranty, available_from, duration, act_docs_promised, '
-               "status, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'sent',?)",
+               "report_plan, status, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'sent',?)",
                (job_id, trade_id, q['price_type'], q['amount_low'], q['amount_high'],
                 1 if q.get('gst_included') else 0, q['message'], q.get('inclusions'), q.get('exclusions'),
                 q.get('warranty'), q.get('available_from'), q.get('duration'),
-                1 if q.get('act_docs_promised') else 0, now_s))
+                1 if q.get('act_docs_promised') else 0, plan, now_s))
     db.execute("UPDATE offers SET status = 'quoted', resolved_at = ? WHERE id = ?", (now_s, offer['id']))
 
     count = db.execute('SELECT quote_count FROM jobs WHERE id = ?', (job_id,)).fetchone()['quote_count']
@@ -272,7 +273,18 @@ def submit_quote(db, job_id, trade_id, q, at=None):
     else:
         notify(db, job['customer_id'], f'New quote {count} of {config.MAX_QUOTES} for “{job["title"]}”.', link, at)
     db.commit()
+    import referrals
+    referrals.earn_for_first_quote(db, trade_id, at)
     return count
+
+
+def _report_plan(q):
+    """The progress updates promised on a quote: None if the field wasn't sent, else '' or e.g. 'daily,weekly'."""
+    if 'report_plan' not in q:
+        return None
+    import reporting
+    value = q['report_plan']
+    return reporting.clean(value if isinstance(value, (list, tuple)) else str(value or '').split(','))
 
 
 def revise_quote(db, job, trade_id, q, at=None):
@@ -284,7 +296,10 @@ def revise_quote(db, job, trade_id, q, at=None):
         raise RuleError('You haven’t quoted on this job.')
     if row['status'] != 'sent':
         raise RuleError('The customer has already responded to this quote, so it can’t be changed.')
+    plan = _report_plan(q)
     q = _clean_quote(job, q)
+    if plan is not None:
+        db.execute('UPDATE quotes SET report_plan = ? WHERE id = ?', (plan, row['id']))
     db.execute('UPDATE quotes SET price_type = ?, amount_low = ?, amount_high = ?, gst_included = ?, message = ?, '
                'inclusions = ?, exclusions = ?, warranty = ?, available_from = ?, duration = ?, '
                'act_docs_promised = ? WHERE id = ?',
@@ -400,6 +415,8 @@ def accept_quote(db, job, quote_id, act_ack=False, at=None):
     db.execute("UPDATE jobs SET status = 'hired', hired_trade_id = ?, closed_at = ?, close_reason = 'hired' WHERE id = ?",
                (q['trade_id'], now_s, job['id']))
     _close_offers_and_quotes(db, job, q['id'], at)
+    import reporting
+    reporting.start_job(db, job, q, at)
     notify(db, q['trade_id'], f'You won “{job["title"]}”. The customer’s contact details are on the job.',
            f'/trade/jobs/{job["id"]}', at)
     db.commit()

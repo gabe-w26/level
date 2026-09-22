@@ -31,12 +31,12 @@ def _mail_from():
             or f'{config.BRAND} <{integrations.get("smtp_user") or config.SUPPORT_EMAIL}>')
 
 
-def _build(to_email, to_name, subject, body, unsubscribe_url=None):
+def _build(to_email, to_name, subject, body, unsubscribe_url=None, reply_to=None):
     msg = EmailMessage()
     msg['Subject'] = subject if len(subject) <= 90 else subject[:87] + '…'
     msg['From'] = _mail_from()
     msg['To'] = f'{to_name} <{to_email}>' if to_name else to_email
-    msg['Reply-To'] = config.SUPPORT_EMAIL
+    msg['Reply-To'] = reply_to or config.SUPPORT_EMAIL
     if unsubscribe_url:
         msg['List-Unsubscribe'] = f'<{unsubscribe_url}>'
         body += f'\n\n—\nStop these emails: {unsubscribe_url}'
@@ -44,9 +44,9 @@ def _build(to_email, to_name, subject, body, unsubscribe_url=None):
     return msg
 
 
-def send(to_email, to_name, subject, body, unsubscribe_url=None):
+def send(to_email, to_name, subject, body, unsubscribe_url=None, reply_to=None):
     """Send one message now. Returns True if it actually went out."""
-    msg = _build(to_email, to_name, subject, body, unsubscribe_url)
+    msg = _build(to_email, to_name, subject, body, unsubscribe_url, reply_to)
     if not enabled():
         print(f'\n[email not set up — would have sent]\nTo: {to_email}\nSubject: {subject}\n\n{body}\n', flush=True)
         return False

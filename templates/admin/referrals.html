@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Referrals — admin{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <p class="small"><a href="{{ url_for('admin_outreach') }}">← Outreach</a></p>
+  <div class="page-head">
+    <div>
+      <h1>Referrals</h1>
+      <p class="muted">Who’s bringing people to {{ cfg.BRAND }}. Trades earn a free month (up to {{ cap }}) when someone they invited sends a first quote.</p>
+    </div>
+  </div>
+
+  <div class="admin-stats">
+    <div><b>{{ totals.trade_invites }}</b><span class="small muted">trades invited by trades</span></div>
+    <div><b>{{ totals.months }}</b><span class="small muted">free months earned</span></div>
+    <div><b>{{ totals.recommended }}</b><span class="small muted">tradies recommended by customers</span></div>
+    <div><b>{{ totals.recommended_joined }}</b><span class="small muted">of those joined</span></div>
+    <div><b>{{ totals.friends }}</b><span class="small muted">customers brought by customers</span></div>
+  </div>
+
+  <div class="grid-2" style="margin-top:20px">
+    <div class="card table-wrap">
+      <h3>Top trades</h3>
+      <table>
+        <thead><tr><th>Trade</th><th>Joined</th><th>Free months</th></tr></thead>
+        <tbody>
+        {% for t in trades %}
+          <tr><td><a href="{{ url_for('admin_trade', trade_id=t.id) }}">{{ t.name }}</a></td><td class="num">{{ t.joined }}</td><td class="num">{{ t.months }}</td></tr>
+        {% else %}
+          <tr><td colspan="3" class="muted">No trade referrals yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card table-wrap">
+      <h3>Top customers</h3>
+      <table>
+        <thead><tr><th>Customer</th><th>Friends</th><th>Tradies recommended</th></tr></thead>
+        <tbody>
+        {% for c in customers %}
+          <tr><td><a href="{{ url_for('admin_customer', user_id=c.id) }}">{{ c.name }}</a></td><td class="num">{{ c.friends }}</td><td class="num">{{ c.recommended }}{% if c.joined %} <span class="small muted">({{ c.joined }} joined)</span>{% endif %}</td></tr>
+        {% else %}
+          <tr><td colspan="3" class="muted">No customer referrals yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

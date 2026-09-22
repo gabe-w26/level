@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Referrals — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Invite a mate, get a free month</h1>
+      <p class="muted">Send a good tradie your link. When they quote on their first job, you get a month free{% if not cfg.CHARGING %} — banked now, used once the free pilot ends{% endif %}.</p>
+    </div>
+  </div>
+
+  <div class="admin-stats">
+    <div><b>{{ joined|length }}</b><span class="small muted">joined from your link</span></div>
+    <div><b>{{ bank.earned }}</b><span class="small muted">free month{{ 's' if bank.earned != 1 }} earned</span></div>
+    <div><b>{{ bank.waiting }}</b><span class="small muted">{{ 'banked for later' if not cfg.CHARGING else 'still to use' }}</span></div>
+  </div>
+
+  <div class="grid-2" style="margin-top:20px">
+    <div class="card">
+      <h3>Your link</h3>
+      <div class="actions" style="gap:8px">
+        <input type="text" value="{{ invite_url }}" readonly aria-label="Your invite link" data-copy-source style="flex:1 1 180px;font-size:13px;padding:8px 10px">
+        <button class="btn btn-quiet btn-sm" type="button" data-copy>Copy</button>
+      </div>
+      {% set pitch = 'I’m on ' ~ cfg.BRAND ~ ' for jobs — each job only goes to 15 trades, no paying per lead. Join here: ' ~ invite_url %}
+      <p class="small" style="margin:10px 0 0"><a href="sms:?&body={{ pitch|urlencode }}">Text it</a> · <a href="https://wa.me/?text={{ pitch|urlencode }}" target="_blank" rel="noopener">WhatsApp</a> · <a href="mailto:?subject={{ ('Join me on ' ~ cfg.BRAND)|urlencode }}&body={{ pitch|urlencode }}">Email</a></p>
+      <hr class="divider">
+      <p class="small muted" style="margin:0">The fine print: one free month per tradie who joins from your link and sends their first quote. Up to {{ bank.cap }} free months in total. A free month is worth one month of whichever plan you’re on when it’s used.</p>
+    </div>
+    <div class="card">
+      <h3>Who’s joined</h3>
+      {% if joined %}
+      <table>
+        <tbody>
+        {% for j in joined %}
+          <tr>
+            <td><b>{{ j.business_name }}</b><div class="small muted">Joined {{ j.created_at|day }}</div></td>
+            <td class="small">{% if j.quotes %}<span class="pill accepted">Free month earned</span>{% else %}<span class="muted">Waiting for their first quote</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="small muted" style="margin:0">Nobody yet. Your first free month is one text away.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

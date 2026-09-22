@@ -32,7 +32,7 @@
                    ('Post a job', url_for('post_job'), 'plus', 0),
                    ('Messages', url_for('messages'), 'chat', unread_msgs),
                    ('Account', url_for('settings'), 'person', 0)] %}
-    {% set side_extra = [] %}
+    {% set side_extra = [('Share & recommend', url_for('customer_share'), 'gift')] %}
   {% else %}
     {% set tabs = [('Jobs', url_for('trade_home'), 'briefcase', leads_waiting),
                    ('Quotes', url_for('trade_quotes'), 'list', 0),
@@ -40,6 +40,7 @@
                    ('Account', url_for('settings'), 'person', 0)] %}
     {% set side_extra = [('Your profile', url_for('trade_setup'), 'profile'),
                          ('Quote templates', url_for('trade_templates'), 'list'),
+                         ('Referrals', url_for('trade_referrals'), 'gift'),
                          ('Plan', url_for('trade_plan'), 'card')] %}
   {% endif %}
 
@@ -95,6 +96,7 @@
           <a href="{{ url_for('admin_home') }}">Overview</a>
           <a href="{{ url_for('admin_inspect') }}">Behind the scenes</a>
           <a href="{{ url_for('admin_trades') }}">Businesses</a>
+          <a href="{{ url_for('admin_outreach') }}">Outreach</a>
           <a href="{{ url_for('admin_customers') }}">Customers</a>
           <a href="{{ url_for('admin_claims') }}">Refunds</a>
           <a href="{{ url_for('admin_reports') }}">Reports</a>

@@ -247,3 +247,6 @@ document.querySelectorAll('[data-ai-help]').forEach((box) => {
     }
   });
 });
+
+// Printable flyer.
+document.querySelectorAll('[data-print]').forEach((b) => b.addEventListener('click', () => window.print()));

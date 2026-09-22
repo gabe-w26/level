@@ -110,8 +110,8 @@
       {% endif %}
 
       <div class="card">
-        <h3>Invite a mate</h3>
-        <p class="small muted" style="margin:0 0 10px">Know a good tradie? Send them your link. {% if invited %}<b>{{ invited }}</b> joined from your invites so far.{% else %}More good tradies here means more customers trust {{ cfg.BRAND }}.{% endif %}</p>
+        <h3>Invite a mate, get a free month</h3>
+        <p class="small muted" style="margin:0 0 10px">Know a good tradie? Send them your link. When they quote on their first job, you get a month free. {% if invited %}<b>{{ invited }}</b> joined from your invites so far — <a href="{{ url_for('trade_referrals') }}">see your free months</a>.{% else %}<a href="{{ url_for('trade_referrals') }}">How it works</a>.{% endif %}</p>
         <div class="actions" style="gap:8px">
           <input type="text" value="{{ invite_url }}" readonly aria-label="Your invite link" data-copy-source style="flex:1 1 180px;font-size:13px;padding:8px 10px">
           <button class="btn btn-quiet btn-sm" type="button" data-copy>Copy</button>

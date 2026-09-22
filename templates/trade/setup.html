@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% import '_macros.html' as m with context %}
+{% import '_progress.html' as rp with context %}
 {% block title %}Your profile — {{ cfg.BRAND }}{% endblock %}
 {% macro checked(when) %}{% if when %}<span class="hint" style="color:var(--pine)">✓ Checked {{ when|day }}</span>{% endif %}{% endmacro %}
 {% block main %}
@@ -36,6 +37,8 @@
         <label for="workmanship_guarantee">Workmanship guarantee <span class="hint">For example “2 years on all workmanship”. Pre-fills your quotes.</span></label>
         <input id="workmanship_guarantee" name="workmanship_guarantee" type="text" value="{{ form.workmanship_guarantee or '' }}">
       </div>
+      {{ rp.plan_picker(report_plan, heading='Progress updates you usually offer') }}
+      <p class="small muted" style="margin:-6px 0 0">Pre-ticks your quotes; you can change it on each one. Customers can see how reliably you keep it — a big reason people pick one tradie over another.</p>
     </fieldset>
 
     <fieldset class="form-step">

@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Unsubscribe — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="auth">
+    {% if not p %}
+      <h1 style="font-size:34px">Link not recognised</h1>
+      <p class="muted">We couldn’t find that link. If you’d like us to stop emailing you, reply to any of our emails with “unsubscribe” and we’ll take you off straight away.</p>
+    {% elif done %}
+      <h1 style="font-size:34px">You’re unsubscribed</h1>
+      <p class="muted">We won’t send {{ p.business_name }} any more leads or emails. Sorry for the bother, and all the best with the business.</p>
+    {% else %}
+      <h1 style="font-size:34px">Stop emails to {{ p.business_name }}?</h1>
+      <p class="muted">We’ll take you off our list and won’t email you again.</p>
+      <form method="post" class="form card">
+        {{ m.csrf() }}
+        <div><button class="btn" type="submit">Unsubscribe</button></div>
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

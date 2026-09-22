@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Share &amp; recommend — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Share &amp; recommend</h1>
+      <p class="muted">Help good local tradies find work, and friends find good tradies.</p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card" id="recommend">
+      <h3>Recommend a tradie you trust</h3>
+      <p class="small muted">We’ll invite them to join. Once they’re on, they can quote on local jobs — including yours next time.</p>
+      {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+      {% if done and done.existing %}
+        <p class="notice ok">Good news — they’re already on {{ cfg.BRAND }}. <a href="{{ url_for('pro_profile', trade_id=done.existing) }}">See their profile</a>.</p>
+      {% elif done %}
+        <div class="notice ok">
+          <p><b>Thanks!</b> {% if done.emailed %}We’ve emailed {{ done.name }} an invite, mentioning you recommended them.{% else %}Send {{ done.name }} this link — it’s theirs, so we’ll know you recommended them:{% endif %}</p>
+          {% if not done.emailed %}
+          <div class="actions" style="gap:8px">
+            <input type="text" value="{{ done.link }}" readonly aria-label="Their invite link" data-copy-source style="flex:1 1 180px;font-size:13px;padding:8px 10px">
+            <button class="btn btn-quiet btn-sm" type="button" data-copy>Copy</button>
+          </div>
+          {% set pitch = 'I recommended you on ' ~ cfg.BRAND ~ ' — local homeowners post jobs there. Join free here: ' ~ done.link %}
+          <p class="small" style="margin:10px 0 0"><a href="sms:?&body={{ pitch|urlencode }}">Text it</a> · <a href="https://wa.me/?text={{ pitch|urlencode }}" target="_blank" rel="noopener">WhatsApp</a> · <a href="mailto:?subject={{ ('I recommended you on ' ~ cfg.BRAND)|urlencode }}&body={{ pitch|urlencode }}">Email</a></p>
+          {% endif %}
+        </div>
+      {% endif %}
+      <form method="post" class="form">
+        {{ m.csrf() }}
+        <div class="row">
+          <div><label for="name">Their name</label><input id="name" name="name" type="text" value="{{ form.get('name', '') }}" autocomplete="off"></div>
+          <div><label for="business_name">Business name <span class="hint">If you know it</span></label><input id="business_name" name="business_name" type="text" value="{{ form.get('business_name', '') }}" autocomplete="off"></div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="category_id">Their trade</label>
+            <select id="category_id" name="category_id">
+              <option value="">Choose…</option>
+              {% for c in categories %}<option value="{{ c.id }}" {{ 'selected' if form.get('category_id') == c.id|string }}>{{ c.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label for="area_id">Where they work</label>
+            <select id="area_id" name="area_id">
+              <option value="">Choose…</option>
+              {% for region, areas in regions.items() %}<optgroup label="{{ region }}">{% for a in areas %}<option value="{{ a.id }}" {{ 'selected' if form.get('area_id') == a.id|string }}>{{ a.name }}</option>{% endfor %}</optgroup>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div><label for="email">Their email</label><input id="email" name="email" type="email" value="{{ form.get('email', '') }}" autocomplete="off"></div>
+          <div><label for="phone">Or their mobile</label><input id="phone" name="phone" type="tel" value="{{ form.get('phone', '') }}" autocomplete="off"></div>
+        </div>
+        {% if email_on %}
+        <label class="check"><input type="checkbox" name="email_them" value="1" {{ 'checked' if form.get('email_them') }}> <span>Email them an invite for me <span class="hint">One email only, saying you recommended them, with a way to opt out. Leave unticked to send them a link yourself.</span></span></label>
+        {% endif %}
+        <div><button class="btn" type="submit">Recommend them</button></div>
+      </form>
+      {% if mine %}
+      <hr class="divider">
+      <p class="small"><b>You’ve recommended:</b></p>
+      <ul class="small" style="margin:0;padding-left:18px">
+        {% for p in mine %}<li>{{ p.business_name }} ({{ p.category_name }}) — {{ 'joined' if p.status == 'signed_up' else 'invited' }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h3>Share {{ cfg.BRAND }} with friends</h3>
+      <p class="small muted">Posting a job is free. Friends who use your link will see you sent them.{% if friends %} <b>{{ friends }}</b> friend{{ 's' if friends != 1 }} joined so far — thank you!{% endif %}</p>
+      <div class="actions" style="gap:8px">
+        <input type="text" value="{{ share_url }}" readonly aria-label="Your share link" data-copy-source style="flex:1 1 180px;font-size:13px;padding:8px 10px">
+        <button class="btn btn-quiet btn-sm" type="button" data-copy>Copy</button>
+      </div>
+      {% set pitch = 'I found my tradie on ' ~ cfg.BRAND ~ ' — post a job free and get up to 6 quotes from local trades: ' ~ share_url %}
+      <p class="small" style="margin:10px 0 0"><a href="sms:?&body={{ pitch|urlencode }}">Text it</a> · <a href="https://wa.me/?text={{ pitch|urlencode }}" target="_blank" rel="noopener">WhatsApp</a> · <a href="mailto:?subject={{ ('Finding a tradie')|urlencode }}&body={{ pitch|urlencode }}">Email</a></p>
+    </div>
+  </div>
+</div>
+{% endblock %}

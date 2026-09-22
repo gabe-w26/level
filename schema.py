@@ -266,6 +266,120 @@ CREATE TABLE IF NOT EXISTS locks (
     expires_at      TEXT NOT NULL
 );
 
+-- The phone app: sign-in tokens (only a hash is kept) and Expo push tokens.
+CREATE TABLE IF NOT EXISTS api_tokens (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL,
+    token_hash      TEXT NOT NULL UNIQUE,
+    device          TEXT,
+    created_at      TEXT NOT NULL,
+    last_used_at    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS push_tokens (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL,
+    token           TEXT NOT NULL UNIQUE,
+    platform        TEXT,
+    created_at      TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_tokens_user  ON api_tokens (user_id);
+CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens (user_id);
+
+-- Outreach: local businesses not on the site yet, who we email free leads to.
+CREATE TABLE IF NOT EXISTS prospects (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    category_id     INTEGER NOT NULL,
+    business_name   TEXT NOT NULL,
+    first_name      TEXT,
+    email           TEXT,
+    phone           TEXT,
+    website         TEXT,
+    based_in        TEXT,
+    source_url      TEXT,
+    notes           TEXT,
+    do_not_contact  INTEGER NOT NULL DEFAULT 0,
+    status          TEXT NOT NULL DEFAULT 'new',
+    leads_sent      INTEGER NOT NULL DEFAULT 0,
+    last_sent_at    TEXT,
+    token           TEXT NOT NULL UNIQUE,
+    user_id         INTEGER,
+    source          TEXT,
+    recommended_by  INTEGER,
+    unsubscribed_at TEXT,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS prospect_areas (
+    prospect_id     INTEGER NOT NULL,
+    area_id         INTEGER NOT NULL,
+    PRIMARY KEY (prospect_id, area_id)
+);
+
+CREATE TABLE IF NOT EXISTS prospect_sends (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    prospect_id     INTEGER NOT NULL,
+    job_id          INTEGER NOT NULL,
+    summary         TEXT,
+    sender_id       INTEGER,
+    sender_name     TEXT,
+    reply_to        TEXT,
+    status          TEXT NOT NULL DEFAULT 'queued',
+    created_at      TEXT NOT NULL,
+    sent_at         TEXT,
+    clicked_at      TEXT
+);
+
+-- Progress updates the hired trade posts, scored against what they promised when quoting.
+CREATE TABLE IF NOT EXISTS progress_updates (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id          INTEGER NOT NULL,
+    trade_id        INTEGER NOT NULL,
+    kinds           TEXT NOT NULL DEFAULT '',
+    body            TEXT NOT NULL,
+    local_date      TEXT NOT NULL,
+    period_daily    TEXT NOT NULL,
+    period_weekly   TEXT NOT NULL,
+    period_monthly  TEXT NOT NULL,
+    created_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS progress_photos (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    update_id       INTEGER NOT NULL,
+    filename        TEXT NOT NULL,
+    created_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS progress_reminders (
+    job_id          INTEGER NOT NULL,
+    kind            TEXT NOT NULL,
+    period          TEXT NOT NULL,
+    sent_at         TEXT NOT NULL,
+    PRIMARY KEY (job_id, kind, period)
+);
+
+-- Free months earned by trades whose invite brought in a trade who went on to quote.
+CREATE TABLE IF NOT EXISTS referral_rewards (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    referrer_id     INTEGER NOT NULL,
+    referred_id     INTEGER NOT NULL UNIQUE,
+    months          INTEGER NOT NULL DEFAULT 1,
+    earned_at       TEXT NOT NULL,
+    applied_at      TEXT,
+    applied_as      TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_progress_job     ON progress_updates (job_id, id);
+CREATE INDEX IF NOT EXISTS idx_progress_photos  ON progress_photos (update_id);
+CREATE INDEX IF NOT EXISTS idx_rewards_referrer ON referral_rewards (referrer_id);
+CREATE INDEX IF NOT EXISTS idx_prospects_match  ON prospects (category_id, status);
+CREATE INDEX IF NOT EXISTS idx_prospects_email  ON prospects (email);
+CREATE INDEX IF NOT EXISTS idx_prospect_sends   ON prospect_sends (prospect_id, job_id);
+CREATE INDEX IF NOT EXISTS idx_prospect_queue   ON prospect_sends (status, id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users (username);
 CREATE INDEX IF NOT EXISTS idx_offers_job      ON offers (job_id, status);
 CREATE INDEX IF NOT EXISTS idx_offers_trade    ON offers (trade_id, offered_at);
@@ -298,6 +412,16 @@ MIGRATIONS = [
     'ALTER TABLE jobs ADD COLUMN nudged_at TEXT',
     'ALTER TABLE jobs ADD COLUMN followup_at TEXT',
     'ALTER TABLE tokens ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE prospects ADD COLUMN source TEXT',
+    'ALTER TABLE prospects ADD COLUMN recommended_by INTEGER',
+    'ALTER TABLE users ADD COLUMN ref_code TEXT',
+    'CREATE UNIQUE INDEX idx_users_ref_code ON users (ref_code)',
+    'ALTER TABLE trades ADD COLUMN report_plan TEXT',
+    'ALTER TABLE quotes ADD COLUMN report_plan TEXT',
+    'ALTER TABLE jobs ADD COLUMN report_plan TEXT',
+    'ALTER TABLE jobs ADD COLUMN work_started_on TEXT',
+    'ALTER TABLE jobs ADD COLUMN work_done_on TEXT',
+    'ALTER TABLE notifications ADD COLUMN pushed_at TEXT',
 ]
 
 

@@ -1,7 +1,7 @@
 // Service worker: makes Level installable and keeps it usable on a bad signal.
 // Pages are fetched fresh when there's a connection, and the last version is
 // kept so a tradie in a basement still sees the job they just opened.
-const VERSION = 'level-v1';
+const VERSION = 'level-v2';
 const SHELL = ['/static/style.css', '/static/app.js', '/static/icons/icon-192.png', '/offline'];
 
 self.addEventListener('install', (event) => {

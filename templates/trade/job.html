@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% import '_macros.html' as m with context %}
+{% import '_progress.html' as rp with context %}
 {% block title %}{{ job.title }} — {{ cfg.BRAND }}{% endblock %}
 {% block main %}
 <div class="wrap page">
@@ -113,6 +114,7 @@
           <div><label for="available_from">Can start</label><input id="available_from" name="available_from" type="text" placeholder="e.g. week of 6 October" value="{{ form.get('available_from', '') }}"></div>
           <div><label for="duration">Takes about</label><input id="duration" name="duration" type="text" placeholder="e.g. 3 days" value="{{ form.get('duration', '') }}"></div>
         </div>
+        {{ rp.plan_picker(form.getlist('report_plan') if form.getlist is defined else default_plan) }}
         {% if job.property_type != 'commercial' %}
         <label class="check notice act" style="margin:0">
           <input type="checkbox" name="act_docs_promised" value="1" {{ 'checked' if form.get('act_docs_promised') }}>
@@ -141,6 +143,7 @@
           {% if quote.warranty %}<dt>Warranty</dt><dd>{{ quote.warranty }}</dd>{% endif %}
           {% if quote.available_from %}<dt>Can start</dt><dd>{{ quote.available_from }}</dd>{% endif %}
           {% if quote.duration %}<dt>Takes about</dt><dd>{{ quote.duration }}</dd>{% endif %}
+          <dt>Progress updates</dt><dd>{{ (quote.report_plan or '')|replace(',', ', ')|title or 'None promised' }}</dd>
         </dl>
         <p style="margin:16px 0 0"><a class="btn btn-quiet btn-sm" href="{{ url_for('thread', job_id=job.id, trade_id=t.user_id) }}">Messages with the customer</a></p>
         {% if quote.status == 'sent' and job.status in ('open', 'full') %}
@@ -180,6 +183,7 @@
               <div><label for="edit_start">Can start</label><input id="edit_start" name="available_from" type="text" value="{{ quote.available_from or '' }}"></div>
               <div><label for="edit_duration">Takes about</label><input id="edit_duration" name="duration" type="text" value="{{ quote.duration or '' }}"></div>
             </div>
+            {{ rp.plan_picker((quote.report_plan or '').split(','), id_prefix='edit-rp') }}
             {% if job.property_type != 'commercial' %}
             <label class="check"><input type="checkbox" name="act_docs_promised" value="1" {{ 'checked' if quote.act_docs_promised }}> <span class="small">If my price is {{ threshold|money }} or more incl. GST, I’ll provide the written contract, disclosure statement and MBIE checklist.</span></label>
             {% endif %}
@@ -188,6 +192,10 @@
         </details>
         {% endif %}
       </div>
+      {% endif %}
+
+      {% if quote and quote.status == 'accepted' and updates is defined %}
+      {{ rp.section('trade', job, updates, update_photos, report_score, report_plan, report_plan_text, nz_today) }}
       {% endif %}
     </div>
 

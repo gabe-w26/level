@@ -1,0 +1,119 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Outreach — admin{% endblock %}
+{% set filters = [('all', 'All'), ('new', 'Not contacted'), ('sent', 'Lead sent'), ('replied', 'Clicked'), ('signed_up', 'Signed up'), ('unsubscribed', 'Unsubscribed'), ('not_interested', 'Not interested'), ('dnc', 'Do not contact')] %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Outreach</h1>
+      <p class="muted">Local businesses who aren’t on {{ cfg.BRAND }} yet. When a job comes in, send it to the ones in that trade and area as a free lead.</p>
+    </div>
+    <div class="actions">
+      <a class="btn btn-quiet btn-sm" href="{{ url_for('admin_outreach_flyer') }}" target="_blank" rel="noopener">Homeowner flyer</a>
+      <a class="btn btn-quiet btn-sm" href="{{ url_for('admin_outreach_flyer', for='trades') }}" target="_blank" rel="noopener">Trades flyer</a>
+      <a class="btn btn-quiet btn-sm" href="{{ url_for('admin_referrals') }}">Referrals</a>
+    </div>
+  </div>
+
+  {% if not email_on %}
+  <p class="notice warn">Email isn’t set up yet, so nothing will actually send. Add a Gmail app password in <a href="{{ url_for('admin_setup') }}">Setup</a> first.</p>
+  {% endif %}
+
+  <div class="admin-stats">
+    <div><b>{{ stats.total }}</b><span class="small muted">businesses listed</span></div>
+    <div><b>{{ stats.emailable }}</b><span class="small muted">OK to email</span></div>
+    <div><b>{{ stats.contacted }}</b><span class="small muted">contacted</span></div>
+    <div><b>{{ stats.sent }}</b><span class="small muted">leads emailed{% if stats.queued %} · {{ stats.queued }} queued{% endif %}</span></div>
+    <div><b>{{ stats.clicks }}</b><span class="small muted">clicked the link</span></div>
+    <div><b>{{ stats.counts.signed_up }}</b><span class="small muted">signed up{% if stats.rate is not none %} · {{ '%.0f'|format(stats.rate * 100) }}%{% endif %}</span></div>
+    <div><b>{{ stats.counts.unsubscribed + stats.counts.not_interested }}</b><span class="small muted">opted out</span></div>
+  </div>
+
+  <div class="grid-2" style="margin-top:20px">
+    <div class="card">
+      <h3>Jobs to send</h3>
+      {% if jobs %}
+      <table>
+        <tbody>
+        {% for row in jobs %}
+          <tr>
+            <td><b>{{ row.job.title }}</b><div class="small muted">{{ row.job.category_name }} · {{ row.job.suburb or row.job.area_name }} · {{ row.job.quote_count }}/{{ cfg.MAX_QUOTES }} quotes</div></td>
+            <td class="small num">{{ row.matches }} to send{% if row.sent %}<div class="muted">{{ row.sent }} sent</div>{% endif %}</td>
+            <td>{% if row.matches %}<a class="btn btn-sm" href="{{ url_for('admin_outreach_job', job_id=row.job.id) }}">Send leads</a>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="small muted">No jobs are taking quotes right now. When one comes in, it shows here with how many listed businesses match it.</p>
+      {% endif %}
+    </div>
+    <div class="card">
+      <h3>Import businesses</h3>
+      <p class="small muted">Upload the outreach spreadsheet (.xlsx — the Prospects tab is read) or a .csv with the same column names. Businesses already here are updated, never duplicated. Opt-outs are kept: an old sheet can’t switch one back on.</p>
+      <form method="post" action="{{ url_for('admin_outreach_import') }}" enctype="multipart/form-data" class="form">
+        {{ m.csrf() }}
+        <div><label for="file">Spreadsheet</label><input id="file" name="file" type="file" accept=".xlsx,.csv"></div>
+        <div><button class="btn btn-sm" type="submit">Import</button></div>
+      </form>
+      <hr class="divider">
+      <p class="small muted">Rules built in: only published business emails; one email per real job; at most {{ max_leads }} to anyone who hasn’t answered; every email names you and has a one-click unsubscribe; nothing goes to someone already on {{ cfg.BRAND }}.</p>
+    </div>
+  </div>
+
+  <div class="page-head" style="margin-top:28px">
+    <h2 style="margin:0">Businesses</h2>
+    <form method="get" class="actions">
+      <label class="vh" for="trade">Trade</label>
+      <select id="trade" name="trade" style="width:auto">
+        <option value="">All trades</option>
+        {% for c in cats %}<option value="{{ c.id }}" {{ 'selected' if trade == c.id|string }}>{{ c.name }}</option>{% endfor %}
+      </select>
+      <label class="vh" for="q">Search</label>
+      <input id="q" name="q" type="search" placeholder="Name or email" value="{{ search }}" style="width:auto;min-width:200px">
+      <input type="hidden" name="show" value="{{ show }}">
+      <button class="btn btn-quiet btn-sm" type="submit">Search</button>
+    </form>
+  </div>
+  <div class="actions" style="margin-bottom:16px">
+    {% for key, label in filters %}
+    <a class="btn btn-sm {{ 'btn-ghost' if show != key else '' }}" href="{{ url_for('admin_outreach', show=key, q=search, trade=trade) }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+
+  <div class="card table-wrap" style="padding:6px 10px">
+    <table>
+      <thead><tr><th>Business</th><th>Trade &amp; areas</th><th>Contact</th><th>Leads</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for p in rows %}
+        <tr>
+          <td>
+            <b>{{ p.business_name }}</b>{% if p.do_not_contact %} <span class="pill declined">Do not contact</span>{% endif %}
+            <div class="small muted">{% if p.first_name %}{{ p.first_name }} · {% endif %}{{ p.based_in or '' }}</div>
+          </td>
+          <td class="small">{{ p.category_name }}<div class="muted">{{ places.get(p.id, [])|join(', ') or 'No areas' }}</div></td>
+          <td class="small">
+            {{ p.email or 'No email' }}{% if p.phone %}<div class="muted">{{ p.phone }}</div>{% endif %}
+            {% if p.source_url %}<div><a href="{{ p.source_url }}" target="_blank" rel="noopener noreferrer">Source</a></div>{% endif %}
+          </td>
+          <td class="small num">{{ p.leads_sent }}{% if p.last_sent_at %}<div class="muted">{{ p.last_sent_at|day }}</div>{% endif %}</td>
+          <td>
+            <form method="post" action="{{ url_for('admin_outreach_prospect', pid=p.id) }}" class="actions">
+              {{ m.csrf() }}
+              <select name="status" aria-label="Status for {{ p.business_name }}" style="width:auto">
+                {% for key, label in statuses.items() %}<option value="{{ key }}" {{ 'selected' if p.status == key }}>{{ 'Clicked' if key == 'replied' else label }}</option>{% endfor %}
+              </select>
+              <button class="btn btn-quiet btn-sm" type="submit">Save</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">No businesses yet — import the outreach spreadsheet above.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="small muted" style="margin-top:12px">{{ rows|length }} shown{% if rows|length == 500 %} (first 500 — narrow it down){% endif %}. If someone replies “unsubscribe” or “not interested” by email, set their status here straight away.</p>
+</div>
+{% endblock %}

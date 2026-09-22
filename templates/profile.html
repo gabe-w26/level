@@ -9,6 +9,12 @@
       <h1 style="font-size:clamp(30px,4vw,46px)">{{ t.business_name }}</h1>
       <p>{{ m.stars(rating) }}</p>
       {{ m.badges(t) }}
+      {% if report_record or report_plan %}
+      <div class="notice small" style="margin-top:14px">
+        {% if report_record %}<b>Keeps customers updated:</b> {{ report_record.pct }}% of promised progress updates on time, across {{ report_record.jobs }} job{{ 's' if report_record.jobs != 1 }} ({{ report_record.kept }} of {{ report_record.expected }}).
+        {% else %}<b>Offers {{ report_plan|lower }}</b> on jobs they’re hired for. Their on-time record shows here once there’s enough to go on.{% endif %}
+      </div>
+      {% endif %}
       {% if t.about %}<p class="desc" style="margin-top:16px">{{ t.about }}</p>{% endif %}
 
       <div class="section-title"><h2>Reviews</h2><span class="label">Only from customers who hired them here</span></div>

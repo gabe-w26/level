@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ cfg.BRAND }} flyer — {{ 'trades' if audience == 'trades' else 'homeowners' }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Public+Sans:wght@400..700&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #16202B; --ink-2: #4B5663; --chalk: #1F4FD1; --chalk-wash: #E4EBFB; --concrete: #E6E9E4; --paint: #F2600C; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--concrete); font-family: 'Public Sans', system-ui, sans-serif; color: var(--ink); }
+  .bar { max-width: 148mm; margin: 16px auto; display: flex; gap: 10px; align-items: center; font-size: 14px; color: var(--ink-2); padding: 0 16px; }
+  .bar button { font: inherit; font-weight: 600; background: var(--chalk); color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+  .bar a { color: var(--chalk); }
+  .sheet { width: min(148mm, calc(100% - 32px)); min-height: 210mm; margin: 0 auto 24px; background: #fff; padding: 14mm 12mm; display: flex; flex-direction: column; gap: 7mm; box-shadow: 0 10px 28px -14px rgba(22,32,43,.3); }
+  .brand { display: flex; align-items: center; gap: 8px; font-family: 'Archivo', sans-serif; font-weight: 800; font-size: 22px; letter-spacing: -.01em; }
+  .brand svg { width: 42px; height: 19px; }
+  h1 { font-family: 'Archivo', sans-serif; font-weight: 900; font-stretch: 85%; font-size: 44px; line-height: .95; margin: 0; text-transform: uppercase; letter-spacing: -.01em; }
+  h1 em { font-style: normal; color: var(--chalk); }
+  .lede { font-size: 17px; line-height: 1.4; margin: 0; color: var(--ink-2); }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3.5mm; }
+  li { display: grid; grid-template-columns: 9mm 1fr; align-items: start; font-size: 15px; line-height: 1.35; }
+  li b { font-family: 'Archivo', sans-serif; font-size: 20px; color: var(--chalk); line-height: 1; }
+  .cta { margin-top: auto; display: grid; grid-template-columns: 38mm 1fr; gap: 6mm; align-items: center; border-top: 2px solid var(--ink); padding-top: 6mm; }
+  .cta svg { width: 38mm; height: 38mm; display: block; }
+  .cta p { margin: 0; font-size: 14px; color: var(--ink-2); }
+  .cta .url { font-family: 'Archivo', sans-serif; font-weight: 800; font-size: 18px; color: var(--ink); word-break: break-all; margin-top: 2mm; }
+  .tag { display: inline-block; background: var(--chalk-wash); color: var(--chalk); font-weight: 700; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; padding: 4px 8px; border-radius: 4px; }
+  @page { size: A5; margin: 0; }
+  @media print {
+    body { background: #fff; }
+    .bar { display: none; }
+    .sheet { margin: 0; box-shadow: none; width: 148mm; height: 210mm; }
+  }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <button type="button" data-print>Print</button>
+    <span>A5 — or print on A4 at “fit to page”.</span>
+    <a href="{{ url_for('admin_outreach_flyer', for=('homeowners' if audience == 'trades' else 'trades')) }}">Switch to the {{ 'homeowner' if audience == 'trades' else 'trades' }} flyer</a>
+  </div>
+  <main class="sheet">
+    <div class="brand"><svg viewBox="0 0 42 19" aria-hidden="true"><rect x="1.25" y="1.25" width="39.5" height="16.5" rx="4.5" fill="none" stroke="currentColor" stroke-width="2.5"/><rect x="12" y="5.5" width="18" height="8" rx="4" fill="#E4EBFB" stroke="#1F4FD1" stroke-width="1.5"/><circle cx="21" cy="9.5" r="2.4" fill="#1F4FD1"/><path d="M17 5.5v8M25 5.5v8" stroke="#16202B" stroke-width="1.1"/></svg>{{ cfg.BRAND }}</div>
+    {% if audience == 'trades' %}
+      <span class="tag">For Wellington tradies</span>
+      <h1>Real jobs.<br><em>No tokens.</em></h1>
+      <p class="lede">Local homeowners post jobs. You see the ones in your trade and area — and so do at most 14 others.</p>
+      <ul>
+        <li><b>15</b><span>trades per job, max. Don’t quote in 24 hours and your spot passes on.</span></li>
+        <li><b>6</b><span>quotes per job, first in first served. No bidding wars.</span></li>
+        <li><b>=</b><span>Jobs shared out fairly. Reviews and spend don’t buy a better spot.</span></li>
+        <li><b>$0</b><span>Free during our pilot — no card needed. After that, one flat monthly price. Never per lead.</span></li>
+      </ul>
+      <div class="cta">
+        {{ qr|safe }}
+        <div><p>Scan to join free — takes 2 minutes.</p><p class="url">{{ target|replace('https://', '')|replace('http://', '') }}</p></div>
+      </div>
+    {% else %}
+      <span class="tag">Wellington homeowners</span>
+      <h1>Need a <em>tradie?</em></h1>
+      <p class="lede">Post your job once — free. Up to 15 local tradies in that trade see it, and you get up to 6 quotes.</p>
+      <ul>
+        <li><b>1</b><span>Describe the job and add a photo. Takes a couple of minutes.</span></li>
+        <li><b>6</b><span>quotes at most, so your phone won’t ring off the hook.</span></li>
+        <li><b>✓</b><span>Every profile shows what we’ve checked — licence, NZBN and insurance.</span></li>
+        <li><b>★</b><span>Reviews come only from real hired jobs, and can’t be bought.</span></li>
+      </ul>
+      <div class="cta">
+        {{ qr|safe }}
+        <div><p>Scan to post your job — it’s free.</p><p class="url">{{ target|replace('https://', '')|replace('http://', '') }}</p></div>
+      </div>
+    {% endif %}
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

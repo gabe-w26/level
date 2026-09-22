@@ -11,6 +11,7 @@ import re
 import json
 import secrets
 import sqlite3
+import sys
 import threading
 import time
 import uuid
@@ -28,6 +29,10 @@ import config
 import engine
 import integrations
 import mailer
+import outreach
+import push
+import referrals
+import reporting
 import sms
 from db import _USE_PG, get_db, release_db
 from engine import RuleError, parse_ts, ts, utcnow
@@ -147,7 +152,7 @@ def offline():
 @app.route('/robots.txt')
 def robots():
     body = '\n'.join(['User-agent: *'] + [f'Disallow: {p}' for p in
-                     ('/me', '/trade', '/admin', '/thread', '/settings', '/uploads', '/demo')] + ['Allow: /', ''])
+                     ('/me', '/trade', '/admin', '/thread', '/settings', '/uploads', '/demo', '/o/')] + ['Allow: /', ''])
     return body, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
 
@@ -166,7 +171,8 @@ def _before():
     if DEMO_TOOLS:
         _load_clock(db())
     integrations.refresh(db())
-    if request.method == 'POST' and request.endpoint != 'stripe_webhook':
+    # The phone app's API authenticates with a bearer token, never the session cookie, so CSRF doesn't apply.
+    if request.method == 'POST' and request.endpoint != 'stripe_webhook' and not request.path.startswith('/api/mobile/'):
         sent = request.form.get('_csrf', '')
         if not sent or not secrets.compare_digest(sent, session.get('_csrf', '')):
             abort(400)
@@ -392,7 +398,9 @@ def pro_profile(trade_id):
     done = db().execute("SELECT COUNT(*) AS n FROM jobs WHERE hired_trade_id = ? AND status = 'hired'",
                         (trade_id,)).fetchone()['n']
     return render_template('profile.html', t=t, cats=cats, areas=areas, reviews=reviews,
-                           rating=engine.trade_rating(db(), trade_id), done=done)
+                           rating=engine.trade_rating(db(), trade_id), done=done,
+                           report_record=reporting.trade_record(db(), trade_id),
+                           report_plan=reporting.describe(t['report_plan']))
 
 
 # ── Accounts ──────────────────────────────────────────────────────────────────
@@ -446,11 +454,22 @@ def signup():
                     engine.notify(db(), inviter['user_id'], f'{business} joined {config.BRAND} from your invite. Cheers!',
                                   url_for('trade_home'))
                 db().commit()
+                prospect = outreach.by_token(db(), session.get('prospect'))
                 login_user(uid)
+                if prospect:
+                    # They came from an outreach email: credit it, and pre-tick their trade and areas.
+                    outreach.signed_up(db(), prospect, uid)
+                    referrals.recommended_joined(db(), prospect, uid)
+                    session['setup_hint'] = outreach.setup_hint(db(), prospect)
                 accounts.welcome(db(), db().execute('SELECT * FROM users WHERE id = ?', (uid,)).fetchone(),
                                  request.url_root.rstrip('/'))
                 return redirect(url_for('trade_setup'))
-    return render_template('signup.html', errors=errors, form=request.form, inviter=inviter)
+    form = request.form
+    prospect = outreach.by_token(db(), session.get('prospect')) if request.method == 'GET' else None
+    if prospect:
+        form = {'business_name': prospect['business_name'], 'email': prospect['email'] or '',
+                'name': prospect['first_name'] or '', 'phone': prospect['phone'] or ''}
+    return render_template('signup.html', errors=errors, form=form, inviter=inviter)
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -708,7 +727,10 @@ def post_job():
             if not u:
                 uid = create_user('customer', f)
                 db().commit()
+                sharer = referrals.referrer_for_code(db(), session.get('ref'))
                 login_user(uid)
+                if sharer:
+                    referrals.customer_joined(db(), uid, sharer['id'])
                 accounts.welcome(db(), db().execute('SELECT * FROM users WHERE id = ?', (uid,)).fetchone(),
                                  request.url_root.rstrip('/'))
             poster = db().execute('SELECT * FROM users WHERE id = ?', (session['uid'],)).fetchone()
@@ -779,6 +801,7 @@ def quotes_for_job(job):
         d = dict(r)
         d['rating'] = engine.trade_rating(db(), r['trade_id'])
         d['needs_act'] = engine.needs_act_docs(job, d)
+        d['report_record'] = reporting.trade_record(db(), r['trade_id'])
         out.append(d)
     return out
 
@@ -789,7 +812,7 @@ def customer_job(job_id):
     job = _my_job(job_id)
     reviewed = db().execute('SELECT 1 FROM reviews WHERE job_id = ?', (job_id,)).fetchone()
     return render_template('customer/job.html', job=job, quotes=quotes_for_job(job), stats=offer_stats(job_id),
-                           photos=_photos(job_id), reviewed=bool(reviewed))
+                           photos=_photos(job_id), reviewed=bool(reviewed), **_progress(job))
 
 
 @app.post('/me/jobs/<int:job_id>/quotes/<int:quote_id>/<action>')
@@ -1071,6 +1094,9 @@ def trade_setup():
     chosen_c = {r['category_id'] for r in db().execute('SELECT category_id FROM trade_categories WHERE trade_id = ?', (tid,))}
     chosen_a = {r['area_id'] for r in db().execute('SELECT area_id FROM trade_areas WHERE trade_id = ?', (tid,))}
     errors, form = {}, t
+    hint = session.get('setup_hint')
+    if hint and not chosen_c and not chosen_a:
+        chosen_c, chosen_a = set(hint.get('categories', [])), set(hint.get('areas', []))
     if request.method == 'POST':
         f = request.form
         form = f
@@ -1119,12 +1145,18 @@ def trade_setup():
                 db().execute('INSERT INTO trade_categories (trade_id, category_id) VALUES (?,?)', (tid, c))
             for a in chosen_a:
                 db().execute('INSERT INTO trade_areas (trade_id, area_id) VALUES (?,?)', (tid, a))
+            db().execute('UPDATE trades SET report_plan = ? WHERE user_id = ?',
+                         (reporting.clean(f.getlist('report_plan')), tid))
             db().commit()
+            session.pop('setup_hint', None)
             flash('Profile saved.')
             fresh = db().execute('SELECT * FROM trades WHERE user_id = ?', (tid,)).fetchone()
             return redirect(url_for('trade_home') if engine.is_subscribed(fresh) else url_for('trade_plan'))
+    plan = (request.form.getlist('report_plan') if request.method == 'POST'
+            else reporting.parse(t['report_plan']) if t['report_plan'] is not None else ['weekly'])
     return render_template('trade/setup.html', t=t, form=form, errors=errors, categories=all_categories(),
-                           regions=areas_by_region(), chosen_c=chosen_c, chosen_a=chosen_a)
+                           regions=areas_by_region(), chosen_c=chosen_c, chosen_a=chosen_a,
+                           report_plan=plan, report_kinds=reporting.LABELS)
 
 
 def _render_trade_job(job_id, form=None, error=None):
@@ -1145,7 +1177,9 @@ def _render_trade_job(job_id, form=None, error=None):
     return render_template('trade/job.html', t=t, job=job, offer=offer, quote=quote, contact=contact,
                            record=engine.customer_record(db(), job['customer_id']), photos=_photos(job_id),
                            can_quote=can_quote, reported=bool(reported), form=form or {}, error=error,
-                           threshold=config.CONTRACT_THRESHOLD, templates=_templates(t['user_id']))
+                           threshold=config.CONTRACT_THRESHOLD, templates=_templates(t['user_id']),
+                           default_plan=reporting.parse(t['report_plan']) if 'report_plan' in t.keys() else [],
+                           **(_progress(job) if job['hired_trade_id'] == t['user_id'] else {}))
 
 
 @app.route('/trade/jobs/<int:job_id>')
@@ -1171,7 +1205,8 @@ def trade_quote(job_id):
              message=f.get('message', ''), inclusions=f.get('inclusions', '').strip() or None,
              exclusions=f.get('exclusions', '').strip() or None, warranty=f.get('warranty', '').strip() or None,
              available_from=f.get('available_from', '').strip() or None,
-             duration=f.get('duration', '').strip() or None, act_docs_promised=bool(f.get('act_docs_promised')))
+             duration=f.get('duration', '').strip() or None, act_docs_promised=bool(f.get('act_docs_promised')),
+             report_plan=f.getlist('report_plan'))
     try:
         n = engine.submit_quote(db(), job_id, current_trade()['user_id'], q)
     except RuleError as e:
@@ -1191,7 +1226,8 @@ def edit_quote(job_id):
                   message=f.get('message', ''), inclusions=f.get('inclusions', '').strip() or None,
                   exclusions=f.get('exclusions', '').strip() or None, warranty=f.get('warranty', '').strip() or None,
                   available_from=f.get('available_from', '').strip() or None,
-                  duration=f.get('duration', '').strip() or None, act_docs_promised=bool(f.get('act_docs_promised')))
+                  duration=f.get('duration', '').strip() or None, act_docs_promised=bool(f.get('act_docs_promised')),
+                  report_plan=f.getlist('report_plan'))
     try:
         engine.revise_quote(db(), engine.get_job(db(), job_id), current_trade()['user_id'], fields)
     except RuleError as e:
@@ -2050,6 +2086,12 @@ def _error(e):
     return render_template('error.html', title=title, body=body), e.code
 
 
+# ── Phone app API (api_mobile.py) ─────────────────────────────────────────────
+
+import api_mobile  # noqa: E402
+api_mobile.init_app(app, sys.modules[__name__])
+
+
 # ── Background sweep ──────────────────────────────────────────────────────────
 
 def sweep_once():
@@ -2063,6 +2105,9 @@ def sweep_once():
                 engine.sweep(conn)
                 mailer.flush(conn)
                 sms.flush(conn)
+                push.flush(conn)
+                outreach.flush(conn)
+                reporting.remind(conn)
         finally:
             if not _USE_PG:
                 conn.close()
@@ -2079,6 +2124,340 @@ def _sweeper():
 
 if os.environ.get('RUN_SWEEPER', '1') == '1':
     threading.Thread(target=_sweeper, daemon=True, name='sweeper').start()
+
+
+# ── Progress updates ──────────────────────────────────────────────────────────
+
+def _progress(job):
+    """Template data for the progress-updates section of a hired job."""
+    if job['status'] != 'hired':
+        return {}
+    updates = reporting.updates_for(db(), job['id'])
+    photos = defaultdict(list)
+    if updates:
+        marks = ','.join('?' * len(updates))
+        for p in db().execute(f'SELECT * FROM progress_photos WHERE update_id IN ({marks}) ORDER BY id',
+                              [u['id'] for u in updates]):
+            photos[p['update_id']].append(p)
+    return {'updates': updates, 'update_photos': photos, 'report_score': reporting.score(job, updates),
+            'report_kinds': reporting.LABELS, 'report_plan_text': reporting.describe(job['report_plan']),
+            'report_plan': reporting.parse(job['report_plan']), 'nz_today': reporting.nz_today()}
+
+
+def _save_photos(files, limit):
+    """Validate and store uploaded photos. Returns (names, error)."""
+    photos = [p for p in files if p and p.filename]
+    if len(photos) > limit:
+        return [], f'Add up to {limit} photos.'
+    if any(p.filename.rsplit('.', 1)[-1].lower() not in PHOTO_TYPES for p in photos):
+        return [], 'Photos must be JPG, PNG, WEBP or HEIC.'
+    names = []
+    for p in photos:
+        name = f'{uuid.uuid4().hex}.{p.filename.rsplit(".", 1)[-1].lower()}'
+        p.save(os.path.join(UPLOAD_DIR, name))
+        names.append(name)
+    return names, None
+
+
+@app.post('/trade/jobs/<int:job_id>/updates')
+@requires('trade')
+def trade_post_update(job_id):
+    job = engine.get_job(db(), job_id)
+    if not job or job['hired_trade_id'] != current_trade()['user_id']:
+        abort(404)
+    names, error = _save_photos(request.files.getlist('photos'), reporting.MAX_PHOTOS)
+    if not error:
+        try:
+            reporting.post_update(db(), job, current_trade()['user_id'], request.form.get('body'),
+                                  request.form.getlist('kinds'), names)
+            flash('Update posted. The customer has been told.')
+        except reporting.ReportError as e:
+            error = str(e)
+    if error:
+        flash(error, 'error')
+    return redirect(url_for('trade_job', job_id=job_id) + '#updates')
+
+
+@app.post('/trade/jobs/<int:job_id>/start')
+@requires('trade')
+def trade_set_start(job_id):
+    job = engine.get_job(db(), job_id)
+    if not job:
+        abort(404)
+    try:
+        reporting.set_start(db(), job, current_trade()['user_id'], request.form.get('start'))
+        flash('Start date saved.')
+    except reporting.ReportError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('trade_job', job_id=job_id) + '#updates')
+
+
+@app.post('/trade/jobs/<int:job_id>/finish')
+@requires('trade')
+def trade_finish(job_id):
+    job = engine.get_job(db(), job_id)
+    if not job or job['hired_trade_id'] != current_trade()['user_id']:
+        abort(404)
+    try:
+        reporting.finish(db(), job, current_trade()['user_id'])
+        flash('Marked as finished. Updates are no longer due.')
+    except reporting.ReportError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('trade_job', job_id=job_id) + '#updates')
+
+
+@app.post('/me/jobs/<int:job_id>/finish')
+@requires('customer')
+def customer_finish(job_id):
+    job = _my_job(job_id)
+    try:
+        reporting.finish(db(), job, current_user()['id'])
+        flash('Marked as finished.')
+    except reporting.ReportError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('customer_job', job_id=job_id) + '#updates')
+
+
+# ── Referrals ─────────────────────────────────────────────────────────────────
+
+@app.route('/trade/referrals')
+@requires('trade')
+def trade_referrals():
+    t = current_trade()
+    joined = db().execute("SELECT u.created_at, tr.business_name, "
+                          "(SELECT COUNT(*) FROM quotes q WHERE q.trade_id = u.id) AS quotes "
+                          "FROM users u JOIN trades tr ON tr.user_id = u.id WHERE u.referred_by = ? "
+                          "ORDER BY u.id DESC", (t['user_id'],)).fetchall()
+    return render_template('trade/referrals.html', t=t, joined=joined, bank=referrals.banked(db(), t['user_id']),
+                           invite_url=f'{integrations.site_url()}/join/{_invite_code(t)}')
+
+
+@app.route('/me/share', methods=['GET', 'POST'])
+@requires('customer')
+def customer_share():
+    me = current_user()
+    errors, done = None, None
+    form = request.form if request.method == 'POST' else {}
+    if request.method == 'POST':
+        try:
+            prospect, existing = referrals.recommend(db(), me, request.form)
+        except referrals.RecommendError as e:
+            errors = str(e)
+        else:
+            if existing:
+                done = {'existing': existing['id']}
+            else:
+                emailed = bool(request.form.get('email_them')) and referrals.send_invite(db(), prospect, me)
+                done = {'link': f'{integrations.site_url()}/o/{prospect["token"]}', 'emailed': emailed,
+                        'name': prospect['business_name']}
+            form = {}
+    mine = db().execute("SELECT p.business_name, p.status, c.name AS category_name FROM prospects p "
+                        "JOIN categories c ON c.id = p.category_id WHERE p.recommended_by = ? ORDER BY p.id DESC",
+                        (me['id'],)).fetchall()
+    friends = db().execute("SELECT COUNT(*) AS n FROM users WHERE referred_by = ? AND role = 'customer'",
+                           (me['id'],)).fetchone()['n']
+    return render_template('customer/share.html', share_url=f'{integrations.site_url()}/r/{referrals.ref_code(db(), me)}',
+                           categories=all_categories(), regions=areas_by_region(), form=form, error=errors,
+                           done=done, mine=mine, friends=friends, email_on=mailer.enabled())
+
+
+@app.route('/r/<code>')
+def customer_ref(code):
+    sharer = referrals.referrer_for_code(db(), code)
+    if sharer and not current_user():
+        session['ref'] = code.lower()
+        flash(f'{(sharer["name"] or "A friend").split(" ")[0]} shared {config.BRAND} with you. '
+              'Post your job free and get up to 6 quotes from local trades.')
+    return redirect(url_for('post_job'))
+
+
+@app.route('/admin/referrals')
+@requires('admin')
+def admin_referrals():
+    trades, customers = referrals.leaderboard(db(), 50)
+    totals = {
+        'trade_invites': db().execute("SELECT COUNT(*) AS n FROM users u JOIN users r ON r.id = u.referred_by "
+                                      "WHERE u.role = 'trade' AND r.role = 'trade'").fetchone()['n'],
+        'months': db().execute('SELECT COALESCE(SUM(months),0) AS n FROM referral_rewards').fetchone()['n'],
+        'recommended': db().execute('SELECT COUNT(*) AS n FROM prospects WHERE recommended_by IS NOT NULL').fetchone()['n'],
+        'recommended_joined': db().execute("SELECT COUNT(*) AS n FROM prospects WHERE recommended_by IS NOT NULL "
+                                           "AND status = 'signed_up'").fetchone()['n'],
+        'friends': db().execute("SELECT COUNT(*) AS n FROM users u JOIN users r ON r.id = u.referred_by "
+                                "WHERE u.role = 'customer' AND r.role = 'customer'").fetchone()['n'],
+    }
+    return render_template('admin/referrals.html', trades=trades, customers=customers, totals=totals,
+                           cap=referrals.MAX_MONTHS)
+
+
+# ── Outreach: free leads for trades who aren't on the site yet ────────────────
+
+def _outreach_job(job_id):
+    job = db().execute('SELECT j.*, c.name AS category_name, a.name AS area_name FROM jobs j '
+                       'JOIN categories c ON c.id = j.category_id JOIN areas a ON a.id = j.area_id '
+                       'WHERE j.id = ?', (job_id,)).fetchone()
+    if not job:
+        abort(404)
+    return job
+
+
+def _outreach_send_now():
+    """Send just-queued emails in the background rather than making the admin wait."""
+    def run():
+        with app.app_context():
+            conn = get_db()
+            try:
+                outreach.flush(conn, limit=60)
+            except Exception:
+                app.logger.exception('Outreach send failed')
+            finally:
+                if not _USE_PG:
+                    conn.close()
+    threading.Thread(target=run, daemon=True, name='outreach').start()
+
+
+@app.route('/admin/outreach')
+@requires('admin')
+def admin_outreach():
+    show, search, trade = request.args.get('show', 'all'), request.args.get('q', '').strip(), request.args.get('trade', '')
+    sql = ('SELECT p.*, c.name AS category_name FROM prospects p JOIN categories c ON c.id = p.category_id '
+           'WHERE 1 = 1')
+    args = []
+    if show in outreach.STATUSES:
+        sql += ' AND p.status = ?'
+        args.append(show)
+    elif show == 'dnc':
+        sql += ' AND p.do_not_contact = 1'
+    if trade.isdigit():
+        sql += ' AND p.category_id = ?'
+        args.append(int(trade))
+    if search:
+        sql += ' AND (LOWER(p.business_name) LIKE ? OR LOWER(p.email) LIKE ?)'
+        args += [f'%{search.lower()}%'] * 2
+    rows = db().execute(sql + ' ORDER BY c.name, p.business_name LIMIT 500', args).fetchall()
+    places = defaultdict(list)
+    for r in db().execute('SELECT pa.prospect_id, a.name FROM prospect_areas pa JOIN areas a ON a.id = pa.area_id '
+                          'ORDER BY a.id'):
+        places[r['prospect_id']].append(r['name'])
+    jobs = []
+    for j in db().execute("SELECT j.*, c.name AS category_name, a.name AS area_name FROM jobs j "
+                          "JOIN categories c ON c.id = j.category_id JOIN areas a ON a.id = j.area_id "
+                          "WHERE j.status = 'open' ORDER BY j.created_at DESC LIMIT 30").fetchall():
+        sent = db().execute("SELECT COUNT(*) AS n FROM prospect_sends WHERE job_id = ? AND status IN ('queued','sent')",
+                            (j['id'],)).fetchone()['n']
+        jobs.append({'job': j, 'matches': len(outreach.matches(db(), j)), 'sent': sent})
+    cats = db().execute('SELECT id, name FROM categories ORDER BY name').fetchall()
+    return render_template('admin/outreach.html', rows=rows, places=places, jobs=jobs, cats=cats,
+                           stats=outreach.stats(db()), statuses=outreach.STATUSES, show=show, search=search,
+                           trade=trade, email_on=mailer.enabled(), max_leads=outreach.MAX_LEADS)
+
+
+@app.route('/admin/outreach/import', methods=['POST'])
+@requires('admin')
+def admin_outreach_import():
+    upload = request.files.get('file')
+    if not upload or not upload.filename:
+        flash('Choose the outreach spreadsheet to upload.', 'error')
+        return redirect(url_for('admin_outreach'))
+    try:
+        rows = outreach.read_upload(upload.filename, upload.read())
+    except ValueError as e:
+        flash(str(e), 'error')
+        return redirect(url_for('admin_outreach'))
+    except Exception:
+        app.logger.exception('Outreach import failed')
+        flash('That file couldn’t be read. Upload the outreach spreadsheet as .xlsx, or a .csv.', 'error')
+        return redirect(url_for('admin_outreach'))
+    added, updated, skipped = outreach.import_rows(db(), rows)
+    note = f' {skipped} row{"s" if skipped != 1 else ""} skipped (no business name or an unknown trade).' if skipped else ''
+    flash(f'Imported: {added} new, {updated} updated.{note}', 'ok')
+    return redirect(url_for('admin_outreach'))
+
+
+@app.route('/admin/outreach/job/<int:job_id>', methods=['GET', 'POST'])
+@requires('admin')
+def admin_outreach_job(job_id):
+    job = _outreach_job(job_id)
+    me = current_user()
+    candidates = outreach.matches(db(), job)
+    summary = outreach.default_summary(job['description'])
+    error = None
+    if request.method == 'POST':
+        summary = re.sub(r'\s+', ' ', request.form.get('summary', '')).strip()
+        chosen = {int(x) for x in request.form.getlist('prospect') if x.isdigit()}
+        if job['status'] != 'open':
+            error = 'This job isn’t taking quotes any more, so there’s nothing to offer.'
+        elif not 10 <= len(summary) <= 300:
+            error = 'Write a one-line summary of the job (10 to 300 characters).'
+        elif not chosen:
+            error = 'Tick at least one business.'
+        else:
+            n = outreach.queue(db(), job, chosen, summary, me)
+            if mailer.enabled():
+                _outreach_send_now()
+                flash(f'{n} email{"s" if n != 1 else ""} sending now — each business gets its own.', 'ok')
+            else:
+                flash(f'{n} email{"s" if n != 1 else ""} queued. They’ll go out once email is set up in Admin → Setup '
+                      f'(queued emails older than {outreach.SEND_WINDOW_HOURS} hours are dropped).', 'ok')
+            return redirect(url_for('admin_outreach'))
+    sample = candidates[0] if candidates else None
+    preview = outreach.compose(sample, job, summary, (me['name'] or 'The team').split(' ')[0]) if sample else None
+    already = db().execute('SELECT p.business_name, s.status, s.sent_at, s.clicked_at FROM prospect_sends s '
+                           'JOIN prospects p ON p.id = s.prospect_id WHERE s.job_id = ? ORDER BY s.id',
+                           (job_id,)).fetchall()
+    return render_template('admin/outreach_job.html', job=job, candidates=candidates, summary=summary,
+                           preview=preview, sample=sample, already=already, error=error,
+                           email_on=mailer.enabled(), reply_to=outreach.reply_address(me))
+
+
+@app.route('/admin/outreach/prospect/<int:pid>', methods=['POST'])
+@requires('admin')
+def admin_outreach_prospect(pid):
+    p = db().execute('SELECT * FROM prospects WHERE id = ?', (pid,)).fetchone()
+    if not p:
+        abort(404)
+    status = request.form.get('status')
+    if status in outreach.STATUSES:
+        db().execute('UPDATE prospects SET status = ?, updated_at = ? WHERE id = ?', (status, ts(utcnow()), pid))
+    if request.form.get('do_not_contact') == '1':
+        db().execute('UPDATE prospects SET do_not_contact = 1, updated_at = ? WHERE id = ?', (ts(utcnow()), pid))
+    db().commit()
+    flash(f'{p["business_name"]} updated.', 'ok')
+    return redirect(request.referrer if (request.referrer or '').startswith(request.host_url) else url_for('admin_outreach'))
+
+
+@app.route('/admin/outreach/flyer')
+@requires('admin')
+def admin_outreach_flyer():
+    import segno
+    audience = 'trades' if request.args.get('for') == 'trades' else 'homeowners'
+    path = url_for('signup') if audience == 'trades' else url_for('post_job')   # sign-up defaults to trades
+    target = integrations.site_url() + path
+    qr = segno.make(target, error='m').svg_inline(scale=6, dark='#1F2933', omitsize=True)
+    return render_template('admin/flyer.html', audience=audience, target=target, qr=qr)
+
+
+@app.route('/o/<token>')
+def outreach_link(token):
+    """The personal link in an outreach email: remember who they are, then sign up."""
+    p = outreach.by_token(db(), token)
+    if not p:
+        return redirect(url_for('signup'))
+    job_id = request.args.get('j', '')
+    outreach.clicked(db(), p, int(job_id) if job_id.isdigit() else None)
+    if current_user():
+        return redirect(home_for(current_user()))
+    session['prospect'] = token
+    return redirect(url_for('signup'))
+
+
+@app.route('/o/<token>/stop', methods=['GET', 'POST'])
+def outreach_stop(token):
+    p = outreach.by_token(db(), token)
+    done = bool(p) and p['status'] == 'unsubscribed'
+    if request.method == 'POST' and p:
+        outreach.unsubscribe(db(), p)
+        done = True
+    return render_template('outreach_stop.html', p=p, done=done)
 
 
 @app.cli.command('sweep')

@@ -13,6 +13,7 @@ is settled against those rows (engine.evaluate_guarantees).
 from datetime import datetime, timedelta
 
 import config
+import referrals
 from engine import RuleError, notify, parse_ts, ts, utcnow
 
 if config.STRIPE_SECRET_KEY:
@@ -103,10 +104,14 @@ def roll_demo_periods(db, at):
                        (t['user_id'],))
             continue
         start = parse_ts(t['period_end'])
-        kind = 'free' if config.FREE_PILOT else 'demo'
-        amount = 0 if config.FREE_PILOT else price_cents(t['tier'])
         while True:
             end = start + timedelta(days=config.DEMO_PERIOD_DAYS)
+            if config.FREE_PILOT:
+                kind, amount = 'free', 0
+            elif referrals.use_demo_month(db, t['user_id'], at):
+                kind, amount = 'referral', 0           # a banked free month from a referral
+            else:
+                kind, amount = 'demo', price_cents(t['tier'])
             _record_payment(db, t['user_id'], t['tier'], amount, ts(start), ts(end), kind, at=at)
             if end > at:
                 break
@@ -201,6 +206,8 @@ def handle_webhook(db, payload, signature):
         trade_id = int(obj.get('client_reference_id') or obj['metadata']['trade_id'])
         db.execute('UPDATE trades SET stripe_customer_id = ?, stripe_subscription_id = ? WHERE user_id = ?',
                    (obj['customer'], obj['subscription'], trade_id))
+        db.commit()
+        referrals.apply_credits(db, trade_id)      # banked free months come off the next invoices
 
     elif kind == 'invoice.paid':
         sub_id = _invoice_subscription(obj)

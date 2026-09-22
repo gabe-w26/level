@@ -1,0 +1,117 @@
+{% import '_macros.html' as m with context %}
+
+{# Checkboxes for the updates a trade promises. `chosen` is a list like ['daily', 'weekly']. #}
+{% macro plan_picker(chosen, id_prefix='rp', heading='Progress updates if you’re hired') %}
+<fieldset class="plan-picker">
+  <legend class="lbl">{{ heading }} <span class="hint">Customers see this next to your price, and your record of keeping it builds up on your profile.</span></legend>
+  <div class="actions">
+    {% for kind, hint in [('daily', 'each working day'), ('weekly', 'end of each week'), ('monthly', 'end of each month')] %}
+    <label class="check" for="{{ id_prefix }}-{{ kind }}"><input id="{{ id_prefix }}-{{ kind }}" type="checkbox" name="report_plan" value="{{ kind }}" {{ 'checked' if kind in chosen }}> <span>{{ kind|capitalize }} <span class="hint" style="display:inline">{{ hint }}</span></span></label>
+    {% endfor %}
+  </div>
+</fieldset>
+{% endmacro %}
+
+{# "Kept 8 of 9 days" chips. #}
+{% macro score_chips(score) %}
+<div class="report-score">
+  {% for kind, s in score.items() %}
+  <div class="rs {{ 'rs-good' if s.expected and s.kept == s.expected else ('rs-warn' if s.expected and s.kept / s.expected < 0.8 else '') }}">
+    <b>{{ s.kept }}<small>/{{ s.expected }}</small></b>
+    <span>{{ s.label }} update{{ 's' if s.expected != 1 }} on time</span>
+    {% if s.due %}<em>Due {{ {'daily': 'today', 'weekly': 'this week', 'monthly': 'this month'}[kind] }}</em>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{# The progress-updates section of a hired job. role is 'trade' or 'customer'. #}
+{% macro section(role, job, updates, update_photos, report_score, report_plan, report_plan_text, nz_today) %}
+<section class="card" id="updates">
+  <div class="actions" style="justify-content:space-between;align-items:baseline">
+    <h2 style="margin:0">Progress updates</h2>
+    {% if job.work_done_on %}<span class="pill hired">Finished {{ job.work_done_on|day }}</span>{% endif %}
+  </div>
+  {% if report_plan %}
+    <p class="small muted" style="margin:6px 0 12px">
+      {% if role == 'trade' %}You promised <b>{{ report_plan_text|lower }}</b> when you quoted.{% else %}They promised <b>{{ report_plan_text|lower }}</b> when they quoted.{% endif %}
+      {% if job.work_started_on %}Counting from {{ job.work_started_on|day }}{% if job.work_done_on %} to {{ job.work_done_on|day }}{% endif %}.{% endif %}
+      Daily means working days (Mon–Fri).
+    </p>
+    {% if report_score %}{{ score_chips(report_score) }}{% elif job.work_started_on %}<p class="notice small">Updates start being counted on {{ job.work_started_on|day }}.</p>{% endif %}
+  {% else %}
+    <p class="small muted" style="margin:6px 0 12px">{% if role == 'trade' %}You didn’t promise regular updates on this job, but customers love hearing how it’s going.{% else %}No regular updates were promised on this job, but the trade can still post them here.{% endif %}</p>
+  {% endif %}
+
+  {% if role == 'trade' and not job.work_done_on %}
+  <form method="post" action="{{ url_for('trade_post_update', job_id=job.id) }}" enctype="multipart/form-data" class="form update-form">
+    {{ m.csrf() }}
+    <div>
+      <label for="upd-body">What got done, and what’s next?</label>
+      <textarea id="upd-body" name="body" rows="4" required minlength="15" placeholder="e.g. Framing finished on the east wall. Windows arrive Thursday; we’ll fit them Friday. Nothing needed from you."></textarea>
+    </div>
+    {% if report_plan %}
+    <fieldset>
+      <legend class="lbl">This update counts as</legend>
+      <div class="actions">
+        {% for kind in report_plan %}
+        {% set due = report_score.get(kind, {}).get('due') %}
+        <label class="check"><input type="checkbox" name="kinds" value="{{ kind }}" {{ 'checked' if due or (loop.first and not report_score) }}> <span>{{ {'daily': 'Today’s update', 'weekly': 'This week’s summary', 'monthly': 'This month’s summary'}[kind] }}</span></label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    {% endif %}
+    <div>
+      <label for="upd-photos">Photos <span class="hint">Up to 6. Straight from your phone’s camera is fine.</span></label>
+      <input id="upd-photos" name="photos" type="file" accept="image/*" multiple>
+    </div>
+    <div><button class="btn" type="submit">Post update</button></div>
+  </form>
+  {% endif %}
+
+  {% if updates %}
+  <ol class="updates">
+    {% for u in updates %}
+    <li>
+      <div class="small muted">{{ u.created_at|when }}{% if u.kinds %} · {% for k in u.kinds.split(',') %}<span class="pill quoted">{{ k|capitalize }}</span> {% endfor %}{% endif %}</div>
+      <p class="desc" style="margin:6px 0 0">{{ u.body }}</p>
+      {% if update_photos.get(u.id) %}
+      <div class="photos" style="margin-top:10px">
+        {% for p in update_photos[u.id] %}<a href="{{ url_for('upload', name=p.filename) }}" target="_blank" rel="noopener"><img src="{{ url_for('upload', name=p.filename) }}" alt="Progress photo {{ loop.index }}" loading="lazy"></a>{% endfor %}
+      </div>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% elif role == 'customer' %}
+  <p class="small muted">No updates yet. You’ll get a notification when one arrives.</p>
+  {% endif %}
+
+  {% if not job.work_done_on %}
+  <div class="actions" style="margin-top:14px;justify-content:space-between">
+    {% if role == 'trade' %}
+    <form method="post" action="{{ url_for('trade_set_start', job_id=job.id) }}" class="actions">
+      {{ m.csrf() }}
+      <label for="start" class="small">Work starts</label>
+      <input id="start" name="start" type="date" value="{{ job.work_started_on or nz_today }}" style="width:auto">
+      <button class="btn btn-quiet btn-sm" type="submit">Save</button>
+    </form>
+    <form method="post" action="{{ url_for('trade_finish', job_id=job.id) }}" data-confirm="Mark the work as finished? Updates stop being due.">{{ m.csrf() }}<button class="btn btn-quiet btn-sm" type="submit">Work finished</button></form>
+    {% else %}
+    <form method="post" action="{{ url_for('customer_finish', job_id=job.id) }}" data-confirm="Mark the work as finished? Updates stop being due.">{{ m.csrf() }}<button class="btn btn-quiet btn-sm" type="submit">The work is finished</button></form>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endmacro %}
+
+{# On a quote: what they promise, and how well they've kept past promises. #}
+{% macro promise(plan, record) %}
+{%- set kinds = (plan or '').split(',')|select|list -%}
+{%- if kinds -%}
+{{ kinds|map('capitalize')|join(' + ') }} updates
+{%- else -%}
+<span class="muted">No regular updates promised</span>
+{%- endif -%}
+{%- if record %}<span class="hint">Kept {{ record.pct }}% of update promises on past jobs ({{ record.kept }} of {{ record.expected }})</span>{% endif -%}
+{% endmacro %}

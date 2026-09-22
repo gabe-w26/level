@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Send leads — admin{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <p class="small"><a href="{{ url_for('admin_outreach') }}">← Outreach</a></p>
+  <div class="page-head">
+    <div>
+      <h1>Send “{{ job.title }}” as a free lead</h1>
+      <p class="muted">{{ job.category_name }} · {{ job.suburb or job.area_name }} · {{ bands[job.value_band].label }} · {{ job.quote_count }}/{{ cfg.MAX_QUOTES }} quotes so far</p>
+    </div>
+  </div>
+
+  {% if error %}<p class="notice error">{{ error }}</p>{% endif %}
+  {% if not email_on %}<p class="notice warn">Email isn’t set up yet: these will queue, and only go out once it is (within {{ 24 }} hours). Set it up in <a href="{{ url_for('admin_setup') }}">Setup</a>.</p>{% endif %}
+
+  {% if not candidates %}
+  <p class="notice">No listed businesses match this job right now — same trade, covers {{ job.area_name }}, has an email, hasn’t opted out, not already on {{ cfg.BRAND }}, and fewer than 3 unanswered leads.</p>
+  {% else %}
+  <form method="post" class="grid-2" data-confirm="Send this job to the ticked businesses? Each gets its own email.">
+    {{ m.csrf() }}
+    <div class="card">
+      <h3>1. The one-line summary</h3>
+      <p class="small muted">This goes in the email. Take out anything that could identify the homeowner — no names, street numbers or phone numbers.</p>
+      <label class="vh" for="summary">Summary</label>
+      <textarea id="summary" name="summary" rows="3" maxlength="300">{{ summary }}</textarea>
+      <p class="small muted" style="margin-top:8px">Full description the customer wrote (not sent):</p>
+      <p class="small" style="white-space:pre-wrap;background:var(--chalk-wash);padding:10px;border-radius:6px">{{ job.description }}</p>
+
+      <h3 style="margin-top:20px">2. Who gets it ({{ candidates|length }})</h3>
+      <p class="small muted">Least-contacted first. Untick anyone you don’t want to send to.</p>
+      {% for p in candidates %}
+      <label class="check" style="margin:6px 0">
+        <input type="checkbox" name="prospect" value="{{ p.id }}" checked>
+        <span><b>{{ p.business_name }}</b> <span class="small muted">{{ p.email }}{% if p.leads_sent %} · {{ p.leads_sent }} lead{{ 's' if p.leads_sent > 1 }} before{% endif %}</span></span>
+      </label>
+      {% endfor %}
+      <div style="margin-top:16px"><button class="btn" type="submit">Send to the ticked businesses</button></div>
+    </div>
+    <div class="card">
+      <h3>What {{ sample.business_name }} will get</h3>
+      <p class="small muted">Each business gets its own copy with their name, their own sign-up link and their own unsubscribe link. Replies go to {{ reply_to }}.</p>
+      <p class="small"><b>Subject:</b> {{ preview[0] }}</p>
+      <div class="small" style="white-space:pre-wrap;border:1px solid var(--rule);padding:12px;border-radius:6px">{{ preview[1] }}
+
+—
+Stop these emails: {{ preview[2] }}</div>
+      <p class="small muted" style="margin-top:8px">Shown with the suggested summary — whatever you write on the left is what goes out.</p>
+    </div>
+  </form>
+  {% endif %}
+
+  {% if already %}
+  <h2 style="margin-top:28px">Already sent for this job</h2>
+  <div class="card table-wrap" style="padding:6px 10px">
+    <table>
+      <thead><tr><th>Business</th><th>Status</th><th>Clicked</th></tr></thead>
+      <tbody>
+      {% for s in already %}
+        <tr><td>{{ s.business_name }}</td><td class="small">{{ s.status|capitalize }}{% if s.sent_at %} · {{ s.sent_at|day }}{% endif %}</td><td class="small">{{ 'Yes' if s.clicked_at else '—' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
