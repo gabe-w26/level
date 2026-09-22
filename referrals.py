@@ -75,7 +75,8 @@ def earn_for_first_quote(db, trade_id, at=None):
     newbie = db.execute('SELECT business_name FROM trades WHERE user_id = ?', (trade_id,)).fetchone()
     db.execute('INSERT INTO referral_rewards (referrer_id, referred_id, months, earned_at) VALUES (?,?,?,?)',
                (referrer['id'], trade_id, REWARD_MONTHS, ts(at or utcnow())))
-    when = 'We’ll use it once the free pilot ends.' if not config.CHARGING else 'It comes off your next bill.'
+    # Plain wording: this also shows in the phone app, where payment talk isn't allowed.
+    when = 'We’ll use it once the free pilot ends.' if not config.CHARGING else 'It’s applied automatically.'
     notify(db, referrer['id'], f'{newbie["business_name"] if newbie else "Your invite"} sent their first quote — '
                                f'you’ve earned a free month. {when}', '/trade/referrals', at)
     db.commit()
