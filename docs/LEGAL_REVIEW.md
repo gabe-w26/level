@@ -53,6 +53,26 @@ details are released only when the customer shares them or accepts the quote.
 
 ---
 
+## 2b. The name "Level" — clash check
+
+`level.co.nz` and `level.nz` are both registered and **in use by a trading business**: Level, an
+"engagement, strategy and design" agency in Whangārei. That's a different industry, but the name is
+identical and they were there first.
+
+**Questions:**
+1. Search the IPONZ trade mark register for "Level" — is it registered in classes covering software,
+   advertising/marketing services or building services (broadly classes 9, 35, 37, 42)?
+2. Does a Wellington trades marketplace called Level risk passing off or a Fair Trading Act claim
+   against a Northland design agency of the same name? Does it matter that neither is likely to be
+   confused for the other?
+3. If Level is kept, is a different domain (e.g. `leveltrades.co.nz`) enough distance, or should the
+   trading name itself change before any flyers are printed?
+4. Worth registering a trade mark of its own? Cost and timeframe?
+
+This is cheap to answer now and expensive to answer after printing flyers and buying ads.
+
+---
+
 ## 3. Documents to review
 
 All live on the site, drafted but never lawyer-checked:
