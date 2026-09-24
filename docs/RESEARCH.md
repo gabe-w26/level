@@ -52,7 +52,7 @@ Based on Trustpilot reviews at 1 and 2 stars, which are mostly from tradies. The
 
 - **Caps work.** Capping at 3 trades per job is the norm at Rated People, hipages and Builderscrack. Uncapped models draw the most anger.
 - **"Charge on unlock" is the #1 complaint everywhere**, at Bark, Rated People, hipages and Thumbtack. So are expiring credits and lock-in: Checkatrade, Bark and hipages have all shortened credit life in 2025. Oneflare's credit model ended in 2026 when it closed and was folded into Airtasker.
-- **First-to-respond speed races** (hipages' "first 3") are disliked. Level's first-in-first-served cap of 3, with a 4-working-hour window, is still a race for the last slots — watch quote quality. Keep an eye on quote quality.
+- **First-to-respond speed races** (hipages' "first 3") are disliked. Level's first-in-first-served cap of 3, with a 4-window, is still a race for the last slots — watch quote quality. Keep an eye on quote quality.
 - **Where the industry is heading:** AI job briefs (Thumbtack 2026, Yelp), homeowners choosing which trades to contact (Angi 2025), and escrow payments (Airtasker, TradeMatch).
 - **Integrations:** Fergus (NZ) has a public API with webhooks. Xero moved to paid developer tiers in March 2026.
 

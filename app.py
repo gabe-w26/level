@@ -6,6 +6,7 @@ sees a job, the quote cap, redistribution, the guarantee) and billing.py
 (plans and refunds).
 """
 import functools
+import io
 import os
 import re
 import json
@@ -18,12 +19,13 @@ import uuid
 from collections import defaultdict
 from datetime import timedelta, timezone
 
-from flask import (Flask, abort, flash, g, redirect, render_template, request,
+from flask import (Flask, Response, abort, flash, g, redirect, render_template, request,
                    send_from_directory, session, url_for)
 from werkzeug.security import check_password_hash
 
 import accounts
 import ai
+import backup
 import billing
 import config
 import engine
@@ -1645,7 +1647,19 @@ def admin_setup():
                 flash(str(e), 'error')
         return redirect(url_for('admin_setup'))
     status = {'email': mailer.enabled(), 'texts': sms.enabled(), 'ai': ai.enabled()}
-    return render_template('admin/setup.html', groups=SETUP_GROUPS, status=status, integrations=integrations)
+    return render_template('admin/setup.html', groups=SETUP_GROUPS, status=status, integrations=integrations,
+                           backups=backup.status(db()))
+
+
+@app.route('/admin/backup')
+@requires('admin')
+def admin_backup():
+    """Download the whole database as a zip of CSVs. Keep it somewhere that isn't Render."""
+    buf = io.BytesIO()
+    backup.dump(db(), buf)
+    return Response(buf.getvalue(), mimetype='application/zip', headers={
+        'Content-Disposition': f'attachment; filename="{backup.filename()}"',
+        'Cache-Control': 'no-store'})
 
 
 @app.route('/admin')
@@ -2161,6 +2175,7 @@ def sweep_once():
                 push.flush(conn)
                 outreach.flush(conn)
                 reporting.remind(conn)
+                backup.maybe_nightly(conn)
         finally:
             if not _USE_PG:
                 conn.close()
@@ -2511,6 +2526,18 @@ def outreach_stop(token):
         outreach.unsubscribe(db(), p)
         done = True
     return render_template('outreach_stop.html', p=p, done=done)
+
+
+@app.cli.command('backup')
+def backup_command():
+    """Write a backup to the backups folder (for a cron job)."""
+    with app.app_context():
+        conn = get_db()
+        try:
+            print(backup.write_nightly(conn))
+        finally:
+            if not _USE_PG:
+                conn.close()
 
 
 @app.cli.command('sweep')

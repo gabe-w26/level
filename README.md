@@ -3,7 +3,7 @@
 A trades marketplace built on four rules:
 
 1. **15 trades per job.** A job is offered to 15 trades who do that work, in that area, on a plan that covers the job’s size.
-2. **4 working hours to quote.** Trades who haven’t quoted in that time lose their slot, and a new trade gets it. The clock only runs 7am–6pm Mon–Sat, so nothing expires overnight. Passing hands the slot on immediately.
+2. **4 hours to quote.** Trades who haven’t quoted in that time lose their slot, and a new trade gets it. The clock runs 24/7. Passing hands the slot on immediately.
 3. **3 quotes, then it closes.** First in, first served. Quote number 4 is refused, even if two trades press send at once.
 4. **Fair rotation, no review bias.** Trades offered the fewest similar jobs recently go first. Reviews are shown to customers, but never used to decide who’s offered a job.
 

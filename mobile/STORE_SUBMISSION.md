@@ -50,7 +50,7 @@ installable build (TestFlight for iOS after the first production upload).
 
   > Level is a fairer way to find a tradie in New Zealand.
   >
-  > Post your job in a couple of minutes — what needs doing, your suburb and a few photos. We offer it to 15 local trades who do that work. They have 4 working hours to quote, and if they don't, the job goes to someone new. You get up to three quotes, first in first served, so you're never swamped with calls.
+  > Post your job in a couple of minutes — what needs doing, your suburb and a few photos. We offer it to 15 local trades who do that work. They have 4 hours to quote, and if they don't, the job goes to someone new. You get up to three quotes, first in first served, so you're never swamped with calls.
   >
   > Compare quotes side by side, message trades, share your contact details only with the ones you like, and accept the one you want. Trades see your suburb, never your address, until you choose them.
   >

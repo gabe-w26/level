@@ -115,29 +115,22 @@ class RulesTest(unittest.TestCase):
         job_id, _ = self.job()
         self.assertEqual(self.offered(job_id), [ok])
 
-    # ── the quote window only counts working hours ──
-    def test_window_runs_during_the_working_day(self):
-        # 9am Friday NZ (UTC+12) -> 1pm the same day.
+    # ── the quote window ──
+    def test_window_is_the_configured_hours(self):
         offered = datetime(2026, 9, 24, 21, 0)
-        self.assertEqual(engine.work_deadline(offered), datetime(2026, 9, 25, 1, 0))
+        self.assertEqual(engine.work_deadline(offered),
+                         offered + timedelta(hours=config.OFFER_WINDOW_HOURS))
 
-    def test_window_does_not_burn_overnight(self):
-        # 4pm Thursday NZ: 2 hours left today, the rest from 7am Friday.
-        offered = datetime(2026, 9, 24, 4, 0)
-        self.assertEqual(engine.work_deadline(offered), datetime(2026, 9, 24, 21, 0))   # 9am Friday NZ
-
-    def test_window_skips_sunday(self):
-        # 9pm Saturday NZ -> Monday morning; Sunday is not a working day.
-        offered = datetime(2026, 9, 26, 9, 0)
-        deadline = engine.work_deadline(offered)
-        self.assertEqual(deadline, datetime(2026, 9, 27, 22, 0))                        # 11am Monday NZ
-
-    def test_a_job_offered_at_night_keeps_its_full_window(self):
+    def test_the_clock_runs_overnight_and_at_weekends(self):
+        # 9pm Saturday NZ: still a straight four hours, because a customer
+        # waiting on quotes doesn't stop waiting on a Sunday.
+        saturday_night = datetime(2026, 9, 26, 9, 0)
+        self.assertEqual(engine.work_deadline(saturday_night), datetime(2026, 9, 26, 13, 0))
         self.trades(15)
-        job_id, _ = self.job(at=datetime(2026, 9, 24, 9, 0))        # 9pm NZ
+        job_id, _ = self.job(at=saturday_night)
         expires = self.db.execute('SELECT expires_at FROM offers WHERE job_id = ? LIMIT 1',
                                   (job_id,)).fetchone()['expires_at']
-        self.assertEqual(expires, ts(datetime(2026, 9, 24, 23, 0)))  # 11am the next morning NZ
+        self.assertEqual(expires, ts(datetime(2026, 9, 26, 13, 0)))
 
     def test_non_quoters_are_replaced_when_their_window_runs_out(self):
         self.trades(40)

@@ -32,7 +32,7 @@
         <span class="meter" data-board-meter>{% for i in range(cfg.MAX_QUOTES) %}<i></i>{% endfor %}</span>
         <span class="label" data-board-status>15 trades deciding</span>
       </div>
-      <p class="board-note">How one job moves: {{ cfg.TRADES_PER_JOB }} trades are offered it, anyone who hasn’t quoted within {{ cfg.OFFER_WINDOW_HOURS }} working hours is swapped for a new trade, and it closes at {{ cfg.MAX_QUOTES }} quotes.</p>
+      <p class="board-note">How one job moves: {{ cfg.TRADES_PER_JOB }} trades are offered it, anyone who hasn’t quoted within {{ cfg.OFFER_WINDOW_HOURS }} hours is swapped for a new trade, and it closes at {{ cfg.MAX_QUOTES }} quotes.</p>
     </div>
   </div>
 </section>
@@ -52,7 +52,7 @@
       <div class="rule-item">
         <span class="rule-fig">24h</span>
         <h3>to quote, or it moves on</h3>
-        <p>Trades who haven’t quoted within {{ cfg.OFFER_WINDOW_HOURS }} working hours lose their slot and a new trade gets it. Jobs don’t sit waiting on people who aren’t interested.</p>
+        <p>Trades who haven’t quoted within {{ cfg.OFFER_WINDOW_HOURS }} hours lose their slot and a new trade gets it. Jobs don’t sit waiting on people who aren’t interested.</p>
       </div>
       <div class="rule-item">
         <span class="rule-fig">6</span>
@@ -86,7 +86,7 @@
         <ol class="steps">
           <li><div><h3>Pick a plan by job size</h3><p>$30, $50 or $90 a month. Each plan includes every job below it. No tokens and no lead fees.</p></div></li>
           <li><div><h3>Get offered jobs in turn</h3><p>Fair rotation shares out jobs in your trade and area. You’re one of 15, not one of 50.</p></div></li>
-          <li><div><h3>Quote within {{ cfg.OFFER_WINDOW_HOURS }} working hours</h3><p>Send a structured quote from your phone. Not for you? Pass, and it goes to another trade straight away.</p></div></li>
+          <li><div><h3>Quote within {{ cfg.OFFER_WINDOW_HOURS }} hours</h3><p>Send a structured quote from your phone. Not for you? Pass, and it goes to another trade straight away.</p></div></li>
           <li><div><h3>Win work, or get the month back</h3><p>Quote on five jobs in a month and don’t win one, and we refund that month.</p></div></li>
         </ol>
       </div>
@@ -195,7 +195,7 @@
     <div class="faq">
       <details><summary>What does it cost to post a job?</summary><p>Nothing. Posting, getting quotes and messaging trades is free.</p></details>
       <details><summary>Why only {{ cfg.MAX_QUOTES }} quotes?</summary><p>{{ cfg.MAX_QUOTES }} is enough to compare prices and approaches without spending a week on the phone. It also means every trade who quotes has a real chance of winning, so they put more into their quotes — and you still hear back faster than ringing around yourself.</p></details>
-      <details><summary>What if nobody quotes?</summary><p>Unused slots go to new trades as each {{ cfg.OFFER_WINDOW_HOURS }}-working-hour window runs out. That carries on for {{ cfg.JOB_OPEN_DAYS }} days, or until you have {{ cfg.MAX_QUOTES }} quotes.</p></details>
+      <details><summary>What if nobody quotes?</summary><p>Unused slots go to new trades as each {{ cfg.OFFER_WINDOW_HOURS }}-window runs out. That carries on for {{ cfg.JOB_OPEN_DAYS }} days, or until you have {{ cfg.MAX_QUOTES }} quotes.</p></details>
       <details><summary>Do trades see my address and phone number?</summary><p>No. Trades see the job details and your suburb. Your name, phone, email and street address are only shared with trades you choose, or the trade whose quote you accept.</p></details>
       <details><summary>How do you check trades?</summary><p>Trades give us their licence or registration number, NZBN and insurance details, and we check them against the public registers and their certificates. A badge only appears once a check is done, and it tells you what we checked and when.</p></details>
       <details><summary>How are jobs shared out between trades?</summary><p>By rotation. Among trades who do that work in that area, on a plan that covers the job’s size, the ones offered the fewest similar jobs recently go first. Reviews and ratings play no part.</p></details>

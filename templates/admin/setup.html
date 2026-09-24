@@ -63,6 +63,22 @@
     </form>
   </div>
 
+  <div class="section-title"><h2>Backups</h2></div>
+  <div class="card">
+    <p class="small muted" style="margin:0 0 12px">
+      Every night {{ cfg.BRAND }} saves a copy of the whole database next to the job photos, and keeps the last {{ backups.keep }}.
+      That covers a bad deploy. It does <b>not</b> cover losing the Render account or the free database expiring —
+      for that, download a copy now and then and keep it somewhere else.
+    </p>
+    <dl class="kv">
+      <dt>Last backup</dt><dd>{% if backups.last_at %}{{ backups.last_at|when }}{% else %}None yet — the next sweep will write one{% endif %}</dd>
+      <dt>Kept on the server</dt><dd>{{ backups.kept }}{% if backups.newest %} · newest {{ backups.newest }}{% endif %}</dd>
+    </dl>
+    <p style="margin:14px 0 0"><a class="btn btn-sm" href="{{ url_for('admin_backup') }}">Download a backup</a></p>
+    <p class="small muted" style="margin:10px 0 0">The download is a zip of spreadsheets, one per table. It contains customer and tradie
+      contact details and password hashes — treat it like a password file.</p>
+  </div>
+
   <div class="section-title"><h2>Where to get these</h2></div>
   <div class="card faq" style="padding:6px 20px">
     <details><summary>Email with Gmail (free, about 5 minutes)</summary>

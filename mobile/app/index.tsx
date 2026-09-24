@@ -10,7 +10,7 @@ import { colors, radius, space } from '../lib/theme';
 
 const RULES: { icon: keyof typeof Ionicons.glyphMap; title: string; body: string }[] = [
   { icon: 'people-outline', title: '15 trades per job', body: 'Your job goes to 15 local trades who do that work.' },
-  { icon: 'time-outline', title: '4 working hours to quote', body: 'Trades who don’t quote in time pass the job on to someone new.' },
+  { icon: 'time-outline', title: '4 hours to quote', body: 'Trades who don’t quote in time pass the job on to someone new.' },
   { icon: 'albums-outline', title: '3 quotes, then it closes', body: 'First in, first served. You’re never flooded with calls.' },
   { icon: 'scale-outline', title: 'Fair for tradies', body: 'Jobs are shared out evenly. No lead fees, no bidding for work.' },
 ];
