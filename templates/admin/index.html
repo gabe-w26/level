@@ -33,7 +33,7 @@
     {% if demo_tools %}
     <div class="card">
       <h3>Demo tools</h3>
-      <p class="small muted">Move the clock forward to watch the rules work. At +24 hours, trades who didn’t quote are swapped for new ones. At +30 days, months end and refunds are worked out.</p>
+      <p class="small muted">Move the clock forward to watch the rules work. Push it past a slot’s window and trades who didn’t quote are swapped for new ones. At +30 days, months end and refunds are worked out.</p>
       <div class="actions">
         {% for h, label in [(1, '+1 hour'), (24, '+24 hours'), (168, '+7 days'), (720, '+30 days')] %}
         <form method="post" action="{{ url_for('admin_clock') }}">{{ m.csrf() }}<input type="hidden" name="hours" value="{{ h }}"><button class="btn btn-quiet btn-sm" type="submit">{{ label }}</button></form>

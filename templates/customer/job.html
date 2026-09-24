@@ -22,7 +22,7 @@
     <div><b>{{ stats.passed }}</b><span>passed or ran out of time</span></div>
   </div>
   <p class="small muted" style="margin-top:10px">
-    {% if stats.active %}Trades who haven’t quoted when their 24 hours are up are swapped for new ones. Next swap in {{ m.countdown(stats.next_expiry, suffix='') }}.
+    {% if stats.active %}Trades who haven’t quoted when their window is up are swapped for new ones. Next swap in {{ m.countdown(stats.next_expiry, suffix='') }}.
     {% elif stats.total == 0 %}No trades cover this job yet. We’ll offer it the moment a matching trade joins.
     {% else %}Every matching trade has seen this job. New trades are offered it as they join.{% endif %}
     Taking quotes until {{ job.closes_at|day }}.

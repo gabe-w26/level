@@ -3,8 +3,8 @@
 A trades marketplace built on four rules:
 
 1. **15 trades per job.** A job is offered to 15 trades who do that work, in that area, on a plan that covers the job’s size.
-2. **24 hours to quote.** Trades who haven’t quoted after 24 hours lose their slot, and a new trade gets it. Passing hands the slot on immediately.
-3. **6 quotes, then it closes.** First in, first served. Quote number 7 is refused, even if two trades press send at once.
+2. **4 working hours to quote.** Trades who haven’t quoted in that time lose their slot, and a new trade gets it. The clock only runs 7am–6pm Mon–Sat, so nothing expires overnight. Passing hands the slot on immediately.
+3. **3 quotes, then it closes.** First in, first served. Quote number 4 is refused, even if two trades press send at once.
 4. **Fair rotation, no review bias.** Trades offered the fewest similar jobs recently go first. Reviews are shown to customers, but never used to decide who’s offered a job.
 
 Trades pay a flat monthly price with no tokens or lead fees. The tiers stack, so each one includes every job below it:
@@ -35,7 +35,7 @@ Demo logins (after `seed.py`):
 **Try this:**
 1. Log in as the customer and open **Replace rotten deck boards**. You'll see the distribution tracker, quotes in arrival order, the side-by-side comparison, shared contact details and messages.
 2. Log in as the trade. You'll see jobs waiting with countdowns. Send a quote, or pass on a job. Check the guarantee progress and "fair share" panels.
-3. Log in as admin and press **+24 hours**. Open a job's distribution log: non-quoters have expired and new trades have been offered it, as wave 2.
+3. Log in as admin and press **+24 hours**. (Any slot whose working-hours window has run out is handed on.) Open a job's distribution log: non-quoters have expired and new trades have been offered it, as wave 2.
 4. Press **+30 days**. Months end, and **Refunds** lists who qualifies under the guarantee.
 
 ## Where the rules live
@@ -62,7 +62,7 @@ python3 -m unittest discover tests -v
 
 32 tests in two files:
 
-- `tests/test_rules.py` — the marketplace rules: exact-15 distribution, tier stacking, 24-hour replacement with *new* trades, passing, the 6-quote cap, even rotation, reviews having zero effect, auto-pause, the $30k contract docs, and every guarantee case.
+- `tests/test_rules.py` — the marketplace rules: exact-15 distribution, tier stacking, slot replacement with *new* trades, passing, the quote cap, even rotation, reviews having zero effect, auto-pause, the $30k contract docs, and every guarantee case.
 - `tests/test_accounts.py` — what real users need: password reset links (one use, and they expire), closing an account, unsubscribe, the free pilot, the budget locking once trades hold a job, and revising a quote.
 
 ## Configuration

@@ -31,7 +31,7 @@ export function ago(value: string | null | undefined): string {
   return day(value);
 }
 
-/** "5h 12m left" style, for the 24-hour quote window. */
+/** "5h 12m left" style, for the quote window. */
 export function countdown(secondsLeft: number): string {
   if (secondsLeft <= 0) return 'Time’s up';
   const h = Math.floor(secondsLeft / 3600);

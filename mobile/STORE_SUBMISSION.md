@@ -45,12 +45,12 @@ installable build (TestFlight for iOS after the first production upload).
 - **Category:** Lifestyle (secondary: Business)
 - **Age rating:** 4+ (no objectionable content; users can message each other — answer "No" to unrestricted web access)
 - **Price:** Free. No in-app purchases.
-- **Promotional text:** Post a job free and get up to six quotes from local New Zealand tradies — or get fair, local jobs if you're a tradie.
+- **Promotional text:** Post a job free and get quotes from local New Zealand tradies — or get fair, local jobs if you're a tradie.
 - **Description:**
 
   > Level is a fairer way to find a tradie in New Zealand.
   >
-  > Post your job in a couple of minutes — what needs doing, your suburb and a few photos. We offer it to 15 local trades who do that work. They have 24 hours to quote, and if they don't, the job goes to someone new. You get up to six quotes, first in first served, so you're never swamped with calls.
+  > Post your job in a couple of minutes — what needs doing, your suburb and a few photos. We offer it to 15 local trades who do that work. They have 4 working hours to quote, and if they don't, the job goes to someone new. You get up to three quotes, first in first served, so you're never swamped with calls.
   >
   > Compare quotes side by side, message trades, share your contact details only with the ones you like, and accept the one you want. Trades see your suburb, never your address, until you choose them.
   >
@@ -112,7 +112,7 @@ can request deletion (in-app: Account → Delete my account).
 > pilot; any business subscription is a B2B arrangement handled outside the app,
 > and the app contains no pricing, payment links or calls to action to purchase.
 >
-> Push notifications tell tradies about new job offers (they have 24 hours to quote)
+> Push notifications tell tradies about new job offers (the window to quote is short)
 > and customers about new quotes and messages.
 
 Create those two review accounts on the live site before submitting (a customer

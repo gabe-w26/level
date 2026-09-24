@@ -22,8 +22,13 @@ BOOTSTRAP_ADMIN = {
 
 # ── Job distribution ──────────────────────────────────────────────────────────
 TRADES_PER_JOB = 15          # live slots per job (trades with an open offer + trades who quoted)
-MAX_QUOTES = 6               # the customer never gets more than this; first in, first served
-OFFER_WINDOW_HOURS = 24      # time a trade has to quote before their slot is handed on
+MAX_QUOTES = 3               # the customer never gets more than this; first in, first served
+OFFER_WINDOW_HOURS = 4       # working hours a trade has to quote before their slot is handed on
+
+# "Working hours" for that window, in NZ time, so a job offered at 9pm doesn't
+# expire while everyone's asleep. Saturday counts; Sunday doesn't.
+WORK_HOURS = (7, 18)         # 7am to 6pm
+WORK_DAYS = (0, 1, 2, 3, 4, 5)   # Monday to Saturday
 JOB_OPEN_DAYS = 14           # after this a job stops being redistributed
 ROTATION_LOOKBACK_DAYS = 30  # fair rotation counts offers received over this window
 AUTO_PAUSE_AFTER = 5         # consecutive offers left to expire before a trade's leads pause
@@ -50,7 +55,7 @@ PRICE_GST_NOTE = os.environ.get('PRICE_GST_NOTE', '+ GST')
 
 # ── No-job guarantee ──────────────────────────────────────────────────────────
 GUARANTEE_MIN_QUOTES = 5     # quotes needed in the month to qualify (lowered if fewer jobs were offered)
-GUARANTEE_AUTO_APPROVE = os.environ.get('GUARANTEE_AUTO_APPROVE', '0') == '1'
+GUARANTEE_AUTO_APPROVE = os.environ.get('GUARANTEE_AUTO_APPROVE', '1') == '1'   # no claim form, no review
 
 # ── Building Act: residential work at or over this value needs a written
 # contract, disclosure statement and the prescribed checklist.

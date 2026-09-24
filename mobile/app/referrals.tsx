@@ -19,7 +19,7 @@ export default function Referrals() {
   async function share() {
     try {
       await Share.share({
-        message: `I get local jobs through Level — each job goes to a handful of trades and closes at six quotes. Join with my link: ${data!.invite_url}`,
+        message: `I get local jobs through Level — each job goes to a handful of trades and closes at three quotes. Join with my link: ${data!.invite_url}`,
         url: data!.invite_url,
       });
     } catch (_) {}

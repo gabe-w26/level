@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from datetime import datetime, timedelta
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -114,23 +115,48 @@ class RulesTest(unittest.TestCase):
         job_id, _ = self.job()
         self.assertEqual(self.offered(job_id), [ok])
 
-    def test_non_quoters_are_replaced_after_24_hours(self):
+    # ── the quote window only counts working hours ──
+    def test_window_runs_during_the_working_day(self):
+        # 9am Friday NZ (UTC+12) -> 1pm the same day.
+        offered = datetime(2026, 9, 24, 21, 0)
+        self.assertEqual(engine.work_deadline(offered), datetime(2026, 9, 25, 1, 0))
+
+    def test_window_does_not_burn_overnight(self):
+        # 4pm Thursday NZ: 2 hours left today, the rest from 7am Friday.
+        offered = datetime(2026, 9, 24, 4, 0)
+        self.assertEqual(engine.work_deadline(offered), datetime(2026, 9, 24, 21, 0))   # 9am Friday NZ
+
+    def test_window_skips_sunday(self):
+        # 9pm Saturday NZ -> Monday morning; Sunday is not a working day.
+        offered = datetime(2026, 9, 26, 9, 0)
+        deadline = engine.work_deadline(offered)
+        self.assertEqual(deadline, datetime(2026, 9, 27, 22, 0))                        # 11am Monday NZ
+
+    def test_a_job_offered_at_night_keeps_its_full_window(self):
+        self.trades(15)
+        job_id, _ = self.job(at=datetime(2026, 9, 24, 9, 0))        # 9pm NZ
+        expires = self.db.execute('SELECT expires_at FROM offers WHERE job_id = ? LIMIT 1',
+                                  (job_id,)).fetchone()['expires_at']
+        self.assertEqual(expires, ts(datetime(2026, 9, 24, 23, 0)))  # 11am the next morning NZ
+
+    def test_non_quoters_are_replaced_when_their_window_runs_out(self):
         self.trades(40)
         job_id, _ = self.job()
         first = self.offered(job_id)
-        for t in first[:4]:
+        quoted = config.MAX_QUOTES - 1          # leave a slot, or the job fills and stops moving
+        for t in first[:quoted]:
             self.quote(job_id, t, T0 + timedelta(hours=2))
-        engine.sweep(self.db, at=T0 + timedelta(hours=24, minutes=1))
-        self.assertEqual(len(self.offered(job_id, 'expired')), 11)
-        self.assertEqual(len(self.offered(job_id, 'quoted')), 4)
+        engine.sweep(self.db, at=engine.work_deadline(T0) + timedelta(minutes=1))
+        self.assertEqual(len(self.offered(job_id, 'expired')), 15 - quoted)
+        self.assertEqual(len(self.offered(job_id, 'quoted')), quoted)
         fresh = self.offered(job_id, 'active')
-        self.assertEqual(len(fresh), 11)
+        self.assertEqual(len(fresh), 15 - quoted)
         self.assertFalse(set(fresh) & set(first), 'replacements must be new trades')
 
-    def test_nothing_changes_before_24_hours(self):
+    def test_nothing_changes_before_the_window_runs_out(self):
         self.trades(40)
         job_id, _ = self.job()
-        engine.sweep(self.db, at=T0 + timedelta(hours=23, minutes=59))
+        engine.sweep(self.db, at=engine.work_deadline(T0) - timedelta(minutes=1))
         self.assertEqual(len(self.offered(job_id, 'active')), 15)
         self.assertEqual(len(self.offered(job_id)), 15)
 
@@ -142,18 +168,19 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(len(self.offered(job_id, 'active')), 15)
         self.assertEqual(len(self.offered(job_id)), 16)
 
-    def test_customer_gets_at_most_6_quotes_first_in_first_served(self):
+    def test_customer_gets_at_most_max_quotes_first_in_first_served(self):
+        cap = config.MAX_QUOTES
         self.trades(15)
         job_id, _ = self.job()
         ts_ = self.offered(job_id)
-        for i, t in enumerate(ts_[:6]):
+        for i, t in enumerate(ts_[:cap]):
             self.assertEqual(self.quote(job_id, t, T0 + timedelta(minutes=10 + i)), i + 1)
         with self.assertRaises(RuleError):
-            self.quote(job_id, ts_[6], T0 + timedelta(minutes=30))
+            self.quote(job_id, ts_[cap], T0 + timedelta(minutes=30))
         job = engine.get_job(self.db, job_id)
-        self.assertEqual((job['status'], job['quote_count']), ('full', 6))
+        self.assertEqual((job['status'], job['quote_count']), ('full', cap))
         self.assertEqual(len(self.offered(job_id, 'active')), 0)
-        self.assertEqual(len(self.offered(job_id, 'closed')), 9)
+        self.assertEqual(len(self.offered(job_id, 'closed')), 15 - cap)
         # A full job is never redistributed.
         engine.sweep(self.db, at=T0 + timedelta(hours=30))
         self.assertEqual(len(self.offered(job_id)), 15)
@@ -162,7 +189,7 @@ class RulesTest(unittest.TestCase):
         t = self.trade()
         job_id, _ = self.job()
         with self.assertRaises(RuleError):
-            self.quote(job_id, t, T0 + timedelta(hours=24, seconds=1))
+            self.quote(job_id, t, engine.work_deadline(T0) + timedelta(seconds=1))
 
     def test_fair_rotation_spreads_jobs_evenly(self):
         pool = self.trades(20)
@@ -236,7 +263,7 @@ class RulesTest(unittest.TestCase):
 
     def test_refund_when_5_quotes_and_no_win(self):
         claim = self._month_with(quotes=5)
-        self.assertEqual(claim['status'], 'pending')
+        self.assertEqual(claim['status'], 'refunded')      # automatic: nobody has to ask
         self.assertEqual(claim['amount_cents'], 9000)
 
     def test_no_refund_with_only_4_quotes(self):
@@ -247,14 +274,22 @@ class RulesTest(unittest.TestCase):
 
     def test_requirement_drops_when_few_jobs_offered(self):
         claim = self._month_with(quotes=2, offers=2)
-        self.assertEqual((claim['quotes_required'], claim['status']), (2, 'pending'))
+        self.assertEqual((claim['quotes_required'], claim['status']), (2, 'refunded'))
 
     def test_pausing_keeps_full_requirement(self):
         claim = self._month_with(quotes=2, offers=2, pause=True)
         self.assertEqual((claim['quotes_required'], claim['status']), (5, 'not_eligible'))
 
-    def test_approved_claim_refunds(self):
-        claim = self._month_with(quotes=5)
+    def test_settled_claim_cannot_be_refunded_twice(self):
+        claim = self._month_with(quotes=5)                 # already refunded by the sweep
+        self.assertEqual(claim['status'], 'refunded')
+        with self.assertRaises(RuleError):
+            billing.refund_claim(self.db, claim['id'])
+
+    def test_refund_still_works_when_review_is_switched_back_on(self):
+        with mock.patch.object(config, 'GUARANTEE_AUTO_APPROVE', False):
+            claim = self._month_with(quotes=5)
+        self.assertEqual(claim['status'], 'pending')
         billing.refund_claim(self.db, claim['id'])
         self.assertEqual(self.db.execute('SELECT status FROM guarantee_claims WHERE id = ?',
                                          (claim['id'],)).fetchone()['status'], 'refunded')

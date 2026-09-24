@@ -1,7 +1,7 @@
 {
   "name": "Level — fair work for NZ trades",
   "short_name": "Level",
-  "description": "Post a job and get up to six quotes, or find work in your trade and area.",
+  "description": "Post a job and get quotes from local trades, or find work in your trade and area.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

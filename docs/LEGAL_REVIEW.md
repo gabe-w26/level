@@ -12,8 +12,8 @@ Prepared 24 September 2026. Live site: https://level-wcyc.onrender.com
 A New Zealand marketplace where homeowners post a job and local trade businesses quote on it.
 
 - A job goes to at most **15** trade businesses in that trade and area.
-- A trade has **24 hours** to quote, or their slot passes to the next business.
-- A customer receives at most **6** quotes, first in first served.
+- A trade has **4 working hours** (7am–6pm, Mon–Sat NZ) to quote, or their slot passes to the next business.
+- A customer receives at most **3** quotes, first in first served.
 - Trades pay a **flat monthly subscription** — $30, $50 or $90 + GST by job value band. No per-lead fees, no credits, no tokens.
 - Jobs are shared out by fair rotation. **Reviews and spend do not affect who is offered work.**
 - If a subscribing trade gets no jobs in a month, they can claim the month back (see §5).

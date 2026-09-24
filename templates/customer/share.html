@@ -77,7 +77,7 @@
         <input type="text" value="{{ share_url }}" readonly aria-label="Your share link" data-copy-source style="flex:1 1 180px;font-size:13px;padding:8px 10px">
         <button class="btn btn-quiet btn-sm" type="button" data-copy>Copy</button>
       </div>
-      {% set pitch = 'I found my tradie on ' ~ cfg.BRAND ~ ' — post a job free and get up to 6 quotes from local trades: ' ~ share_url %}
+      {% set pitch = 'I found my tradie on ' ~ cfg.BRAND ~ ' — post a job free and get up to ' ~ cfg.MAX_QUOTES ~ ' quotes from local trades: ' ~ share_url %}
       <p class="small" style="margin:10px 0 0"><a href="sms:?&body={{ pitch|urlencode }}">Text it</a> · <a href="https://wa.me/?text={{ pitch|urlencode }}" target="_blank" rel="noopener">WhatsApp</a> · <a href="mailto:?subject={{ ('Finding a tradie')|urlencode }}&body={{ pitch|urlencode }}">Email</a></p>
     </div>
   </div>

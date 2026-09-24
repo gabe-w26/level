@@ -145,7 +145,7 @@ class ApiTest(unittest.TestCase):
 
         offers = self.call('get', '/trade/offers', trade).get_json()
         self.assertEqual([o['id'] for o in offers['offers']], [job_id])
-        self.assertGreater(offers['offers'][0]['seconds_left'], 23 * 3600)
+        self.assertGreater(offers['offers'][0]['seconds_left'], 0)   # the working-hours window is still running
         self.assertFalse(offers['trade']['needs_web_setup'])
 
         detail = self.call('get', f'/trade/jobs/{job_id}', trade).get_json()

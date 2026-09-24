@@ -3,8 +3,9 @@ Job distribution engine — the rules the product promises.
 
   • Each open job keeps TRADES_PER_JOB live slots: trades holding an open offer
     plus trades who have quoted. When a slot frees up — an offer runs past
-    OFFER_WINDOW_HOURS without a quote, or a trade passes on it — it goes to a
-    new trade. So if 11 of 15 don't quote within 24 hours, 11 new trades see it.
+    OFFER_WINDOW_HOURS of working time without a quote, or a trade passes on it —
+    it goes to a new trade. The clock only runs during working hours, so a job
+    offered at 9pm still has its full window in the morning.
   • A customer receives at most MAX_QUOTES quotes, first in, first served. The
     cap is enforced by one conditional UPDATE, so two trades pressing send at
     the same moment can't both become quote number six.
@@ -16,13 +17,13 @@ Job distribution engine — the rules the product promises.
 All timestamps are UTC strings computed in Python (see schema.py).
 """
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import config
 
 TS = '%Y-%m-%d %H:%M:%S'
 
-# Demo tools can move the clock forward so a 24-hour handover can be watched
+# Demo tools can move the clock forward so a slot handover can be watched
 # without waiting a day. Always zero in production.
 _clock = {'offset_hours': 0.0}
 
@@ -67,6 +68,42 @@ def is_subscribed(trade, at=None):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+try:
+    from zoneinfo import ZoneInfo
+    NZ = ZoneInfo('Pacific/Auckland')
+except Exception:                       # no tz database on this machine
+    NZ = timezone(timedelta(hours=12))
+
+
+def work_deadline(at, hours=None):
+    """`hours` of working time after `at` (NZ working hours, Mon–Sat).
+
+    A trade shouldn't lose a slot overnight or on a Sunday, so the window only
+    counts time when someone could reasonably be looking at their phone."""
+    hours = config.OFFER_WINDOW_HOURS if hours is None else hours
+    start_h, end_h = config.WORK_HOURS
+    left = timedelta(hours=hours)
+    local = at.replace(tzinfo=timezone.utc).astimezone(NZ)
+    guard = 0
+    while left > timedelta(0) and guard < 60:          # 60 days is plenty; never loop forever
+        guard += 1
+        day_start = local.replace(hour=start_h, minute=0, second=0, microsecond=0)
+        day_end = local.replace(hour=end_h, minute=0, second=0, microsecond=0)
+        if local.weekday() not in config.WORK_DAYS or local >= day_end:
+            local = (day_start + timedelta(days=1))    # next day, from opening time
+            continue
+        if local < day_start:
+            local = day_start
+        usable = day_end - local
+        if usable >= left:
+            local = local + left
+            left = timedelta(0)
+        else:
+            left -= usable
+            local = day_start + timedelta(days=1)
+    return local.astimezone(timezone.utc).replace(tzinfo=None)
+
 
 def notify(db, user_id, body, link=None, at=None, sms=False):
     """In-app notice, emailed by the sweep; `sms=True` also texts it (new jobs)."""
@@ -146,7 +183,7 @@ def fill_slots(db, job, at=None):
         return 0
     wave = db.execute('SELECT COALESCE(MAX(wave), 0) AS w FROM offers WHERE job_id = ?',
                       (job['id'],)).fetchone()['w'] + 1
-    now_s, expires = ts(at), ts(at + timedelta(hours=config.OFFER_WINDOW_HOURS))
+    now_s, expires = ts(at), ts(work_deadline(at))
     band = config.VALUE_BANDS[job['value_band']]['short']
     area = job['area_name'] if 'area_name' in job.keys() else ''
     for trade_id in picks:
@@ -156,7 +193,7 @@ def fill_slots(db, job, at=None):
                    "VALUES (?,?,?,'active',?,?)", (job['id'], trade_id, wave, now_s, expires))
         db.execute('UPDATE trades SET last_offered_at = ? WHERE user_id = ?', (now_s, trade_id))
         notify(db, trade_id,
-               f'New {band} job in {area}: “{job["title"]}”. You have {config.OFFER_WINDOW_HOURS} hours to quote.',
+               f'New {band} job in {area}: “{job["title"]}”. You have {config.OFFER_WINDOW_HOURS} working hours to quote.',
                f'/trade/jobs/{job["id"]}', at, sms=True)
     return len(picks)
 
@@ -238,7 +275,7 @@ def submit_quote(db, job_id, trade_id, q, at=None):
     if offer['status'] == 'closed' or job['status'] == 'full':
         raise RuleError(f'This job already has its {config.MAX_QUOTES} quotes.')
     if offer['status'] != 'active' or parse_ts(offer['expires_at']) <= at:
-        raise RuleError(f'Your {config.OFFER_WINDOW_HOURS} hours to quote have passed, so this job went to another trade.')
+        raise RuleError('Your time to quote has passed, so this job went to another trade.')
     plan = _report_plan(q)
     q = _clean_quote(job, q)
 

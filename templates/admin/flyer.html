@@ -49,8 +49,8 @@
       <h1>Real jobs.<br><em>No tokens.</em></h1>
       <p class="lede">Local homeowners post jobs. You see the ones in your trade and area — and so do at most 14 others.</p>
       <ul>
-        <li><b>15</b><span>trades per job, max. Don’t quote in 24 hours and your spot passes on.</span></li>
-        <li><b>6</b><span>quotes per job, first in first served. No bidding wars.</span></li>
+        <li><b>15</b><span>trades per job, max. Don’t quote in {{ cfg.OFFER_WINDOW_HOURS }} working hours and your spot passes on.</span></li>
+        <li><b>{{ cfg.MAX_QUOTES }}</b><span>quotes per job, first in first served. No bidding wars.</span></li>
         <li><b>=</b><span>Jobs shared out fairly. Reviews and spend don’t buy a better spot.</span></li>
         <li><b>$0</b><span>Free during our pilot — no card needed. After that, one flat monthly price. Never per lead.</span></li>
       </ul>
@@ -61,10 +61,10 @@
     {% else %}
       <span class="tag">Wellington homeowners</span>
       <h1>Need a <em>tradie?</em></h1>
-      <p class="lede">Post your job once — free. Up to 15 local tradies in that trade see it, and you get up to 6 quotes.</p>
+      <p class="lede">Post your job once — free. Up to {{ cfg.TRADES_PER_JOB }} local tradies in that trade see it, and you get up to {{ cfg.MAX_QUOTES }} quotes.</p>
       <ul>
         <li><b>1</b><span>Describe the job and add a photo. Takes a couple of minutes.</span></li>
-        <li><b>6</b><span>quotes at most, so your phone won’t ring off the hook.</span></li>
+        <li><b>{{ cfg.MAX_QUOTES }}</b><span>quotes at most, so your phone won’t ring off the hook.</span></li>
         <li><b>✓</b><span>Every profile shows what we’ve checked — licence, NZBN and insurance.</span></li>
         <li><b>★</b><span>Reviews come only from real hired jobs, and can’t be bought.</span></li>
       </ul>

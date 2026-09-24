@@ -30,7 +30,7 @@ export default function TradeJobs() {
         <Empty icon="flash-outline" title="No jobs waiting right now"
           body={data.trade?.paused
             ? 'New jobs are paused. Turn them back on from your Account tab.'
-            : 'When a local job matches your trades and areas, it lands here and you’ll get a notification. You have 24 hours to quote.'} />
+            : 'When a local job matches your trades and areas, it lands here and you’ll get a notification. You have 4 working hours to quote.'} />
       ) : null}
       {offers.length ? (
         <Text style={{ fontSize: 15, color: colors.ink2, marginBottom: space.md }}>

@@ -95,13 +95,14 @@ document.addEventListener('submit', (e) => {
   };
   const quotes = (n) => {
     meter.forEach((m, i) => m.classList.toggle('on', i < n));
-    count.textContent = `${n}/6`;
+    count.textContent = `${n}/${meter.length}`;
   };
+  const CAP = meter.length;                       // the quote cap, straight from the page
   const finalState = () => {
-    const quoted = [1, 6, 10, 3, 0, 12];
+    const quoted = FIRST.concat(LATE);
     seats.forEach((s, i) => set(s, quoted.includes(i) ? 'quoted' : 'closed', quoted.includes(i) ? 'Quoted' : 'Closed'));
-    quotes(6);
-    clock.textContent = 'Hour 31';
+    quotes(CAP);
+    clock.textContent = 'Hour 6';
     status.textContent = 'Full — closed to everyone else';
     stamp.classList.add('is-full');
   };
@@ -111,8 +112,10 @@ document.addEventListener('submit', (e) => {
     return;
   }
 
-  const firstQuotes = [1, 6, 10, 3];
-  const lateQuotes = [0, 12];
+  const FIRST = [1, 6];                           // quote before the window runs out
+  const LATE = [10];                              // quotes after the slots are handed on
+  const firstQuotes = FIRST;
+  const lateQuotes = LATE;
   let timers = [];
   const at = (ms, fn) => timers.push(setTimeout(fn, ms));
 
@@ -128,26 +131,27 @@ document.addEventListener('submit', (e) => {
     firstQuotes.forEach((i, k) => at(1100 + k * 900, () => {
       set(seats[i], 'quoted', 'Quoted');
       quotes(k + 1);
-      clock.textContent = `Hour ${[2, 5, 9, 16][k]}`;
-      status.textContent = `${k + 1} quoted · ${14 - k} deciding`;
+      clock.textContent = `Hour ${k + 1}`;
+      status.textContent = `${k + 1} quoted · ${seats.length - 1 - k} deciding`;
     }));
 
+    const left = seats.length - firstQuotes.length;
     const t24 = 1100 + firstQuotes.length * 900 + 900;
     at(t24, () => {
-      clock.textContent = 'Hour 24';
-      status.textContent = '11 didn’t quote — slots handed on';
+      clock.textContent = 'Hour 4';
+      status.textContent = `${left} didn’t quote — slots handed on`;
       seats.forEach((s, i) => { if (!firstQuotes.includes(i)) set(s, 'gone', 'Out'); });
     });
     at(t24 + 1000, () => {
       seats.forEach((s, i) => { if (!firstQuotes.includes(i)) set(s, 'fresh', 'New trade'); });
-      status.textContent = '11 new trades deciding';
+      status.textContent = `${left} new trades deciding`;
     });
 
     lateQuotes.forEach((i, k) => at(t24 + 2200 + k * 1000, () => {
       set(seats[i], 'quoted', 'Quoted');
-      quotes(5 + k);
-      clock.textContent = `Hour ${[27, 31][k]}`;
-      status.textContent = k ? '6 quotes in' : '5 quoted';
+      quotes(firstQuotes.length + k + 1);
+      clock.textContent = `Hour ${5 + k}`;
+      status.textContent = firstQuotes.length + k + 1 >= CAP ? `${CAP} quotes in` : `${firstQuotes.length + k + 1} quoted`;
     }));
 
     at(t24 + 4300, () => {

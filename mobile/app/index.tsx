@@ -10,8 +10,8 @@ import { colors, radius, space } from '../lib/theme';
 
 const RULES: { icon: keyof typeof Ionicons.glyphMap; title: string; body: string }[] = [
   { icon: 'people-outline', title: '15 trades per job', body: 'Your job goes to 15 local trades who do that work.' },
-  { icon: 'time-outline', title: '24 hours to quote', body: 'Trades who don’t quote in time pass the job on to someone new.' },
-  { icon: 'albums-outline', title: '6 quotes, then it closes', body: 'First in, first served. You’re never flooded with calls.' },
+  { icon: 'time-outline', title: '4 working hours to quote', body: 'Trades who don’t quote in time pass the job on to someone new.' },
+  { icon: 'albums-outline', title: '3 quotes, then it closes', body: 'First in, first served. You’re never flooded with calls.' },
   { icon: 'scale-outline', title: 'Fair for tradies', body: 'Jobs are shared out evenly. No lead fees, no bidding for work.' },
 ];
 
@@ -31,7 +31,7 @@ export default function Welcome() {
         </View>
         <Text style={styles.headline}>Fair work for NZ trades.</Text>
         <Text style={styles.lede}>
-          Post a job and get up to six quotes from local tradies — or, if you’re a tradie, get jobs without paying per lead.
+          Post a job and get quotes from local tradies — or, if you’re a tradie, get jobs without paying per lead.
         </Text>
 
         {token && !user ? (

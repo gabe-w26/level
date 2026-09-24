@@ -71,7 +71,7 @@
         <table>
           <tbody>
             {% for o in missed %}
-            <tr><td>{{ o.title }}</td><td class="small muted">{{ {'expired': 'Your 24 hours ran out', 'closed': 'Filled up or closed before you quoted', 'declined': 'You passed'}[o.status] }}</td></tr>
+            <tr><td>{{ o.title }}</td><td class="small muted">{{ {'expired': 'Your time to quote ran out', 'closed': 'Filled up or closed before you quoted', 'declined': 'You passed'}[o.status] }}</td></tr>
             {% endfor %}
           </tbody>
         </table>

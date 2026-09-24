@@ -1,6 +1,6 @@
 """
 Text messages through Twilio — for things that can't wait, mainly telling a
-tradie about a new job, since they have 24 hours to quote.
+tradie about a new job, since the window to quote is short.
 
 Nothing is sent until the Twilio details are entered in Admin → Setup. Until
 then each text is printed to the log instead.

@@ -2320,7 +2320,7 @@ def customer_ref(code):
     if sharer and not current_user():
         session['ref'] = code.lower()
         flash(f'{(sharer["name"] or "A friend").split(" ")[0]} shared {config.BRAND} with you. '
-              'Post your job free and get up to 6 quotes from local trades.')
+              f'Post your job free and get up to {config.MAX_QUOTES} quotes from local trades.')
     return redirect(url_for('post_job'))
 
 

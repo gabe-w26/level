@@ -5,7 +5,7 @@
   <div class="wrap hero-grid">
     <div>
       <h1>15 trades see it. 6 can quote. Nobody pays per lead.</h1>
-      <p class="lede">Post a job free and get up to six quotes from local trades — without your phone ringing off the hook. Trades pay one flat monthly price, and get the month back if they don’t win a job.</p>
+      <p class="lede">Post a job free and get up to {{ cfg.MAX_QUOTES }} quotes from local trades — without your phone ringing off the hook. Trades pay one flat monthly price, and get the month back if they don’t win a job.</p>
       <form class="quickstart" action="{{ url_for('post_job') }}" method="get">
         <select name="category" aria-label="What kind of trade do you need?">
           <option value="">What do you need done?</option>
@@ -20,7 +20,7 @@
       <div class="board-head">
         <div class="stamp stamp-big" aria-hidden="true">
           <span class="stamp-top">Auckland – Central</span>
-          <span class="stamp-mid"><b>$5–50k</b><i data-board-count>0/6</i></span>
+          <span class="stamp-mid"><b>$5–50k</b><i data-board-count>0/{{ cfg.MAX_QUOTES }}</i></span>
           <span class="stamp-bot">Job 0142 · Builder</span>
         </div>
         <div class="board-clock" aria-hidden="true"><span class="label">Clock</span><b data-board-clock>Hour 0</b></div>
@@ -29,10 +29,10 @@
         {% for i in range(15) %}<div class="seat"><small>Slot {{ '%02d'|format(i + 1) }}</small><b>Deciding</b></div>{% endfor %}
       </div>
       <div class="board-foot" aria-hidden="true">
-        <span class="meter" data-board-meter>{% for i in range(6) %}<i></i>{% endfor %}</span>
+        <span class="meter" data-board-meter>{% for i in range(cfg.MAX_QUOTES) %}<i></i>{% endfor %}</span>
         <span class="label" data-board-status>15 trades deciding</span>
       </div>
-      <p class="board-note">How one job moves: 15 trades are offered it, anyone who hasn’t quoted after 24 hours is swapped for a new trade, and it closes at 6 quotes.</p>
+      <p class="board-note">How one job moves: {{ cfg.TRADES_PER_JOB }} trades are offered it, anyone who hasn’t quoted within {{ cfg.OFFER_WINDOW_HOURS }} working hours is swapped for a new trade, and it closes at {{ cfg.MAX_QUOTES }} quotes.</p>
     </div>
   </div>
 </section>
@@ -52,7 +52,7 @@
       <div class="rule-item">
         <span class="rule-fig">24h</span>
         <h3>to quote, or it moves on</h3>
-        <p>Trades who haven’t quoted after 24 hours lose their slot and a new trade gets it. Jobs don’t sit waiting on people who aren’t interested.</p>
+        <p>Trades who haven’t quoted within {{ cfg.OFFER_WINDOW_HOURS }} working hours lose their slot and a new trade gets it. Jobs don’t sit waiting on people who aren’t interested.</p>
       </div>
       <div class="rule-item">
         <span class="rule-fig">6</span>
@@ -76,7 +76,7 @@
         <h3 class="label">If you need a job done</h3>
         <ol class="steps">
           <li><div><h3>Describe the job</h3><p>What needs doing, a rough budget, and photos if you have them. Free, and about five minutes.</p></div></li>
-          <li><div><h3>Up to six quotes arrive</h3><p>Each quote has the price, what’s included and what isn’t, the warranty and when they can start.</p></div></li>
+          <li><div><h3>Up to {{ cfg.MAX_QUOTES }} quotes arrive</h3><p>Each quote has the price, what’s included and what isn’t, the warranty and when they can start.</p></div></li>
           <li><div><h3>Compare, then share your number</h3><p>Trades see your suburb, not your address or phone. Share your details only with the trades you want to talk to.</p></div></li>
           <li><div><h3>Hire and review</h3><p>Accept a quote and get the job done. Only customers who hired a trade can review them.</p></div></li>
         </ol>
@@ -86,7 +86,7 @@
         <ol class="steps">
           <li><div><h3>Pick a plan by job size</h3><p>$30, $50 or $90 a month. Each plan includes every job below it. No tokens and no lead fees.</p></div></li>
           <li><div><h3>Get offered jobs in turn</h3><p>Fair rotation shares out jobs in your trade and area. You’re one of 15, not one of 50.</p></div></li>
-          <li><div><h3>Quote within 24 hours</h3><p>Send a structured quote from your phone. Not for you? Pass, and it goes to another trade straight away.</p></div></li>
+          <li><div><h3>Quote within {{ cfg.OFFER_WINDOW_HOURS }} working hours</h3><p>Send a structured quote from your phone. Not for you? Pass, and it goes to another trade straight away.</p></div></li>
           <li><div><h3>Win work, or get the month back</h3><p>Quote on five jobs in a month and don’t win one, and we refund that month.</p></div></li>
         </ol>
       </div>
@@ -194,8 +194,8 @@
     <h2>Questions</h2>
     <div class="faq">
       <details><summary>What does it cost to post a job?</summary><p>Nothing. Posting, getting quotes and messaging trades is free.</p></details>
-      <details><summary>Why only six quotes?</summary><p>Six is enough to compare prices and approaches without spending a week on the phone. It also means every trade who quotes has a real chance of winning, so they put more into their quotes.</p></details>
-      <details><summary>What if nobody quotes?</summary><p>Every 24 hours, slots that weren’t used go to new trades. That carries on for {{ cfg.JOB_OPEN_DAYS }} days, or until you have six quotes.</p></details>
+      <details><summary>Why only {{ cfg.MAX_QUOTES }} quotes?</summary><p>{{ cfg.MAX_QUOTES }} is enough to compare prices and approaches without spending a week on the phone. It also means every trade who quotes has a real chance of winning, so they put more into their quotes — and you still hear back faster than ringing around yourself.</p></details>
+      <details><summary>What if nobody quotes?</summary><p>Unused slots go to new trades as each {{ cfg.OFFER_WINDOW_HOURS }}-working-hour window runs out. That carries on for {{ cfg.JOB_OPEN_DAYS }} days, or until you have {{ cfg.MAX_QUOTES }} quotes.</p></details>
       <details><summary>Do trades see my address and phone number?</summary><p>No. Trades see the job details and your suburb. Your name, phone, email and street address are only shared with trades you choose, or the trade whose quote you accept.</p></details>
       <details><summary>How do you check trades?</summary><p>Trades give us their licence or registration number, NZBN and insurance details, and we check them against the public registers and their certificates. A badge only appears once a check is done, and it tells you what we checked and when.</p></details>
       <details><summary>How are jobs shared out between trades?</summary><p>By rotation. Among trades who do that work in that area, on a plan that covers the job’s size, the ones offered the fewest similar jobs recently go first. Reviews and ratings play no part.</p></details>

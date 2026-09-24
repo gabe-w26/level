@@ -99,7 +99,7 @@ export default function TradeJob() {
         <Notice tone="muted">
           {offer.status === 'declined' ? 'You passed on this job.'
             : offer.status === 'closed' ? 'This job filled up or closed before you quoted.'
-            : 'Your 24 hours ran out, so the job went to another trade.'}
+            : 'Your time to quote ran out, so the job went to another trade.'}
         </Notice>
       ) : null}
 

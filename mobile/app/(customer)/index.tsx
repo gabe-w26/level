@@ -28,7 +28,7 @@ export default function MyJobs() {
       <ErrorText>{error}</ErrorText>
       {jobs.length === 0 && !error ? (
         <Empty icon="briefcase-outline" title="No jobs yet"
-          body="Post your first job. Up to 15 local trades see it, and you’ll get up to six quotes.">
+          body="Post your first job. Up to 15 local trades see it, and you’ll get up to three quotes.">
           <Button title="Post a job" icon="add" onPress={() => router.push('/(customer)/post')} style={{ marginTop: 12, alignSelf: 'stretch' }} />
         </Empty>
       ) : null}

@@ -12,7 +12,7 @@ import { colors } from './theme';
 const STORED_TOKEN_KEY = 'level_push_token';
 let lastOpened: string | null = null;           // so one tap is only ever handled once
 
-// New jobs have a 24-hour clock, so show alerts even while the app is open.
+// New jobs have a short clock, so show alerts even while the app is open.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,

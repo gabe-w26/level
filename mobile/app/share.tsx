@@ -30,7 +30,7 @@ export default function ShareAndRecommend() {
     if (!data) return;
     try {
       await Share.share({
-        message: `I found my tradie on Level — post a job free and get up to six quotes from local trades: ${data.share_url}`,
+        message: `I found my tradie on Level — post a job free and get quotes from local trades: ${data.share_url}`,
         url: data.share_url,
       });
     } catch (_) {}
