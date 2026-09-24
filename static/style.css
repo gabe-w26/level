@@ -492,3 +492,17 @@ body.is-offline .offline-banner { display: block; }
 .update-form fieldset { border: 0; padding: 0; margin: 0; }
 .updates { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 14px; }
 .updates li { border-left: 3px solid var(--chalk); padding: 2px 0 2px 14px; }
+
+/* Comparing quotes: price sits with what you get, not above it */
+.quote-price-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-top: 14px;
+  padding-top: 12px; border-top: 1px solid var(--rule-soft); }
+.quote-price-row b { font-family: var(--f-display); font-stretch: 112%; font-weight: 800; font-size: 24px; line-height: 1; }
+.quote-price-row small { font-size: 13px; color: var(--ink-2); }
+.quote-notes { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.quote-notes li { display: flex; gap: 9px; align-items: baseline; font-size: 14.5px; color: var(--ink-2); }
+.quote-notes li::before { content: "•"; font-weight: 800; color: var(--ink-3); }
+.quote-notes .n-low::before, .quote-notes .n-gst::before { content: "!"; color: var(--paint-ink); }
+.quote-notes .n-low, .quote-notes .n-gst { color: var(--ink); font-weight: 600; }
+.choose-help { margin-bottom: 16px; }
+.choose-help summary { cursor: pointer; font-size: 17px; }
+.choose-help[open] summary { margin-bottom: 4px; }

@@ -181,6 +181,8 @@ export interface Quote {
   created_at: string;
   price_text: string;
   act_docs_promised: boolean;
+  /** What this quote covers that the others don't, and the GST trap. From compare.py. */
+  notes?: { kind: string; text: string }[];
   business_name?: string;
   licence_type?: string | null;
   licence_checked?: boolean;

@@ -27,6 +27,7 @@ import accounts
 import ai
 import backup
 import billing
+import compare
 import config
 import engine
 import integrations
@@ -816,8 +817,13 @@ def quotes_for_job(job):
 def customer_job(job_id):
     job = _my_job(job_id)
     reviewed = db().execute('SELECT 1 FROM reviews WHERE job_id = ?', (job_id,)).fetchone()
-    return render_template('customer/job.html', job=job, quotes=quotes_for_job(job), stats=offer_stats(job_id),
-                           photos=_photos(job_id), reviewed=bool(reviewed), **_progress(job))
+    quotes = quotes_for_job(job)
+    # What this kind of job usually costs here, as a fallback when there are too
+    # few quotes to compare against each other.
+    guide = _spread(_price_points(job['category_id'], job['value_band']))
+    return render_template('customer/job.html', job=job, quotes=quotes, stats=offer_stats(job_id),
+                           photos=_photos(job_id), reviewed=bool(reviewed),
+                           notes=compare.notes_for(quotes, guide), **_progress(job))
 
 
 @app.post('/me/jobs/<int:job_id>/quotes/<int:quote_id>/<action>')

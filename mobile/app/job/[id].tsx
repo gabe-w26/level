@@ -110,6 +110,7 @@ export default function CustomerJob() {
       {data.progress ? <ProgressSection progress={data.progress} role="customer" jobId={jobId} onChanged={reload} /> : null}
 
       <Label style={{ marginTop: space.md, marginBottom: 8 }}>Quotes ({quotes.length})</Label>
+      {quotes.length > 1 && open ? <BeforeYouChoose big={job.value_band !== 'small'} /> : null}
       {quotes.length === 0 ? (
         <Card><Empty icon="hourglass-outline" title="No quotes yet" body="We’ll let you know the moment one arrives." /></Card>
       ) : quotes.map((q, i) => (
@@ -148,6 +149,33 @@ export default function CustomerJob() {
   );
 }
 
+function BeforeYouChoose({ big }: { big: boolean }) {
+  const [open, setOpen] = useState(true);
+  const points = [
+    ['Compare what’s included, not just the price.', 'Two quotes for the same job can cover different work — any differences are flagged under each price.'],
+    ['Check the GST.', 'A price “plus GST” is 15% more than it looks beside one that includes it.'],
+    ['Licences matter.', 'Electrical, gas and sanitary plumbing must be done by a registered person. We show what we’ve checked, and when.'],
+    ['Insurance is yours to lose.', 'If something gets damaged and the trade isn’t insured, you carry it.'],
+    ['Go careful on big deposits.', 'A deposit for materials is normal; most of the money up front is how people get burned.'],
+    ...(big ? [['Over $30,000, the law is on your side.', 'Residential work that size needs a written contract, a disclosure statement and a checklist before work starts.']] : []),
+  ];
+  return (
+    <Card>
+      <Text onPress={() => setOpen(!open)} style={{ fontWeight: '800', color: colors.ink, fontSize: 16 }}>
+        <Ionicons name={open ? 'chevron-down' : 'chevron-forward'} size={15} color={colors.ink3} /> Before you choose
+      </Text>
+      {open ? points.map(([head, body]) => (
+        <View key={head} style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+          <Ionicons name="checkmark-circle-outline" size={16} color={colors.pine} style={{ marginTop: 2 }} />
+          <Text style={{ flex: 1, fontSize: 14, color: colors.ink2 }}>
+            <Text style={{ fontWeight: '700', color: colors.ink }}>{head}</Text> {body}
+          </Text>
+        </View>
+      )) : null}
+    </Card>
+  );
+}
+
 function QuoteCard({ q, n, jobOpen, busy, onShare, onAccept, onDecline, onMessage }: {
   q: Quote; n: number; jobOpen: boolean; busy: string | null;
   onShare: () => void; onAccept: () => void; onDecline: () => void; onMessage: () => void;
@@ -168,10 +196,6 @@ function QuoteCard({ q, n, jobOpen, busy, onShare, onAccept, onDecline, onMessag
             </Text>
           ) : <Text style={{ fontSize: 14, color: colors.ink3 }}>No reviews yet</Text>}
         </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ fontSize: 20, fontWeight: '800', color: colors.ink }}>{q.price_text}</Text>
-          {q.price_type !== 'site_visit' ? <Text style={{ fontSize: 13, color: colors.ink2 }}>{q.gst_included ? 'incl. GST' : 'plus GST'}</Text> : null}
-        </View>
       </View>
       {badges.length ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
@@ -186,6 +210,29 @@ function QuoteCard({ q, n, jobOpen, busy, onShare, onAccept, onDecline, onMessag
       <Row label="Warranty" value={q.warranty || ''} />
       <Row label="Can start" value={q.available_from || ''} />
       <Row label="Takes about" value={q.duration || ''} />
+      {/* The price sits with what you get for it, not in the heading — the cheapest quote is
+          usually the smallest one, and putting it on top invites people to read it alone. */}
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 10, paddingTop: 10,
+                     borderTopWidth: 1, borderTopColor: colors.ruleSoft }}>
+        <Text style={{ fontSize: 12, color: colors.ink3, fontWeight: '700' }}>PRICE</Text>
+        <Text style={{ fontSize: 20, fontWeight: '800', color: colors.ink }}>{q.price_text}</Text>
+        {q.price_type !== 'site_visit' ? (
+          <Text style={{ fontSize: 13, color: colors.ink2 }}>{q.gst_included ? 'incl. GST' : 'plus GST'}</Text>
+        ) : null}
+      </View>
+      {q.notes?.length ? (
+        <View style={{ marginTop: 8 }}>
+          {q.notes.map((note, i) => (
+            <View key={i} style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+              <Text style={{ color: colors.ink3 }}>•</Text>
+              <Text style={{ flex: 1, fontSize: 14, color: colors.ink2 }}>{note.text}</Text>
+            </View>
+          ))}
+          <Text style={{ fontSize: 13, color: colors.ink3, marginTop: 6 }}>
+            Worth asking about before you choose — a cheaper price often means a smaller job, not a cheaper one.
+          </Text>
+        </View>
+      ) : null}
       {q.needs_act ? (
         <Notice tone="chalk">This quote is $30,000 or more. For residential work this size the law requires a written contract, disclosure statement and MBIE checklist — the trade has confirmed they’ll provide them.</Notice>
       ) : null}

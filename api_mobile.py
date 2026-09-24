@@ -233,6 +233,19 @@ def job_json(j, include_address=False):
     return out
 
 
+def _with_notes(job, quotes):
+    """Quotes for the customer, each carrying the same comparison notes the website shows."""
+    import compare
+    guide = web._spread(web._price_points(job['category_id'], job['value_band']))
+    notes = compare.notes_for(quotes, guide)
+    out = []
+    for q in quotes:
+        item = quote_json(q, with_contact=True)
+        item['notes'] = [{'kind': n['kind'], 'text': n['text']} for n in notes.get(q['id'], [])]
+        out.append(item)
+    return out
+
+
 def quote_json(q, with_contact=False):
     fields = ('id', 'job_id', 'trade_id', 'price_type', 'amount_low', 'amount_high', 'message', 'inclusions',
               'exclusions', 'warranty', 'available_from', 'duration', 'status', 'created_at', 'responded_at')
@@ -672,7 +685,7 @@ def customer_job(job_id):
     reviewed = bool(db().execute('SELECT 1 FROM reviews WHERE job_id = ?', (job_id,)).fetchone())
     stats = web.offer_stats(job_id)
     return {'job': job_json(job, include_address=True),
-            'quotes': [quote_json(q, with_contact=True) for q in web.quotes_for_job(job)],
+            'quotes': _with_notes(job, web.quotes_for_job(job)),
             'stats': {'offered': stats['total'], 'waiting': stats['active'], 'quoted': stats['quoted'],
                       'passed': stats['passed'], 'next_expiry': stats['next_expiry']},
             'photos': [photo_url(p['filename']) for p in web._photos(job_id)],

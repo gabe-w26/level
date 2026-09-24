@@ -55,6 +55,20 @@
       <div class="empty"><h3>No quotes yet</h3><p style="margin:0">Quotes usually start arriving within a few hours. We’ll let you know as each one comes in.</p></div>
       {% endif %}
 
+      {% if quotes %}
+      <details class="card choose-help" {{ 'open' if quotes|length > 1 and job.status in ('open', 'full') }}>
+        <summary><b>Before you choose</b></summary>
+        <ul class="checklist" style="margin:12px 0 0">
+          <li><b>Compare what’s included, not just the price.</b> Two quotes for the same job can cover different work — any differences are flagged under each price.</li>
+          <li><b>Check the GST.</b> A price “plus GST” is 15% more than it looks beside one that includes it.</li>
+          <li><b>Licences matter.</b> Electrical, gas and sanitary plumbing must be done by a registered person, and unconsented work can hold up a sale years later. We show what we’ve checked, and when.</li>
+          <li><b>Insurance is yours to lose.</b> If something gets damaged and the trade isn’t insured, you carry it.</li>
+          <li><b>Go careful on big deposits.</b> A deposit for materials is normal; most of the money up front is how people get burned. Pay as the work gets done.</li>
+          {% if job.value_band != 'small' %}<li><b>Over {{ cfg.CONTRACT_THRESHOLD|money }}, the law is on your side.</b> Residential work that size needs a written contract, a disclosure statement and a checklist before work starts.</li>{% endif %}
+        </ul>
+      </details>
+      {% endif %}
+
       {% for q in quotes %}
       <article class="quote {{ q.status }}" id="q{{ q.id }}">
         <div class="quote-head">
@@ -64,7 +78,6 @@
             {{ m.stars(q.rating) }}
             {{ m.badges(q) }}
           </div>
-          <div class="quote-price">{{ q|price }}{% if q.price_type != 'site_visit' %}<small>{{ 'incl. GST' if q.gst_included else 'plus GST' }}</small>{% endif %}</div>
         </div>
         <div class="quote-body">
           <p class="desc" style="margin:0">{{ q.message }}</p>
@@ -76,6 +89,18 @@
             {% if q.duration %}<dt>Takes about</dt><dd>{{ q.duration }}</dd>{% endif %}
             <dt>Progress updates</dt><dd>{{ rp.promise(q.report_plan, q.report_record) }}</dd>
           </dl>
+          <div class="quote-price-row">
+            <span class="label">Price</span>
+            <b>{{ q|price }}</b>
+            {% if q.price_type != 'site_visit' %}<small>{{ 'incl. GST' if q.gst_included else 'plus GST' }}</small>{% endif %}
+          </div>
+          {% set qnotes = notes.get(q.id, []) %}
+          {% if qnotes %}
+          <ul class="quote-notes">
+            {% for n in qnotes %}<li class="n-{{ n.kind }}">{{ n.text }}</li>{% endfor %}
+          </ul>
+          <p class="small muted" style="margin:6px 0 0">Worth asking about before you choose — a cheaper price often means a smaller job, not a cheaper one.</p>
+          {% endif %}
           {% if q.needs_act %}
           <div class="notice act" style="margin:14px 0 0">
             <p><b>This quote is {{ cfg.CONTRACT_THRESHOLD|money }} or more.</b> For residential work this size, the law requires a written contract, a disclosure statement and MBIE’s checklist before work starts. {{ q.business_name }} has confirmed they’ll provide them.</p>
