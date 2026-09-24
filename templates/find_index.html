@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Find a tradie near you — {{ cfg.BRAND }}{% endblock %}
+{% block description %}Find a local tradie in your area. Post your job free on {{ cfg.BRAND }} and get up to {{ cfg.MAX_QUOTES }} quotes from trades who cover your patch.{% endblock %}
+{% block main %}
+<div class="wrap page narrow">
+  <h1 style="font-size:clamp(30px,4vw,44px)">Find a tradie near you</h1>
+  <p class="lede">Pick your area to see the trades that cover it, what each job usually involves, and what to check before you hire.</p>
+  <p style="margin:20px 0"><a class="btn" href="{{ url_for('post_job') }}">Post a job — free</a></p>
+
+  {% for region, areas in regions.items() %}
+  <div class="section-title"><h2 style="font-size:20px">{{ region }}</h2></div>
+  <p class="small">{% for a in areas %}<a href="{{ url_for('find_area', area_slug=a.slug) }}">{{ a.name }}</a>{{ ' · ' if not loop.last }}{% endfor %}</p>
+  {% endfor %}
+</div>
+{% endblock %}

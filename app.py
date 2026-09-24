@@ -28,6 +28,7 @@ import billing
 import config
 import engine
 import integrations
+import local_pages
 import mailer
 import outreach
 import push
@@ -694,7 +695,8 @@ def post_job():
     if u and u['role'] != 'customer':
         flash('Trade and admin accounts can’t post jobs. Log out and post with a customer account.', 'error')
         return redirect(home_for(u))
-    form = request.form if request.method == 'POST' else {'category': request.args.get('category', '')}
+    form = (request.form if request.method == 'POST'
+            else {'category': request.args.get('category', ''), 'area': request.args.get('area', '')})
     errors = {}
     if request.method == 'POST':
         f = request.form
@@ -1475,6 +1477,55 @@ def join(code):
     return redirect(url_for('signup'))
 
 
+# ── Local pages: "Plumbers in Karori" ─────────────────────────────────────────
+
+@app.route('/find')
+def find_index():
+    return render_template('find_index.html', regions=areas_by_region())
+
+
+@app.route('/find/<area_slug>')
+def find_area(area_slug):
+    area = db().execute('SELECT * FROM areas WHERE slug = ?', (area_slug,)).fetchone()
+    if not area:
+        abort(404)
+    cats = [c for c in all_categories() if local_pages.content(c['slug'])]
+    covering = {r['category_id']: r['n'] for r in db().execute(
+        'SELECT tc.category_id AS category_id, COUNT(*) AS n FROM trades t JOIN users u ON u.id = t.user_id '
+        'JOIN trade_categories tc ON tc.trade_id = t.user_id '
+        'JOIN trade_areas ta ON ta.trade_id = t.user_id AND ta.area_id = ? '
+        "WHERE u.closed_at IS NULL AND t.paused = 0 AND t.sub_status = 'active' "
+        'GROUP BY tc.category_id', (area['id'],)).fetchall()}
+    nearby = db().execute('SELECT * FROM areas WHERE region = ? AND id <> ? ORDER BY id',
+                          (area['region'], area['id'])).fetchall()
+    return render_template('find_area.html', area=area, categories=cats, covering=covering, nearby=nearby)
+
+
+@app.route('/find/<cat_slug>/<area_slug>')
+def find_local(cat_slug, area_slug):
+    cat = db().execute('SELECT * FROM categories WHERE slug = ?', (cat_slug,)).fetchone()
+    area = db().execute('SELECT * FROM areas WHERE slug = ?', (area_slug,)).fetchone()
+    info = local_pages.content(cat_slug) if cat else None
+    if not cat or not area or not info:
+        abort(404)
+    # Only ever show counts that are true right now.
+    covering = db().execute(
+        'SELECT COUNT(*) AS n FROM trades t JOIN users u ON u.id = t.user_id '
+        'JOIN trade_categories tc ON tc.trade_id = t.user_id AND tc.category_id = ? '
+        'JOIN trade_areas ta ON ta.trade_id = t.user_id AND ta.area_id = ? '
+        "WHERE u.closed_at IS NULL AND t.paused = 0 AND t.sub_status = 'active'",
+        (cat['id'], area['id'])).fetchone()['n']
+    posted = db().execute(
+        'SELECT COUNT(*) AS n FROM jobs WHERE category_id = ? AND area_id = ? AND created_at >= ?',
+        (cat['id'], area['id'], ts(utcnow() - timedelta(days=90)))).fetchone()['n']
+    bands = {key: _spread(_price_points(cat['id'], key)) for key in config.VALUE_BANDS}
+    nearby = [a for a in db().execute('SELECT * FROM areas WHERE region = ? AND id <> ? ORDER BY id',
+                                      (area['region'], area['id'])).fetchall()]
+    others = [c for c in all_categories() if c['slug'] != cat_slug and local_pages.content(c['slug'])]
+    return render_template('find.html', cat=cat, area=area, info=info, covering=covering, posted=posted,
+                           bands=bands, nearby=nearby, others=others, need=GUIDE_MIN_QUOTES)
+
+
 # ── Price guides ──────────────────────────────────────────────────────────────
 
 def _price_points(category_id, band=None):
@@ -1526,8 +1577,10 @@ def guide(slug):
 @app.route('/sitemap.xml')
 def sitemap():
     base = integrations.site_url()
-    pages = ['/', '/pricing', '/post', '/signup', '/guides', '/terms', '/privacy'] + \
-            [f'/guides/{c["slug"]}' for c in all_categories()]
+    cats, areas = all_categories(), [a for r in areas_by_region().values() for a in r]
+    pages = ['/', '/pricing', '/post', '/signup', '/guides', '/terms', '/privacy', '/find'] + \
+            [f'/guides/{c["slug"]}' for c in cats] + [f'/find/{a["slug"]}' for a in areas] + \
+            [f'/find/{c["slug"]}/{a["slug"]}' for c, a in local_pages.pairs(cats, areas)]
     body = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + \
            ''.join(f'  <url><loc>{base}{p}</loc></url>\n' for p in pages) + '</urlset>\n'
     return body, 200, {'Content-Type': 'application/xml'}

@@ -6,7 +6,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{% block title %}{{ cfg.BRAND }} — {{ cfg.TAGLINE }}{% endblock %}</title>
-<meta name="description" content="Post a job free and get up to six quotes from local NZ trades. Trades pay one flat monthly price — no lead fees — and get the month back if they don’t win a job.">
+<meta name="description" content="{% block description %}Post a job free and get up to six quotes from local NZ trades. Trades pay one flat monthly price — no lead fees — and get the month back if they don’t win a job.{% endblock %}">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#1F4FD1">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -126,6 +126,7 @@
         <li><a href="{{ url_for('post_job') }}">Post a job</a></li>
         <li><a href="{{ url_for('index') }}#how">How it works</a></li>
         <li><a href="{{ url_for('pricing') }}">Pricing for trades</a></li>
+        <li><a href="{{ url_for('find_index') }}">Find a tradie near you</a></li>
         <li><a href="{{ url_for('guides') }}">Price guides</a></li>
         <li><a href="{{ url_for('pricing') }}#guarantee">No-job guarantee</a></li>
       </ul>

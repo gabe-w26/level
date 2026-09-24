@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% set trade = cat.name|lower %}
+{% block title %}{{ cat.name }} in {{ area.name }} — get up to {{ cfg.MAX_QUOTES }} quotes | {{ cfg.BRAND }}{% endblock %}
+{% block description %}Need a {{ trade }} in {{ area.name }}? Post the job free on {{ cfg.BRAND }} and get up to {{ cfg.MAX_QUOTES }} quotes from local trades. {{ info.blurb }}{% endblock %}
+{% block main %}
+<div class="wrap page narrow">
+  <p class="small"><a href="{{ url_for('find_index') }}">← Find a tradie</a></p>
+  <h1 style="font-size:clamp(30px,4vw,44px)">{{ cat.name }} in {{ area.name }}</h1>
+  <p class="lede">{{ info.blurb }} Post your job once and up to {{ cfg.TRADES_PER_JOB }} local {{ trade }} businesses see it. You get up to {{ cfg.MAX_QUOTES }} quotes and pick who you like.</p>
+
+  <p style="margin:20px 0"><a class="btn" href="{{ url_for('post_job', category=cat.slug, area=area.slug) }}">Post a {{ trade }} job — free</a></p>
+
+  {% if covering or posted %}
+  <div class="card" style="margin-bottom:24px">
+    <div class="stat-row" style="margin:0">
+      {% if covering %}<div><b>{{ covering }}</b><span>{{ trade }} business{{ 'es' if covering != 1 }} covering {{ area.name }}</span></div>{% endif %}
+      {% if posted %}<div><b>{{ posted }}</b><span>{{ trade }} job{{ 's' if posted != 1 }} posted here in the last 90 days</span></div>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="section-title"><h2>Jobs people post</h2></div>
+  <ul class="checklist" style="margin:0">
+    {% for job in info.jobs %}<li>{{ job }}</li>{% endfor %}
+  </ul>
+
+  <div class="section-title"><h2>What to check before you hire</h2></div>
+  <ul class="checklist" style="margin:0">
+    {% for check in info.checks %}<li>{{ check }}</li>{% endfor %}
+  </ul>
+  {# Only when the checks above don't already say it. #}
+  {% if cat.licence_note and cat.licence_note[:22] not in info.checks|join(' ') %}<p class="notice small" style="margin-top:14px">{{ cat.licence_note }}</p>{% endif %}
+
+  {% set any_prices = bands.values()|select|list %}
+  {% if any_prices %}
+  <div class="section-title"><h2>What it usually costs</h2><span class="label">incl. GST</span></div>
+  <div class="card table-wrap" style="padding:6px 10px">
+    <table>
+      <thead><tr><th>Size of job</th><th>Most quotes between</th><th>Middle quote</th></tr></thead>
+      <tbody>
+        {% for key, b in bands.items() %}{% if b %}
+        <tr><td>{{ cfg.VALUE_BANDS[key].label }}</td><td class="num">{{ b.low|money }} – {{ b.high|money }}</td><td class="num"><b>{{ b.mid|money }}</b></td></tr>
+        {% endif %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="small muted">From real quotes {{ trade }} businesses have sent on {{ cfg.BRAND }} — nationwide, not just {{ area.name }}. <a href="{{ url_for('guide', slug=cat.slug) }}">Full {{ trade }} price guide</a></p>
+  {% endif %}
+
+  <div class="section-title"><h2>How {{ cfg.BRAND }} works</h2></div>
+  <ol class="steps">
+    <li><div><h3>Post the job</h3><p>Describe it, add a photo, pick a rough budget. A couple of minutes, and it costs nothing.</p></div></li>
+    <li><div><h3>Up to {{ cfg.TRADES_PER_JOB }} local {{ trade }} businesses see it</h3><p>They have {{ cfg.OFFER_WINDOW_HOURS }} hours to quote, or the spot passes to someone else.</p></div></li>
+    <li><div><h3>Up to {{ cfg.MAX_QUOTES }} quotes come back</h3><p>First in, first served — so your phone doesn’t ring all week.</p></div></li>
+    <li><div><h3>You choose</h3><p>Your name and address stay private until you pick someone.</p></div></li>
+  </ol>
+
+  <div class="card" style="margin-top:24px">
+    <h3 style="margin-top:0">Are these tradies checked?</h3>
+    <p class="small" style="margin:0">We show what we’ve actually checked on each profile — licence number on the public register, NZBN, and a public liability certificate — with the date we checked it. We don’t claim more than that. Reviews come only from customers who hired someone through {{ cfg.BRAND }}, and can’t be bought.</p>
+  </div>
+
+  <p style="margin:24px 0"><a class="btn" href="{{ url_for('post_job', category=cat.slug, area=area.slug) }}">Post a {{ trade }} job in {{ area.name }}</a></p>
+
+  {% if nearby %}
+  <div class="section-title"><h2>Nearby</h2></div>
+  <p class="small">{% for a in nearby %}<a href="{{ url_for('find_local', cat_slug=cat.slug, area_slug=a.slug) }}">{{ cat.name }} in {{ a.name }}</a>{{ ' · ' if not loop.last }}{% endfor %}</p>
+  {% endif %}
+
+  <div class="section-title"><h2>Other trades in {{ area.name }}</h2></div>
+  <p class="small">{% for c in others[:12] %}<a href="{{ url_for('find_local', cat_slug=c.slug, area_slug=area.slug) }}">{{ c.name }}</a>{{ ' · ' if not loop.last }}{% endfor %}</p>
+</div>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Tradies in {{ area.name }} — get up to {{ cfg.MAX_QUOTES }} quotes | {{ cfg.BRAND }}{% endblock %}
+{% block description %}Need a tradie in {{ area.name }}? Post your job free on {{ cfg.BRAND }} and up to {{ cfg.TRADES_PER_JOB }} local trades see it. You get up to {{ cfg.MAX_QUOTES }} quotes.{% endblock %}
+{% block main %}
+<div class="wrap page narrow">
+  <p class="small"><a href="{{ url_for('find_index') }}">← All areas</a></p>
+  <h1 style="font-size:clamp(30px,4vw,44px)">Tradies in {{ area.name }}</h1>
+  <p class="lede">Post your job once and up to {{ cfg.TRADES_PER_JOB }} local trades in that trade see it. You get up to {{ cfg.MAX_QUOTES }} quotes, and your name and address stay private until you choose someone.</p>
+  <p style="margin:20px 0"><a class="btn" href="{{ url_for('post_job', area=area.slug) }}">Post a job in {{ area.name }} — free</a></p>
+
+  <div class="section-title"><h2>Trades</h2></div>
+  <div class="card table-wrap" style="padding:6px 10px">
+    <table>
+      <tbody>
+        {% for c in categories %}
+        <tr>
+          <td><a href="{{ url_for('find_local', cat_slug=c.slug, area_slug=area.slug) }}"><b>{{ c.name }}</b></a></td>
+          <td class="small muted num">{% if covering.get(c.id) %}{{ covering[c.id] }} covering this area{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if nearby %}
+  <div class="section-title"><h2>Nearby areas</h2></div>
+  <p class="small">{% for a in nearby %}<a href="{{ url_for('find_area', area_slug=a.slug) }}">{{ a.name }}</a>{{ ' · ' if not loop.last }}{% endfor %}</p>
+  {% endif %}
+</div>
+{% endblock %}
