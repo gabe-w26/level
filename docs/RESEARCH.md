@@ -27,7 +27,7 @@ Based on Trustpilot reviews at 1 and 2 stars, which are mostly from tradies. The
 ### What homeowners complain about
 
 1. Unreliable tradies.
-2. Deposit theft. RNZ (26 August 2025) reported a builder who passed the checks, had no LBP licence, and took more than $60k.
+2. Deposit theft. RNZ (26 August 2025) reported about six clients who lost tens of thousands of dollars to one builder who then vanished. (The story does not say the builder was unlicensed — an earlier version of this note claimed that, and it was wrong.)
 3. Weak handling of disputes.
 4. Confusing terminology.
 
