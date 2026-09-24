@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% import '_macros.html' as m with context %}
+{% block title %}Numbers — admin{% endblock %}
+{% macro pct(v) %}{% if v is none %}<span class="muted">—</span>{% else %}{{ '%.0f'|format(v * 100) }}%{% endif %}{% endmacro %}
+{% macro num(v, dp=1) %}{% if v is none %}<span class="muted">—</span>{% else %}{{ ('%.' ~ dp ~ 'f')|format(v) }}{% endif %}{% endmacro %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Numbers</h1>
+      <p class="muted">Counted from the database right now. A rate only shows once there’s something to divide by.</p>
+    </div>
+    <div class="actions">
+      {% for label, d in windows %}
+      <a class="btn btn-sm {{ 'btn-ghost' if days != d }}" href="{{ url_for('admin_numbers', days=d or 'all') }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="section-title"><h2>Jobs</h2><span class="label">the funnel</span></div>
+  <div class="admin-stats">
+    <div><b>{{ data.jobs.posted }}</b><span class="small muted">posted</span></div>
+    <div><b>{{ data.jobs.quoted }}</b><span class="small muted">got a quote · {{ pct(data.jobs.quoted_rate) }}</span></div>
+    <div><b>{{ data.jobs.hired }}</b><span class="small muted">hired someone</span></div>
+    <div><b>{{ pct(data.jobs.hire_rate) }}</b><span class="small muted">hire rate, of {{ data.jobs.settled }} finished jobs</span></div>
+    <div><b>{{ num(data.jobs.hours_to_first_quote) }}</b><span class="small muted">hours to the first quote (middle job)</span></div>
+    <div><b>{{ num(data.jobs.avg_quotes) }}</b><span class="small muted">quotes per job on average</span></div>
+    <div><b>{{ data.jobs.full }}</b><span class="small muted">filled all {{ cfg.MAX_QUOTES }} slots</span></div>
+    <div><b>{{ data.jobs.no_quotes }}</b><span class="small muted">finished with no quotes at all</span></div>
+  </div>
+  <p class="small muted" style="margin-top:10px">
+    Hire rate counts jobs that reached an end — hired, closed or expired — so jobs still taking quotes don’t drag it down.
+    {% if data.jobs.hired_elsewhere %}{{ data.jobs.hired_elsewhere }} customer{{ 's' if data.jobs.hired_elsewhere != 1 }} told us they hired someone found elsewhere.{% endif %}
+    No competitor publishes this number. Once it’s steady, publishing it is a real point of difference.
+  </p>
+
+  <div class="section-title"><h2>Trades</h2><span class="label">are they quoting?</span></div>
+  <div class="admin-stats">
+    <div><b>{{ data.offers.sent }}</b><span class="small muted">jobs offered</span></div>
+    <div><b>{{ pct(data.offers.quote_rate) }}</b><span class="small muted">of finished offers were quoted on</span></div>
+    <div><b>{{ pct(data.offers.lapse_rate) }}</b><span class="small muted">ran out of time</span></div>
+    <div><b>{{ data.offers.declined }}</b><span class="small muted">passed on</span></div>
+    <div><b>{{ data.trades.taking_jobs }}</b><span class="small muted">taking jobs now</span></div>
+    <div><b>{{ pct(data.trades.quoting_rate) }}</b><span class="small muted">of them quoted in this window</span></div>
+    <div><b>{{ data.trades.joined }}</b><span class="small muted">joined</span></div>
+    <div><b>{{ data.trades.paused }} / {{ data.trades.cancelled }}</b><span class="small muted">paused / cancelled</span></div>
+  </div>
+  <p class="small muted" style="margin-top:10px">
+    {{ data.trades.checked }} of {{ data.trades.total }} businesses have at least one check done (licence, NZBN or insurance).
+    A high lapse rate means jobs are sitting unquoted — that’s the number to watch if customers complain about silence.
+  </p>
+
+  <div class="section-title"><h2>Customers</h2></div>
+  <div class="admin-stats">
+    <div><b>{{ data.customers.joined }}</b><span class="small muted">joined</span></div>
+    <div><b>{{ data.customers.posted_ever }}</b><span class="small muted">have posted a job, ever</span></div>
+    <div><b>{{ pct(data.customers.repeat_rate) }}</b><span class="small muted">came back and posted again</span></div>
+    <div><b>{{ pct(data.customers.review_rate) }}</b><span class="small muted">of hired jobs got a review</span></div>
+  </div>
+
+  <div class="section-title"><h2>Progress updates</h2><span class="label">the promise</span></div>
+  <div class="admin-stats">
+    <div><b>{{ pct(data.reporting.promise_rate) }}</b><span class="small muted">of quotes promise updates</span></div>
+    <div><b>{{ pct(data.reporting.on_time) }}</b><span class="small muted">of promised updates arrived on time</span></div>
+    <div><b>{{ data.reporting.kept }}/{{ data.reporting.expected }}</b><span class="small muted">across {{ data.reporting.jobs }} job{{ 's' if data.reporting.jobs != 1 }}</span></div>
+  </div>
+
+  <div class="section-title"><h2>Outreach</h2><span class="label">free leads by email</span></div>
+  <div class="admin-stats">
+    <div><b>{{ data.outreach.sent }}</b><span class="small muted">emails sent</span></div>
+    <div><b>{{ pct(data.outreach.click_rate) }}</b><span class="small muted">clicked the link</span></div>
+    <div><b>{{ data.outreach.businesses }}</b><span class="small muted">businesses contacted</span></div>
+    <div><b>{{ pct(data.outreach.join_rate) }}</b><span class="small muted">of them joined</span></div>
+    <div><b>{{ pct(data.outreach.opt_out_rate) }}</b><span class="small muted">opted out</span></div>
+  </div>
+  <p class="small muted" style="margin-top:10px">If the opt-out rate climbs above about 5%, the email is wrong or the list is wrong — stop and look before sending more.</p>
+</div>
+{% endblock %}

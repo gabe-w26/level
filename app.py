@@ -32,6 +32,7 @@ import engine
 import integrations
 import local_pages
 import mailer
+import metrics
 import outreach
 import push
 import referrals
@@ -2055,6 +2056,16 @@ def admin_claim(claim_id, action):
     except RuleError as e:
         flash(str(e), 'error')
     return redirect(url_for('admin_claims'))
+
+
+@app.route('/admin/numbers')
+@requires('admin')
+def admin_numbers():
+    """How the marketplace is actually doing: posted, quoted, hired."""
+    days = request.args.get('days', '30')
+    days = int(days) if days.isdigit() else None
+    return render_template('admin/numbers.html', data=metrics.everything(db(), days), days=days,
+                           windows=metrics.WINDOWS)
 
 
 @app.route('/admin/reports')
