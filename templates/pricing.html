@@ -22,7 +22,8 @@
           {% elif key == 'medium' %}<li>Renovations, decks, re-roofs, rewires</li><li>Includes every job under $5,000</li>
           {% else %}<li>New builds, extensions, full renovations</li><li>Includes every job under $50,000</li>{% endif %}
           <li>Jobs offered by fair rotation</li>
-          <li>No-job guarantee</li>
+          <li>No-job guarantee, paid back automatically</li>
+          <li>Month to month — no fixed term</li>
         </ul>
         <a class="btn{% if key != 'medium' %} btn-ghost{% endif %}" href="{{ url_for('signup') }}">Start with {{ t.name }}</a>
       </div>
@@ -67,7 +68,7 @@
   <div class="wrap narrow">
     <h2>Plan questions</h2>
     <div class="faq">
-      <details><summary>Is there a contract?</summary><p>No. Plans are month to month. Cancel online in one click and you keep getting jobs until the end of the month you’ve paid for.</p></details>
+      <details><summary>Is there a contract?</summary><p>No. Plans are month to month — there’s no introductory term that renews into a longer one, and no cancellation fee. Cancel online in one click and you keep getting jobs until the end of the month you’ve paid for.</p></details>
       <details><summary>Can I change plans?</summary><p>Any time, from your Plan page. The change applies straight away.</p></details>
       <details><summary>How many jobs will I get?</summary><p>That depends on how many jobs are posted in your trade and area. Your dashboard shows how many you were offered next to the average for trades on your plan in your trade and area, so you can see the rotation is fair.</p></details>
       <details><summary>What if I’m flat out?</summary><p>Pause new jobs for one, two or four weeks from your dashboard. If you let {{ cfg.AUTO_PAUSE_AFTER }} jobs in a row run out without quoting, we pause them for you so customers aren’t left waiting.</p></details>
