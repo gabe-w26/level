@@ -65,6 +65,36 @@
     <div><b>{{ data.reporting.kept }}/{{ data.reporting.expected }}</b><span class="small muted">across {{ data.reporting.jobs }} job{{ 's' if data.reporting.jobs != 1 }}</span></div>
   </div>
 
+  <div class="section-title"><h2>How well checked the trades are</h2><span class="label">trust</span></div>
+  <div class="admin-stats">
+    <div><b>{{ num(data.trust.median, 0) }}</b><span class="small muted">middle score, of {{ data.trust.scored }} businesses</span></div>
+    <div><b>{{ data.trust.bands['Well checked'] }}</b><span class="small muted">well checked (75+)</span></div>
+    <div><b>{{ data.trust.bands['Part way checked'] }}</b><span class="small muted">part way (50–74)</span></div>
+    <div><b>{{ data.trust.bands['Just getting started'] }}</b><span class="small muted">just getting started</span></div>
+    <div><b>{{ data.trust.photos }}</b><span class="small muted">added a photo</span></div>
+    <div><b>{{ data.trust.ids }}</b><span class="small muted">ID matched to that photo</span></div>
+    <div><b>{{ data.trust.vetted }}</b><span class="small muted">showed police vetting</span></div>
+    <div><b>{{ data.trust.referees_rung }}</b><span class="small muted">referees rung</span></div>
+  </div>
+  <p class="small muted" style="margin-top:10px">
+    The score is shown to customers and never used to decide who gets offered a job. Every point comes from
+    something we checked, something that happened here, or something the tradie chose to add.
+    A low middle score usually means <a href="{{ url_for('admin_trades', show='unchecked') }}">checks are waiting on you</a>,
+    not that the trades are bad.
+  </p>
+
+  <div class="section-title"><h2>Did the job go to the right trade?</h2><span class="label">the routing check</span></div>
+  <div class="admin-stats">
+    <div><b>{{ data.routing.checked }}</b><span class="small muted">of {{ data.routing.of }} jobs checked · {{ pct(data.routing.checked_rate) }}</span></div>
+    <div><b>{{ data.routing.disagreed }}</b><span class="small muted">where it suggested a different trade</span></div>
+    <div><b>{{ pct(data.routing.disagree_rate) }}</b><span class="small muted">of checked jobs</span></div>
+  </div>
+  <p class="small muted" style="margin-top:10px">
+    It only suggests — the customer decides, on their own job page. Nothing is checked at all unless an
+    Anthropic key is set in <a href="{{ url_for('admin_setup') }}">Setup</a>. If it disagrees with more than a
+    few percent of jobs, read a handful before trusting it.
+  </p>
+
   <div class="section-title"><h2>Outreach</h2><span class="label">free leads by email</span></div>
   <div class="admin-stats">
     <div><b>{{ data.outreach.sent }}</b><span class="small muted">emails sent</span></div>
@@ -73,6 +103,12 @@
     <div><b>{{ pct(data.outreach.join_rate) }}</b><span class="small muted">of them joined</span></div>
     <div><b>{{ pct(data.outreach.opt_out_rate) }}</b><span class="small muted">opted out</span></div>
   </div>
-  <p class="small muted" style="margin-top:10px">If the opt-out rate climbs above about 5%, the email is wrong or the list is wrong — stop and look before sending more.</p>
+  <div class="admin-stats" style="margin-top:10px">
+    <div><b>{{ data.outreach.topped_up }}</b><span class="small muted">jobs the software emailed about on its own</span></div>
+    <div><b>{{ data.outreach.topup_sent }}</b><span class="small muted">businesses asked that way</span></div>
+    <div><b>{{ data.outreach.nobody_to_ask }}</b><span class="small muted">short jobs with nobody left to ask</span></div>
+  </div>
+  <p class="small muted" style="margin-top:10px">If the opt-out rate climbs above about 5%, the email is wrong or the list is wrong — stop and look before sending more.
+    “Nobody left to ask” means the prospect list has run dry for that trade and area — that is where to go looking for more businesses.</p>
 </div>
 {% endblock %}

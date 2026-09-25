@@ -189,9 +189,18 @@ export function Notice({ children, tone = 'chalk', title }: { children?: React.R
   return (
     <View style={[styles.notice, { backgroundColor: t.bg, borderLeftColor: t.fg }]}>
       {title ? <Text style={[styles.noticeTitle, { color: t.fg }]}>{title}</Text> : null}
-      {typeof children === 'string' ? <Text style={styles.body}>{children}</Text> : children}
+      {/* Wrap loose text ourselves. React Native throws a fatal — not a warning —
+          if a bare string reaches a View, and `{'a'} {b} {'c'}` arrives here as an
+          array of strings, which the old `typeof children === 'string'` check
+          missed. That crashed the quote form. */}
+      {isAllText(children) ? <Text style={styles.body}>{children}</Text> : children}
     </View>
   );
+}
+
+function isAllText(children: React.ReactNode) {
+  const kids = React.Children.toArray(children);
+  return kids.length > 0 && kids.every((c) => typeof c === 'string' || typeof c === 'number');
 }
 
 export function ErrorText({ children }: { children?: string | null }) {

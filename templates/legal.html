@@ -74,6 +74,8 @@
     <li><b>Everyone:</b> name, email, phone, password (stored scrambled, never in plain text), and what you do on the site.</li>
     <li><b>Customers:</b> the jobs you post, including the suburb, any street address you add, photos and messages.</li>
     <li><b>Tradespeople:</b> business name, the trades and areas you cover, licence or registration numbers, NZBN, insurance details, quotes and messages.</li>
+    <li><b>Tradespeople, only if you choose to add them:</b> a photo of yourself, the fact that we’ve seen photo ID matching it, the fact that you showed us a police vetting result, and the name and contact details of referees. Every one of these is optional, you can remove any of them, and none of them affects which jobs you’re offered.</li>
+    <li><b>On a job that’s been won:</b> site details either side fills in, site notes and photos, and the tradesperson’s pre-start check. Only the two people on that job can see any of it.</li>
     <li><b>Technical:</b> your IP address and browser, kept in server logs for security.</li>
   </ul>
 
@@ -86,13 +88,29 @@
   </ul>
 
   <h2>Checks we make</h2>
-  <p>For tradespeople, we check licence and registration numbers against the public registers run by the Licensed Building Practitioners scheme, the Electrical Workers Registration Board and the Plumbers, Gasfitters and Drainlayers Board, and we check NZBN details against the New Zealand Business Number register. We record what we checked and when.</p>
+  <p>For tradespeople, we check licence and registration numbers against the public registers run by the Licensed Building Practitioners scheme, the Electrical Workers Registration Board and the Plumbers, Gasfitters and Drainlayers Board, and we check NZBN details against the New Zealand Business Number register, and we may look at the Companies Office record for the business. We record what we checked and when.</p>
+
+  <h2>Photo ID and police vetting</h2>
+  <p>A tradesperson can choose to show us photo ID, so we can confirm the photo on their profile is really them, and can choose to show us a police vetting result they requested themselves from the New Zealand Police.</p>
+  <p><b>We do not keep either document, and we do not record what a vetting result says.</b> All we store is that we saw it and the date. You can ask us to remove that at any time, and it disappears from your profile immediately.</p>
+  <p>We never request vetting on your behalf, and we never ask you for a criminal history. Whether to get one, and whether to show it to us, is entirely yours.</p>
+
+  <h2>Referees</h2>
+  <p>If you give us a referee, you are giving us someone else’s name and contact details. <b>Please tell them first</b> — the Privacy Act expects a person to know when their information has been handed over. We use their details for one thing only: to ring or email them once about your work. We don’t add them to any mailing list, and we delete their details if you remove them or close your account.</p>
+
+  <h2>The trust score</h2>
+  <p>Each tradesperson has a score out of 100 shown to customers. It is built only from three things: what we have checked ourselves, what has actually happened on {{ cfg.BRAND }}, and what the tradesperson chose to add. <b>We do not buy data about you, we do not look you up anywhere except the public business and licensing registers named above, and nothing about your private life goes into it unless you handed it to us yourself.</b></p>
+  <p>Every point is itemised on your own page at <a href="{{ url_for('trade_trust') }}">how you look to customers</a>, so you can see exactly how the number was reached and tell us if something is wrong. <b>The score never affects which jobs you are offered.</b> Jobs go out on fair rotation — whoever has been offered the fewest goes first — and no score, review or payment changes that.</p>
+
+  <h2>Businesses we email a free lead to</h2>
+  <p>We keep a list of trade businesses in the regions we cover, built from their own public websites and listings: business name, the trade, the area and a business email address. When a real job is posted that matches, we may email the business once to offer it.</p>
+  <p>We send at most <b>three</b> emails to a business that never replies, and never more than one per job. Every email has a one-click unsubscribe, and once someone opts out it is permanent — importing the list again will not switch them back on. To be removed at any time, email <a href="mailto:{{ cfg.SUPPORT_EMAIL }}">{{ cfg.SUPPORT_EMAIL }}</a>.</p>
 
   <h2>Emails</h2>
   <p>We email you about jobs, quotes and messages. Turn those off in your settings or with the unsubscribe link in any of them. We’ll still email about your account, such as password resets.</p>
 
   <h2>How long we keep things</h2>
-  <p>Job and quote records are kept while your account is open, so both sides have a record of what was agreed. When you close your account we delete your name, phone and email. Reviews stay, without your surname.</p>
+  <p>Job and quote records are kept while your account is open, so both sides have a record of what was agreed. When you close your account we delete your name, phone and email, along with your photo, any record that we saw your ID or a vetting result, and your referees’ details. Reviews stay, without your surname. Site notes and pre-start checks stay on the job, because they are a record both sides may need.</p>
 
   <h2>Keeping it safe</h2>
   <p>Data is sent over an encrypted connection and passwords are stored scrambled. If a breach happens that could seriously harm anyone, we’ll tell the people affected and the Privacy Commissioner.</p>
@@ -101,7 +119,7 @@
   <p>You can ask for a copy of what we hold about you, or ask us to correct it. Email <a href="mailto:{{ cfg.SUPPORT_EMAIL }}">{{ cfg.SUPPORT_EMAIL }}</a> and we’ll reply within 20 working days. If you’re not happy with our answer you can complain to the Office of the Privacy Commissioner at privacy.org.nz.</p>
 
   <h2>Someone else’s details</h2>
-  <p>If you post a job using another person’s details, for example a tenant at the property, tell them you’ve done it. The Privacy Act requires people to be told when their information is collected from someone else.</p>
+  <p>If you post a job using another person’s details, for example a tenant at the property, tell them you’ve done it. The same goes for a referee, or anyone you name in a site note. The Privacy Act requires people to be told when their information is collected from someone else.</p>
 
   <h2>Cookies</h2>
   <p>We use one cookie, to keep you logged in. There is no advertising or tracking on this site.</p>

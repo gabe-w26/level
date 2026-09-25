@@ -137,6 +137,37 @@ class MetricsTest(unittest.TestCase):
         m = metrics.trades(self.db, at=T0)
         self.assertEqual((m['taking_jobs'], m['paused']), (0, 1))
 
+    # ── the new sections ──
+    def test_trust_counts_are_grouped_not_averaged(self):
+        trade = self.user('trade')
+        self.db.execute('UPDATE trades SET trust_score = 80 WHERE user_id = ?', (trade,))
+        other = self.user('trade')
+        self.db.execute('UPDATE trades SET trust_score = 20 WHERE user_id = ?', (other,))
+        self.db.commit()
+        m = metrics.trust_scores(self.db, at=T0)
+        self.assertEqual(m['scored'], 2)
+        self.assertEqual(m['median'], 50)
+        self.assertEqual(m['bands']['Well checked'], 1)
+        self.assertEqual(m['bands']['Just getting started'], 1)
+
+    def test_trust_is_none_rather_than_zero_when_nothing_is_scored(self):
+        self.assertIsNone(metrics.trust_scores(self.db, at=T0)['median'])
+
+    def test_routing_counts_only_what_was_actually_checked(self):
+        customer = self.user()
+        job_id = self.job(customer)
+        m = metrics.routing(self.db, at=T0)
+        self.assertEqual((m['checked'], m['disagreed']), (0, 0))
+        self.assertIsNone(m['disagree_rate'])
+
+        plumber = self.db.execute("SELECT id FROM categories WHERE slug = 'plumber'").fetchone()['id']
+        self.db.execute('UPDATE jobs SET routed_at = ?, routed_category_id = ? WHERE id = ?',
+                        (ts(T0), plumber, job_id))
+        self.db.commit()
+        m = metrics.routing(self.db, at=T0)
+        self.assertEqual((m['checked'], m['disagreed']), (1, 1))
+        self.assertEqual(m['disagree_rate'], 1.0)
+
     # ── the page ──
     def test_page_loads_for_admin_only(self):
         admin = self.db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id").fetchone()

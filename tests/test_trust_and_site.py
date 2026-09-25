@@ -205,6 +205,34 @@ class TrustScoreTest(Base):
         self.assertEqual(counts.get(low), 6)
 
 
+class ClosingAnAccountTest(Base):
+    """The privacy page promises these go. It has to be true."""
+
+    def test_closing_a_trade_account_removes_the_optional_personal_things(self):
+        import accounts
+        tid = self.user('trade')
+        self.db.execute("UPDATE trades SET photo = 'me.jpg', photo_at = ?, photo_checked_at = ?, "
+                        "id_checked_at = ?, vetting_status = 'seen', vetting_at = ?, "
+                        "vetting_note = 'seen in person' WHERE user_id = ?", (ts(T0),) * 4 + (tid,))
+        self.db.execute('INSERT INTO trade_referees (trade_id, name, phone, created_at) VALUES (?,?,?,?)',
+                        (tid, 'Aroha Ngata', '021 555 0100', ts(T0)))
+        self.db.commit()
+
+        user = self.db.execute('SELECT * FROM users WHERE id = ?', (tid,)).fetchone()
+        accounts.close(self.db, user, at=T0)
+
+        row = self.trade(tid)
+        self.assertIsNone(row['photo'])
+        self.assertIsNone(row['photo_checked_at'])
+        self.assertIsNone(row['id_checked_at'])
+        self.assertIsNone(row['vetting_status'])
+        self.assertIsNone(row['vetting_note'])
+        # The referee never had an account here; their details are not this
+        # person's to leave behind.
+        self.assertEqual(self.db.execute('SELECT COUNT(*) AS n FROM trade_referees WHERE trade_id = ?',
+                                         (tid,)).fetchone()['n'], 0)
+
+
 class PhotoTest(Base):
 
     def png(self):

@@ -89,6 +89,13 @@ def close(db, user, at=None):
                    'WHERE user_id = ?', (user['id'],))
         db.execute("UPDATE offers SET status = 'closed', resolved_at = ? WHERE trade_id = ? AND status = 'active'",
                    (now_s, user['id']))
+        # The optional personal things go with the account, as the privacy page
+        # promises. The referees' details are not even this person's to leave
+        # behind — they belong to whoever agreed to vouch for them.
+        db.execute('UPDATE trades SET photo = NULL, photo_at = NULL, photo_checked_at = NULL, '
+                   'id_checked_at = NULL, vetting_status = NULL, vetting_at = NULL, vetting_note = NULL '
+                   'WHERE user_id = ?', (user['id'],))
+        db.execute('DELETE FROM trade_referees WHERE trade_id = ?', (user['id'],))
 
     db.execute('UPDATE users SET name = ?, email = ?, phone = NULL, password_hash = ?, email_alerts = 0, '
                'unsub_token = NULL, closed_at = ? WHERE id = ?',

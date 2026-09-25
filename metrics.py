@@ -124,9 +124,61 @@ def outreach(db, at=None):
     joined = db.execute("SELECT COUNT(*) AS n FROM prospects WHERE status = 'signed_up'").fetchone()['n']
     opted_out = db.execute("SELECT COUNT(*) AS n FROM prospects WHERE status = 'unsubscribed' "
                            "OR status = 'not_interested'").fetchone()['n']
+    # Jobs the software emailed about on its own, because there weren't enough
+    # trades here to fill the slots. Worth watching separately: it is the only
+    # email that goes out without somebody pressing Send.
+    topped = db.execute('SELECT COUNT(*) AS n FROM jobs WHERE topup_at IS NOT NULL').fetchone()['n']
+    topup_sent = db.execute('SELECT COALESCE(SUM(topup_sent), 0) AS n FROM jobs').fetchone()['n']
+    short = db.execute("SELECT COUNT(*) AS n FROM jobs WHERE status = 'open' AND topup_at IS NOT NULL "
+                       'AND topup_sent = 0').fetchone()['n']
     return {'sent': sent, 'clicked': clicked, 'click_rate': _rate(clicked, sent), 'businesses': businesses,
             'joined': joined, 'join_rate': _rate(joined, businesses), 'opted_out': opted_out,
-            'opt_out_rate': _rate(opted_out, businesses)}
+            'opt_out_rate': _rate(opted_out, businesses),
+            'topped_up': topped, 'topup_sent': topup_sent, 'nobody_to_ask': short}
+
+
+def routing(db, at=None):
+    """Is the trade check earning its keep, and is it right?
+
+    `moved` is the number the customer agreed with; that is the only real
+    measure of whether the suggestions are any good.
+    """
+    checked = db.execute('SELECT COUNT(*) AS n FROM jobs WHERE routed_at IS NOT NULL').fetchone()['n']
+    disagreed = db.execute('SELECT COUNT(*) AS n FROM jobs WHERE routed_category_id IS NOT NULL '
+                           'AND routed_category_id <> category_id').fetchone()['n']
+    total = db.execute('SELECT COUNT(*) AS n FROM jobs').fetchone()['n']
+    return {'checked': checked, 'of': total, 'checked_rate': _rate(checked, total),
+            'disagreed': disagreed, 'disagree_rate': _rate(disagreed, checked)}
+
+
+def trust_scores(db, at=None):
+    """How well checked the businesses on Level actually are.
+
+    No average: one number would hide the shape, and the shape is the useful
+    part — a board of half-checked trades is a different problem from a few
+    unchecked ones.
+    """
+    import trust
+    rows = db.execute("SELECT t.trust_score AS s FROM trades t JOIN users u ON u.id = t.user_id "
+                      "WHERE u.closed_at IS NULL AND t.sub_status <> 'closed'").fetchall()
+    scores = [r['s'] for r in rows if r['s'] is not None]
+    bands = {'Well checked': 0, 'Part way checked': 0, 'Just getting started': 0}
+    for score in scores:
+        bands[trust.band_for(score)] = bands.get(trust.band_for(score), 0) + 1
+    with_photo = db.execute('SELECT COUNT(*) AS n FROM trades WHERE photo IS NOT NULL').fetchone()['n']
+    with_id = db.execute('SELECT COUNT(*) AS n FROM trades WHERE id_checked_at IS NOT NULL').fetchone()['n']
+    vetted = db.execute("SELECT COUNT(*) AS n FROM trades WHERE vetting_status = 'seen'").fetchone()['n']
+    referees = db.execute('SELECT COUNT(*) AS n FROM trade_referees WHERE checked_at IS NOT NULL').fetchone()['n']
+    return {'scored': len(scores), 'bands': bands, 'median': _median(scores),
+            'photos': with_photo, 'ids': with_id, 'vetted': vetted, 'referees_rung': referees}
+
+
+def _median(values):
+    if not values:
+        return None
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    return ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
 
 
 def reporting(db, at=None):
@@ -153,4 +205,5 @@ def everything(db, days=30, at=None):
     at = at or utcnow()
     return {'days': days, 'jobs': jobs(db, days, at), 'offers': offers(db, days, at),
             'trades': trades(db, days, at), 'customers': customers(db, days, at),
-            'outreach': outreach(db, at), 'reporting': reporting(db, at)}
+            'outreach': outreach(db, at), 'reporting': reporting(db, at),
+            'routing': routing(db, at), 'trust': trust_scores(db, at)}

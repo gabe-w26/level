@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
-import { api, QuoteInput, TradeJobDetail } from '../../lib/api';
+import { api, QuoteInput, QuoteItem, TradeJobDetail } from '../../lib/api';
+import { BLANK, LineItems, totals } from '../../components/LineItems';
 import { Button, Check, Choice, ErrorText, Field, Loading, Notice, Screen } from '../../components/ui';
 import { colors, radius, space } from '../../lib/theme';
 import { PlanPicker } from '../../components/Progress';
@@ -17,6 +18,7 @@ export default function QuoteForm() {
   const navigation = useNavigation();
   const [detail, setDetail] = useState<TradeJobDetail | null>(null);
   const [f, setF] = useState<QuoteInput>({ price_type: 'fixed', gst: 'incl', message: '', report_plan: [] });
+  const [items, setItems] = useState<QuoteItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (k: keyof QuoteInput) => (v: any) => setF((old) => ({ ...old, [k]: v }));
@@ -27,6 +29,7 @@ export default function QuoteForm() {
       setDetail(d);
       // New quotes start from the trade's usual promise (set on the website profile)
       if (!editing) setF((old) => ({ ...old, report_plan: d.default_report_plan || [] }));
+      setItems(d.items?.length ? d.items.map((i) => ({ ...i })) : []);
       if (editing && d.quote) {
         const q = d.quote;
         setF({
@@ -42,7 +45,11 @@ export default function QuoteForm() {
 
   if (!detail && !error) return <Loading />;
 
-  const top = Number((f.price_type === 'range' ? f.amount_high : f.amount_low)?.replace(/[^\d.]/g, '') || 0);
+  const broken = totals(items, f.gst === 'incl');
+  const typed = Number((f.price_type === 'range' ? f.amount_high : f.amount_low)?.replace(/[^\d.]/g, '') || 0);
+  // With a breakdown the lines are the price, so the $30k test has to read them
+  // and not the box the tradie stopped using.
+  const top = broken.total != null ? (f.gst === 'incl' ? broken.total : broken.subtotal!) : typed;
   const topInclGst = f.gst === 'incl' ? top : top * 1.15;
   const threshold = detail?.contract_threshold || 30000;
   const needsAct = f.price_type !== 'site_visit' && topInclGst >= threshold && detail?.job.property_type !== 'commercial';
@@ -54,13 +61,16 @@ export default function QuoteForm() {
       message: t.message || old.message, inclusions: t.inclusions || '', exclusions: t.exclusions || '',
       warranty: t.warranty || '', duration: t.duration || '',
     }));
+    if (t.items?.length) setItems(t.items.map((i) => ({ ...i })));
   }
 
   async function submit() {
     setBusy(true);
     setError(null);
     try {
-      const res = editing ? await api.editQuote(jobId, f) : await api.sendQuote(jobId, f);
+      const real = items.filter((i) => i.description.trim());
+      const body = { ...f, items: real.length ? real : undefined };
+      const res = editing ? await api.editQuote(jobId, body) : await api.sendQuote(jobId, body);
       Alert.alert(editing ? 'Quote updated' : 'Quote sent', res.message);
       router.back();
     } catch (e: any) {
@@ -93,7 +103,17 @@ export default function QuoteForm() {
       <Choice<PriceType> label="How do you want to price it?" value={f.price_type} onChange={set('price_type')}
         options={[{ key: 'fixed', label: 'Fixed price' }, { key: 'range', label: 'Price range' }, { key: 'site_visit', label: 'Site visit first' }]} />
       {f.price_type === 'fixed' ? (
-        <Field label="Your price ($)" value={f.amount_low} onChangeText={set('amount_low')} keyboardType="numeric" placeholder="e.g. 1800" />
+        broken.total != null ? (
+          <Notice tone="chalk">
+            <Text style={{ fontSize: 15, color: colors.ink }}>
+              Your breakdown below sets the price: ${(f.gst === 'incl' ? broken.total : broken.subtotal!)
+                .toLocaleString('en-NZ', { maximumFractionDigits: 0 })}{' '}
+              {f.gst === 'incl' ? 'incl. GST' : 'plus GST'}. Remove the lines to type a price instead.
+            </Text>
+          </Notice>
+        ) : (
+          <Field label="Your price ($)" value={f.amount_low} onChangeText={set('amount_low')} keyboardType="numeric" placeholder="e.g. 1800" />
+        )
       ) : null}
       {f.price_type === 'range' ? (
         <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -104,6 +124,14 @@ export default function QuoteForm() {
       {f.price_type !== 'site_visit' ? (
         <Choice<'incl' | 'excl'> label="GST" value={f.gst} onChange={set('gst')}
           options={[{ key: 'incl', label: 'Includes GST' }, { key: 'excl', label: 'Plus GST' }]} />
+      ) : null}
+      {f.price_type !== 'site_visit' ? (
+        items.length ? (
+          <LineItems items={items} units={detail?.units || []} gstIncluded={f.gst === 'incl'} onChange={setItems} />
+        ) : (
+          <Button title="Break the price down" icon="list-outline" variant="quiet" small
+            onPress={() => setItems([{ ...BLANK }, { ...BLANK }])} />
+        )
       ) : null}
       <Field label="Message to the customer" value={f.message} onChangeText={set('message')} multiline
         placeholder="How you’d do the job, what you’d need to check, anything they should know."

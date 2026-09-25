@@ -310,6 +310,8 @@ export interface TradeProfile {
 }
 
 export interface QuoteInput {
+  /** Optional breakdown. When present the lines set the price, not `amount_low`. */
+  items?: QuoteItem[];
   price_type: 'fixed' | 'range' | 'site_visit';
   amount_low?: string;
   amount_high?: string;
