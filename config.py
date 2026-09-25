@@ -46,7 +46,12 @@ QUIET_AFTER_HOURS = 24       # tell the customer if their job still has no quote
 # and Google locks the mailbox for 24 hours — which takes password resets and
 # job alerts down with it, not just the outreach. So we stop first, and outreach
 # stops well before anything a person is waiting on.
-MAIL_DAILY_CAP = int(os.environ.get('MAIL_DAILY_CAP', '400'))
+# Left unset, the cap follows whichever provider is actually sending — see
+# mailer.daily_cap(). Set MAIL_DAILY_CAP to override it, which is what you do
+# once you're on a paid plan and the provider's ceiling is the real one.
+MAIL_DAILY_CAP = int(os.environ.get('MAIL_DAILY_CAP') or 0)
+MAIL_CAP_SMTP = 400          # a free Gmail stops at about 500 a day
+MAIL_CAP_RESEND = 90         # Resend's free plan is about 100 a day
 MAIL_OUTREACH_SHARE = 0.6    # outreach may use this much of the cap; the rest is kept
                              # for password resets, job alerts and quote notifications
 

@@ -444,19 +444,20 @@ class DailyCapTest(unittest.TestCase):
         self.assertEqual(mailer.sent_today(self.db), 0)
 
     def test_leads_stop_long_before_the_things_people_wait_on(self):
-        share = int(config.MAIL_DAILY_CAP * config.MAIL_OUTREACH_SHARE)
+        # The effective cap, not the override — it now follows the provider.
+        share = int(mailer.daily_cap() * config.MAIL_OUTREACH_SHARE)
         self.already_sent(share)
         self.assertEqual(mailer.allowance(self.db, 'outreach'), 0, 'leads should be done')
         self.assertGreater(mailer.allowance(self.db, 'alert'), 0,
                            'password resets must still have room')
 
     def test_the_cap_is_a_floor_of_zero_not_a_negative(self):
-        self.already_sent(config.MAIL_DAILY_CAP + 50)
+        self.already_sent(mailer.daily_cap() + 50)
         self.assertEqual(mailer.allowance(self.db, 'alert'), 0)
         self.assertEqual(mailer.allowance(self.db, 'outreach'), 0)
 
     def test_a_capped_flush_sends_nothing_rather_than_erroring(self):
-        self.already_sent(config.MAIL_DAILY_CAP)
+        self.already_sent(mailer.daily_cap())
         with mock.patch.object(mailer, 'enabled', return_value=True):
             self.assertEqual(mailer.flush(self.db), 0)
         self.assertEqual(outreach._flush(self.db, 20), 0)

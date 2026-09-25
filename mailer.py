@@ -149,6 +149,19 @@ def sent_today(db, at=None):
     return alerts + leads
 
 
+def daily_cap():
+    """How many we'll send in a day, before the provider starts refusing.
+
+    Follows whichever provider is actually sending, because the two have very
+    different ceilings — a free Gmail is around 500 a day and Resend's free plan
+    around 100. Getting this wrong is quiet: the sends simply start failing.
+    Set MAIL_DAILY_CAP once you know your own plan's real limit.
+    """
+    if config.MAIL_DAILY_CAP:
+        return config.MAIL_DAILY_CAP
+    return config.MAIL_CAP_RESEND if how() == 'resend' else config.MAIL_CAP_SMTP
+
+
 def allowance(db, kind='alert', at=None):
     """How many more emails of this kind we may send before we stop.
 
@@ -158,7 +171,7 @@ def allowance(db, kind='alert', at=None):
     so they don't get the same headroom.
     """
     used = sent_today(db, at)
-    ceiling = config.MAIL_DAILY_CAP
+    ceiling = daily_cap()
     if kind == 'outreach':
         ceiling = int(ceiling * config.MAIL_OUTREACH_SHARE)
     return max(0, ceiling - used)

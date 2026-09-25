@@ -230,6 +230,21 @@ class ResendTest(unittest.TestCase):
         self.assertNotIn('html', body, 'plain text is deliberate')
         self.assertEqual(body['headers']['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click')
 
+    def test_the_daily_cap_follows_whichever_provider_is_sending(self):
+        """Getting this wrong is quiet: the sends just start failing."""
+        import config
+        self.assertEqual(mailer.daily_cap(), config.MAIL_CAP_SMTP)
+        self.use_resend()
+        self.assertEqual(mailer.daily_cap(), config.MAIL_CAP_RESEND)
+        self.assertLess(config.MAIL_CAP_RESEND, config.MAIL_CAP_SMTP,
+                        'Resend’s free plan is the tighter of the two')
+
+    def test_an_explicit_cap_beats_both_defaults(self):
+        import config
+        self.use_resend()
+        with mock.patch.object(config, 'MAIL_DAILY_CAP', 5000):
+            self.assertEqual(mailer.daily_cap(), 5000)
+
     def test_a_refusal_is_reported_not_raised(self):
         self.use_resend()
         err = mailer.urllib.error.HTTPError('u', 422, 'no', {}, io.BytesIO(b'{"message":"bad domain"}'))

@@ -107,10 +107,14 @@
       <div><b>{{ mail.leads_left }}</b><span class="small muted">free leads left</span></div>
     </div>
     <p class="small muted" style="margin-top:10px">
-      A free Gmail account sends about 500 a day over SMTP. Go past it and Google locks the mailbox for
-      24 hours, which takes password resets down with it — so {{ cfg.BRAND }} stops first, and stops sending
-      free leads well before anything a person is waiting on. Anything held simply goes out tomorrow.
-      Raise it with <code>MAIL_DAILY_CAP</code> once you’re sending from your own domain.
+      {% if mail.how == 'resend' %}Going out through <b>Resend</b>. The cap is {{ mail.cap }} a day, which
+      suits their free plan (about 100). On a paid plan, raise it with <code>MAIL_DAILY_CAP</code>.
+      {% elif mail.how == 'smtp' %}Going out over <b>SMTP</b>. A free Gmail sends about 500 a day; past that
+      Google locks the mailbox for 24 hours and takes password resets down with it, so we stop at
+      {{ mail.cap }}.
+      {% else %}Nothing is going out yet — add an email provider above.{% endif %}
+      {% if mail.pinned %}<b>MAIL_DAILY_CAP is set, so that figure is yours, not ours.</b>{% endif %}
+      Free leads stop well before anything a person is waiting on, and anything held goes out tomorrow.
     </p>
   </div>
 
