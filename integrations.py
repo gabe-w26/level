@@ -20,10 +20,12 @@ KEYS = {
     'twilio_from': 'TWILIO_FROM',
     'anthropic_key': 'ANTHROPIC_API_KEY',
     'site_url': 'BASE_URL',
+    'resend_key': 'RESEND_API_KEY',
+    'resend_secret': 'RESEND_WEBHOOK_SECRET',
     'docket_url': 'DOCKET_URL',
     'docket_key': 'DOCKET_KEY',
 }
-SECRET = {'smtp_pass', 'twilio_token', 'anthropic_key', 'docket_key'}
+SECRET = {'smtp_pass', 'twilio_token', 'anthropic_key', 'docket_key', 'resend_key', 'resend_secret'}
 PREFIX = 'integration.'
 
 _cache = {'at': 0.0, 'values': {}}

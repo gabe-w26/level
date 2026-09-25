@@ -8,6 +8,7 @@ marked down, and the app's CSRF guard would have done it.
 
 Run from the project folder:  python3 -m unittest discover tests -v
 """
+import io
 import os
 import sys
 import tempfile
@@ -167,6 +168,156 @@ class OneClickTest(unittest.TestCase):
         r = A.app.test_client().post('/login', data={'email': 'a@b.nz', 'password': 'x'})
         self.assertEqual(r.status_code, 400)
 
+
+
+class ResendTest(unittest.TestCase):
+    """The other way out. Same message, different transport."""
+
+    def setUp(self):
+        self.tmp = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
+        self.tmp.close()
+        dbmod._DATABASE = self.tmp.name
+        init_db()
+        A.app.testing = True
+        self.db = dbmod.get_db()
+        integrations._cache.update(at=10 ** 12, values={})
+
+    def tearDown(self):
+        integrations._cache.update(at=0, values={})
+        self.db.close()
+        os.unlink(self.tmp.name)
+
+    def use_resend(self, secret='whsec_' + __import__('base64').b64encode(b'k' * 24).decode()):
+        integrations.save(self.db, {'resend_key': 're_test_key', 'resend_secret': secret})
+        integrations.refresh(self.db, force=True)
+        return secret
+
+    def test_a_key_switches_the_transport_without_smtp(self):
+        self.assertIsNone(mailer.how())
+        self.use_resend()
+        self.assertEqual(mailer.how(), 'resend')
+        self.assertTrue(mailer.enabled(), 'no SMTP host, but it can still send')
+
+    def test_the_message_sent_to_resend_keeps_its_unsubscribe_headers(self):
+        self.use_resend()
+        captured = {}
+
+        class FakeResponse:
+            def read(self):
+                return b'{"id":"abc"}'
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def fake_open(request, timeout=None):
+            captured['url'] = request.full_url
+            captured['auth'] = request.headers.get('Authorization')
+            captured['body'] = __import__('json').loads(request.data.decode())
+            return FakeResponse()
+
+        with mock.patch.object(mailer.urllib.request, 'urlopen', fake_open):
+            ok = mailer.send('t@example.com', 'T', 'Builder job in Karori', 'Body',
+                             unsubscribe_url='https://level.co.nz/o/abc/stop')
+        self.assertTrue(ok)
+        self.assertEqual(captured['url'], 'https://api.resend.com/emails')
+        self.assertEqual(captured['auth'], 'Bearer re_test_key')
+        body = captured['body']
+        self.assertEqual(body['to'], ['t@example.com'])
+        self.assertIn('Body', body['text'])
+        self.assertNotIn('html', body, 'plain text is deliberate')
+        self.assertEqual(body['headers']['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click')
+
+    def test_a_refusal_is_reported_not_raised(self):
+        self.use_resend()
+        err = mailer.urllib.error.HTTPError('u', 422, 'no', {}, io.BytesIO(b'{"message":"bad domain"}'))
+        with mock.patch.object(mailer.urllib.request, 'urlopen', side_effect=err):
+            self.assertFalse(mailer.send('t@example.com', None, 'S', 'B'))
+
+
+class BounceHookTest(unittest.TestCase):
+    """A public endpoint that stops emails. It had better be signed."""
+
+    def setUp(self):
+        self.tmp = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
+        self.tmp.close()
+        dbmod._DATABASE = self.tmp.name
+        init_db()
+        A.app.testing = True
+        self.db = dbmod.get_db()
+        integrations._cache.update(at=10 ** 12, values={})
+        import base64
+        self.key = b'k' * 24
+        self.secret = 'whsec_' + base64.b64encode(self.key).decode()
+        integrations.save(self.db, {'resend_secret': self.secret})
+        integrations.refresh(self.db, force=True)
+        self.db.execute('INSERT INTO prospects (business_name, email, category_id, token, status, '
+                        "leads_sent, do_not_contact, created_at) VALUES ('X','dead@x.co.nz',1,'tk','sent',1,0,?)",
+                        (ts(utcnow()),))
+        self.db.commit()
+
+    def tearDown(self):
+        integrations._cache.update(at=0, values={})
+        self.db.close()
+        os.unlink(self.tmp.name)
+
+    def post(self, kind='email.bounced', sign=True, email='dead@x.co.nz', stamp=None):
+        import base64, hashlib, hmac, json as js, time as t
+        raw = js.dumps({'type': kind, 'data': {'to': [email]}}).encode()
+        msg_id, stamp = 'msg_1', str(stamp or int(t.time()))
+        headers = {'Content-Type': 'application/json'}
+        if sign:
+            signed = f'{msg_id}.{stamp}.'.encode() + raw
+            sig = base64.b64encode(hmac.new(self.key, signed, hashlib.sha256).digest()).decode()
+            headers.update({'svix-id': msg_id, 'svix-timestamp': stamp, 'svix-signature': f'v1,{sig}'})
+        return A.app.test_client().post('/hooks/resend', data=raw, headers=headers)
+
+    def status(self):
+        return self.db.execute("SELECT status, do_not_contact FROM prospects WHERE email = 'dead@x.co.nz'"
+                               ).fetchone()
+
+    def test_a_signed_bounce_stops_that_address_for_good(self):
+        r = self.post()
+        self.assertEqual(r.status_code, 200)
+        row = self.status()
+        self.assertEqual(row['status'], 'bounced')
+        self.assertEqual(row['do_not_contact'], 1)
+
+    def test_a_spam_complaint_counts_too(self):
+        self.post(kind='email.complained')
+        self.assertEqual(self.status()['status'], 'bounced')
+
+    def test_an_unsigned_post_changes_nothing(self):
+        """Otherwise anyone could stop us emailing a rival."""
+        self.assertEqual(self.post(sign=False).status_code, 403)
+        self.assertEqual(self.status()['do_not_contact'], 0)
+
+    def test_a_wrong_signature_changes_nothing(self):
+        import base64, hashlib, hmac, json as js, time as t
+        raw = js.dumps({'type': 'email.bounced', 'data': {'to': ['dead@x.co.nz']}}).encode()
+        stamp = str(int(t.time()))
+        bad = base64.b64encode(hmac.new(b'wrong' * 5, b'x', hashlib.sha256).digest()).decode()
+        r = A.app.test_client().post('/hooks/resend', data=raw, headers={
+            'svix-id': 'msg_1', 'svix-timestamp': stamp, 'svix-signature': f'v1,{bad}'})
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(self.status()['do_not_contact'], 0)
+
+    def test_an_old_replayed_event_is_refused(self):
+        self.assertEqual(self.post(stamp=1).status_code, 403)
+
+    def test_an_event_we_do_not_care_about_is_shrugged_off(self):
+        r = self.post(kind='email.delivered')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self.status()['do_not_contact'], 0)
+
+    def test_a_bounced_address_is_never_emailed_again(self):
+        self.post()
+        job = self.db.execute('SELECT * FROM jobs LIMIT 1').fetchone()
+        self.assertIsNone(job, 'no jobs here; the list filter is what matters')
+        self.assertEqual(self.db.execute("SELECT COUNT(*) AS n FROM prospects WHERE do_not_contact = 0 "
+                                         "AND email = 'dead@x.co.nz'").fetchone()['n'], 0)
 
 if __name__ == '__main__':
     unittest.main()

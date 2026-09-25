@@ -45,7 +45,7 @@ STATUSES = {
     'unsubscribed': 'Unsubscribed',
 }
 OPEN_STATUSES = ('new', 'sent', 'replied')
-STOPPED = ('not_interested', 'unsubscribed')
+STOPPED = ('not_interested', 'unsubscribed', 'bounced')
 _FROM_SHEET = {label.lower(): key for key, label in STATUSES.items()}
 
 EMAIL_RE = re.compile(r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}')
@@ -431,6 +431,28 @@ def _flush(db, limit):
 
 
 # ── What the business does with the email ─────────────────────────────────────
+
+def bounced(db, email, hard=True, at=None):
+    """An address that doesn't exist, or somebody who pressed "spam".
+
+    Both are permanent. Sending again to an address that bounced is the fastest
+    way to wreck a sending reputation, and a spam complaint is somebody telling
+    us in the clearest terms available. The list was built from public websites,
+    so some of it will be stale — this is what keeps the stale part from
+    poisoning the rest.
+    """
+    email = (email or '').strip().lower()
+    if not email:
+        return 0
+    n = db.execute("UPDATE prospects SET status = 'bounced', do_not_contact = 1, updated_at = ? "
+                   'WHERE LOWER(email) = ? AND do_not_contact = 0',
+                   (ts(at or utcnow()), email)).rowcount
+    # A real account too: stop emailing an address that no longer works.
+    if hard:
+        db.execute('UPDATE users SET email_alerts = 0 WHERE LOWER(email) = ?', (email,))
+    db.commit()
+    return n
+
 
 def by_token(db, token):
     return db.execute('SELECT * FROM prospects WHERE token = ?', (token or '',)).fetchone()

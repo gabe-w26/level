@@ -5,6 +5,9 @@ Routing, forms and access control. The business rules live in engine.py (who
 sees a job, the quote cap, redistribution, the guarantee) and billing.py
 (plans and refunds).
 """
+import base64
+import hmac
+import hashlib
 import functools
 import io
 import os
@@ -186,7 +189,7 @@ def _csrf_token():
 # by pressing it. Rejecting these would be far worse: we'd be telling Gmail we
 # honour one-click and then returning 400, which is exactly what gets a sender
 # marked down.
-NO_CSRF = {'stripe_webhook', 'outreach_stop', 'unsubscribe'}
+NO_CSRF = {'stripe_webhook', 'outreach_stop', 'unsubscribe', 'resend_hook'}
 
 
 @app.before_request
@@ -2174,6 +2177,12 @@ SETUP_GROUPS = [
      [('anthropic_key', 'Anthropic API key', 'sk-ant-…')]),
     ('Your web address', 'Used in every link we email or text. Set it once your own domain is connected.',
      [('site_url', 'Site address', 'https://level.co.nz')]),
+    ('Email provider (recommended for outreach)',
+     'A personal Gmail is fine for password resets. For cold outreach it is the weakest option there is — '
+     'you can’t sign as your own brand and Google may suspend the account. Paste a Resend key and we use '
+     'that instead, signed as your own domain. Add the webhook so a bounced address stops itself.',
+     [('resend_key', 'Resend API key', 're_…'),
+      ('resend_secret', 'Webhook signing secret', 'whsec_… — from the webhook you add in Resend')]),
     ('Docket', 'Connect Level to Docket once, here, and every tradie who uses both gets their won jobs '
                'there automatically — they don’t set anything up. Put the same key in Docket’s '
                'LEVEL_PLATFORM_KEY.',
@@ -2228,6 +2237,56 @@ def admin_setup():
                            mail=dict(sent_today=mailer.sent_today(db()), cap=config.MAIL_DAILY_CAP,
                                      alerts_left=mailer.allowance(db(), 'alert'),
                                      leads_left=mailer.allowance(db(), 'outreach')))
+
+
+@app.post('/hooks/resend')
+def resend_hook():
+    """Resend telling us an address bounced or somebody pressed "spam".
+
+    Both mean stop, permanently. Sending again to a dead address is the fastest
+    way to wreck a sending reputation, and with a list built from public
+    websites some of it will be stale.
+
+    Signed with Svix headers. We verify before believing a word of it — this
+    endpoint is public, and without the check anyone could post a rival's
+    address and have us stop emailing them.
+    """
+    secret = integrations.get('resend_secret')
+    raw = request.get_data()
+    if not _resend_signature_ok(secret, raw):
+        abort(403)
+    event = request.get_json(silent=True) or {}
+    kind = event.get('type') or ''
+    if kind not in ('email.bounced', 'email.complained'):
+        return {'ok': True, 'ignored': kind}, 200
+    data = event.get('data') or {}
+    to = data.get('to') or []
+    stopped = 0
+    for address in (to if isinstance(to, list) else [to]):
+        stopped += outreach.bounced(db(), address, hard=(kind == 'email.bounced'))
+    app.logger.info('resend %s: stopped %s address(es)', kind, stopped)
+    return {'ok': True, 'stopped': stopped}, 200
+
+
+def _resend_signature_ok(secret, raw):
+    """Svix signature check: v1,<base64 hmac> over "<id>.<timestamp>.<body>"."""
+    if not secret:
+        return False
+    msg_id = request.headers.get('svix-id', '')
+    stamp = request.headers.get('svix-timestamp', '')
+    sent = request.headers.get('svix-signature', '')
+    if not (msg_id and stamp and sent):
+        return False
+    try:
+        # Replays are worthless to an attacker but cheap to refuse.
+        if abs(time.time() - int(stamp)) > 300:
+            return False
+        key = base64.b64decode(secret.split('_', 1)[-1])
+    except Exception:
+        return False
+    signed = f'{msg_id}.{stamp}.'.encode() + raw
+    want = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
+    return any(secrets.compare_digest(part.split(',', 1)[-1], want) for part in sent.split(' ') if ',' in part)
 
 
 @app.route('/admin/deliverability', methods=['GET', 'POST'])

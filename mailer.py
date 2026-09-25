@@ -11,7 +11,10 @@ the terminal instead, so you can still click a reset link while testing.
 """
 import os
 import secrets
+import json
 import smtplib
+import urllib.error
+import urllib.request
 from datetime import timedelta
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
@@ -23,7 +26,14 @@ from engine import ts, utcnow
 
 
 def enabled():
-    return bool(integrations.get('smtp_host'))
+    return bool(integrations.get('resend_key') or integrations.get('smtp_host'))
+
+
+def how():
+    """Which way out the mail is taking, for the admin pages to report."""
+    if integrations.get('resend_key'):
+        return 'resend'
+    return 'smtp' if integrations.get('smtp_host') else None
 
 
 def _mail_from():
@@ -55,11 +65,21 @@ def _build(to_email, to_name, subject, body, unsubscribe_url=None, reply_to=None
 
 
 def send(to_email, to_name, subject, body, unsubscribe_url=None, reply_to=None):
-    """Send one message now. Returns True if it actually went out."""
+    """Send one message now. Returns True if it actually went out.
+
+    Two ways out. Resend when there's a key — better for anything cold, because
+    the mail is signed as your own domain and bounces come back to us. Plain
+    SMTP otherwise, which is fine for a handful of password resets.
+
+    The message is identical either way: plain text, one link, a real
+    unsubscribe. The transport is the only thing that changes.
+    """
     msg = _build(to_email, to_name, subject, body, unsubscribe_url, reply_to)
     if not enabled():
         print(f'\n[email not set up — would have sent]\nTo: {to_email}\nSubject: {subject}\n\n{body}\n', flush=True)
         return False
+    if integrations.get('resend_key'):
+        return _send_resend(msg, to_email, subject)
     try:
         port = int(integrations.get('smtp_port') or 587)
         with smtplib.SMTP(integrations.get('smtp_host'), port, timeout=20) as smtp:
@@ -70,6 +90,41 @@ def send(to_email, to_name, subject, body, unsubscribe_url=None, reply_to=None):
         return True
     except Exception as e:                       # never let email break a request
         print(f'[email] could not send to {to_email}: {e}', flush=True)
+        return False
+
+
+def _send_resend(msg, to_email, subject):
+    """Hand the message to Resend. Same headers as the SMTP path, so a
+    one-click unsubscribe still works and the body is still plain text."""
+    payload = {
+        'from': msg['From'],
+        'to': [to_email],
+        'subject': subject,
+        'text': msg.get_content(),
+        'headers': {k: msg[k] for k in ('List-Unsubscribe', 'List-Unsubscribe-Post') if msg[k]},
+    }
+    if msg['Reply-To']:
+        payload['reply_to'] = msg['Reply-To']
+    request = urllib.request.Request(
+        'https://api.resend.com/emails',
+        data=json.dumps(payload).encode(),
+        headers={'Authorization': f'Bearer {integrations.get("resend_key")}',
+                 'Content-Type': 'application/json'},
+        method='POST')
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            json.loads(response.read().decode() or '{}')
+        return True
+    except urllib.error.HTTPError as e:
+        detail = ''
+        try:
+            detail = json.loads(e.read().decode() or '{}').get('message', '')
+        except Exception:
+            pass
+        print(f'[email] Resend refused {to_email}: {e.code} {detail}', flush=True)
+        return False
+    except Exception as e:                       # never let email break a request
+        print(f'[email] Resend could not send to {to_email}: {e}', flush=True)
         return False
 
 
