@@ -20,8 +20,18 @@ export function Screen({ children, refreshing, onRefresh, style, keyboard }: {
       contentContainerStyle={[styles.screenContent, style]}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode={keyboard ? 'interactive' : 'on-drag'}
+      // iOS-only. Android gets the same effect from softwareKeyboardLayoutMode
+      // 'resize' in app.json, which resizes the window instead — set there
+      // explicitly rather than left to a default that could change.
       automaticallyAdjustKeyboardInsets
-      refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={colors.chalk} /> : undefined}
+      refreshControl={onRefresh ? (
+        <RefreshControl
+          refreshing={!!refreshing}
+          onRefresh={onRefresh}
+          tintColor={colors.chalk}          // iOS
+          colors={[colors.chalk]}           // Android reads this one instead
+        />
+      ) : undefined}
     >
       {children}
     </ScrollView>

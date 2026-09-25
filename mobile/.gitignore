@@ -13,3 +13,6 @@ android/
 npm-debug.*
 .DS_Store
 expo-env.d.ts
+
+# Firebase config for Android push — per-project, never committed.
+google-services.json
