@@ -267,6 +267,98 @@ class OutreachTest(unittest.TestCase):
 
 
 
+class VolumeFollowsTheJobTest(unittest.TestCase):
+    """How many emails go out is decided by what's actually happening on the job,
+    not by a schedule. Queue one, then let the job move on underneath it."""
+
+    def setUp(self):
+        self.tmp = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
+        self.tmp.close()
+        dbmod._DATABASE = self.tmp.name
+        init_db()
+        self.db = dbmod.get_db()
+        integrations._cache.update(at=10 ** 12, values={})
+        self.cat = self.db.execute("SELECT id FROM categories WHERE slug = 'builder'").fetchone()['id']
+        self.area = self.db.execute("SELECT id FROM areas WHERE slug = 'wellington'").fetchone()['id']
+        self.admin = self.db.execute("SELECT id, name, email FROM users WHERE role = 'admin' "
+                                     'ORDER BY id').fetchone()
+        self.customer = self.db.execute(
+            'INSERT INTO users (role, email, password_hash, name, created_at) '
+            "VALUES ('customer','sam@test.nz',?,'Sam',?)",
+            (hash_password('x'), ts(utcnow()))).lastrowid
+        self.db.commit()
+        self.job_id = engine.post_job(self.db, self.customer, dict(
+            category_id=self.cat, area_id=self.area, suburb='Karori', title='Deck repair',
+            description='Twelve square metres of soft boards out the back.',
+            value_band='medium', timing='weeks', property_type='house'))[0]
+        pid = self.db.execute(
+            'INSERT INTO prospects (business_name, email, category_id, token, status, leads_sent, '
+            "do_not_contact, created_at) VALUES ('Sparky','p@x.co.nz',?,'tk','new',0,0,?)",
+            (self.cat, ts(utcnow()))).lastrowid
+        self.db.execute('INSERT INTO prospect_areas (prospect_id, area_id) VALUES (?,?)', (pid, self.area))
+        self.db.commit()
+        self.job = self.db.execute('SELECT j.*, c.name AS category_name, a.name AS area_name FROM jobs j '
+                                   'JOIN categories c ON c.id = j.category_id '
+                                   'JOIN areas a ON a.id = j.area_id WHERE j.id = ?',
+                                   (self.job_id,)).fetchone()
+        self.pid = pid
+
+    def tearDown(self):
+        integrations._cache.update(at=0, values={})
+        self.db.close()
+        os.unlink(self.tmp.name)
+
+    def queue_one(self):
+        self.db.execute("DELETE FROM prospect_sends")
+        self.db.commit()
+        outreach.queue(self.db, self.job, [self.pid], 'A summary.', self.admin)
+
+    def flush(self):
+        with mock.patch.object(mailer, 'enabled', return_value=True), \
+             mock.patch.object(mailer, 'send', return_value=True) as send:
+            outreach._flush(self.db, 20)
+        return send.call_count
+
+    def test_a_queued_lead_goes_out_while_there_is_still_room(self):
+        self.queue_one()
+        self.assertEqual(self.flush(), 1)
+
+    def test_it_is_dropped_once_the_job_has_all_its_quotes(self):
+        """The email promises a slot. Three quotes in, there isn't one."""
+        self.queue_one()
+        self.db.execute('UPDATE jobs SET quote_count = ? WHERE id = ?',
+                        (engine.config.MAX_QUOTES, self.job_id))
+        self.db.commit()
+        self.assertEqual(self.flush(), 0)
+        self.assertEqual(self.db.execute("SELECT status FROM prospect_sends").fetchone()['status'],
+                         'skipped')
+
+    def test_it_is_dropped_once_the_customer_has_picked_someone(self):
+        self.queue_one()
+        self.db.execute("UPDATE jobs SET status = 'hired' WHERE id = ?", (self.job_id,))
+        self.db.commit()
+        self.assertEqual(self.flush(), 0)
+
+    def test_it_is_dropped_once_every_slot_is_taken_by_trades_already_here(self):
+        """Nothing to offer: fifteen locals hold it, even with no quotes in yet."""
+        self.queue_one()
+        now = ts(utcnow())
+        for i in range(engine.config.TRADES_PER_JOB):
+            self.db.execute('INSERT INTO offers (job_id, trade_id, wave, status, offered_at, expires_at) '
+                            "VALUES (?,?,1,'active',?,?)", (self.job_id, 9000 + i, now, now))
+        self.db.commit()
+        self.assertEqual(self.flush(), 0)
+
+    def test_the_business_keeps_its_three_emails_for_a_job_it_can_act_on(self):
+        """A dropped lead must not count against them."""
+        self.queue_one()
+        self.db.execute("UPDATE jobs SET status = 'hired' WHERE id = ?", (self.job_id,))
+        self.db.commit()
+        self.flush()
+        self.assertEqual(self.db.execute('SELECT leads_sent FROM prospects WHERE id = ?',
+                                         (self.pid,)).fetchone()['leads_sent'], 0)
+
+
 class StandingTest(unittest.TestCase):
     """What the email says about how the job is doing. All of it has to be true."""
 

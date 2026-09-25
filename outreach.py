@@ -401,6 +401,7 @@ def _flush(db, limit):
         "p.id AS prospect_id, p.token, p.first_name, p.business_name, p.email, p.website, p.status AS p_status, "
         "p.do_not_contact, j.id, j.title, j.suburb, j.value_band, j.status AS job_status, "
         "j.quote_count, j.timing, j.created_at AS job_created_at, "
+        "(SELECT COUNT(*) FROM offers o WHERE o.job_id = j.id AND o.status IN ('active','quoted')) AS taken, "
         "c.name AS category_name, a.name AS area_name "
         "FROM prospect_sends s JOIN prospects p ON p.id = s.prospect_id JOIN jobs j ON j.id = s.job_id "
         "JOIN categories c ON c.id = j.category_id JOIN areas a ON a.id = j.area_id "
@@ -409,7 +410,13 @@ def _flush(db, limit):
     sent = 0
     for r in rows:
         stale = parse_ts(r['queued_at']) < now - timedelta(hours=SEND_WINDOW_HOURS)
-        if (stale or r['job_status'] not in ('open', 'full') or r['do_not_contact']
+        # The email's whole promise is that there's a slot on this job. Between
+        # queueing it and sending it, other trades may have taken every slot or
+        # the customer may have picked someone — in which case the promise is no
+        # longer true. Hold the business for the next job instead of spending one
+        # of their three emails on a lead they can't act on.
+        no_room = (r['quote_count'] or 0) >= config.MAX_QUOTES or (r['taken'] or 0) >= config.TRADES_PER_JOB
+        if (stale or r['job_status'] != 'open' or no_room or r['do_not_contact']
                 or r['p_status'] in STOPPED or r['p_status'] == 'signed_up'):
             db.execute("UPDATE prospect_sends SET status = 'skipped' WHERE id = ?", (r['send_id'],))
             continue
