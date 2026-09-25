@@ -166,7 +166,14 @@ function BeforeYouChoose({ big }: { big: boolean }) {
   ];
   return (
     <Card>
-      <Text onPress={() => setOpen(!open)} style={{ fontWeight: '800', color: colors.ink, fontSize: 16 }}>
+      <Text
+        onPress={() => setOpen(!open)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        // A bare Text is not a 44pt target. Padding gives it the hit region a
+        // finger needs, pulled back with a negative margin so nothing moves.
+        style={{ fontWeight: '800', color: colors.ink, fontSize: 16,
+                 paddingVertical: 12, marginVertical: -12 }}>
         <Ionicons name={open ? 'chevron-down' : 'chevron-forward'} size={15} color={colors.ink3} /> Before you choose
       </Text>
       {open ? points.map(([head, body]) => (

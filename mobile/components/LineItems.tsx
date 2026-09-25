@@ -90,8 +90,12 @@ export function LineItems({ items, units, gstIncluded, onChange }: {
               </Text>
             </View>
             {items.length > 1 ? (
-              <Text onPress={() => onChange(items.filter((_, n) => n !== i))}
-                style={{ color: colors.ink3, marginTop: 6, fontSize: 13 }}>
+              <Text
+                onPress={() => onChange(items.filter((_, n) => n !== i))}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove ${item.description || 'this line'}`}
+                style={{ color: colors.ink3, fontSize: 13,
+                         paddingVertical: 12, paddingRight: 12, marginBottom: -6 }}>
                 Remove this line
               </Text>
             ) : null}

@@ -8,7 +8,11 @@
   --paper: #FFFFFF;
   --ink: #16202B;
   --ink-2: #4B5663;
-  --ink-3: #6F7985;
+  /* Muted text. #6F7985 was 3.61:1 on --concrete and 4.42:1 on white — both
+     under the 4.5:1 that body text needs, and it is the colour of every
+     hint and caption on the site. #5C646E is 4.89:1 on concrete and
+     5.99:1 on white: the same cool grey, readable on all three surfaces. */
+  --ink-3: #5C646E;
   --rule: #CBD0C8;
   --rule-soft: #DFE3DC;
   --chalk: #1F4FD1;

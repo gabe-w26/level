@@ -134,14 +134,23 @@ function PreStartCheck({ site, jobId, onChanged }: { site: Site; jobId: number; 
                 <Text
                   key={value}
                   onPress={() => setAnswers({ ...answers, [item.key]: value })}
+                  // Without a role and a state, a screen reader reads three
+                  // words and gives no way to tell which one is chosen — the
+                  // tint alone carries it, which is exactly what colour must
+                  // never do on its own.
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: on, checked: on }}
+                  accessibilityLabel={`${word} — ${item.question}`}
                   style={{
-                    flex: 1, textAlign: 'center', paddingVertical: 11, borderRadius: radius,
-                    borderWidth: 1.5, overflow: 'hidden', fontWeight: '700',
-                    borderColor: on ? (value === 'no' ? colors.paint : colors.pine) : colors.rule,
+                    flex: 1, textAlign: 'center', paddingVertical: 14, borderRadius: radius,
+                    overflow: 'hidden', fontWeight: '700',
+                    // Chosen is also 1.5pt heavier, so it reads without colour.
+                    borderWidth: on ? 2.5 : 1.5,
+                    borderColor: on ? (value === 'no' ? colors.paintInk : colors.pine) : colors.rule,
                     backgroundColor: on ? (value === 'no' ? colors.paintWash : colors.pineWash) : colors.paper,
                     color: on ? (value === 'no' ? colors.paintInk : colors.pine) : colors.ink2,
                   }}>
-                  {word}
+                  {on ? '✓ ' : ''}{word}
                 </Text>
               );
             })}
@@ -235,7 +244,12 @@ function SiteNotes({ site, jobId, role, onChanged }: {
           ? 'Lifted the old boards, three joists need replacing.'
           : 'Left the side gate unlocked for you.'} />
       {role === 'trade' ? (
-        <Text onPress={() => setPrivate(!isPrivate)} style={{ marginTop: 8, color: colors.ink2 }}>
+        <Text
+          onPress={() => setPrivate(!isPrivate)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: isPrivate }}
+          accessibilityLabel="Keep this note to myself"
+          style={{ color: colors.ink2, paddingVertical: 12 }}>
           {isPrivate ? '☑' : '☐'} Keep this one to myself — the customer won’t see it
         </Text>
       ) : null}

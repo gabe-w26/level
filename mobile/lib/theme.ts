@@ -10,7 +10,11 @@ export const colors = {
   paper: '#FFFFFF',
   ink: '#16202B',
   ink2: '#4B5663',
-  ink3: '#6F7985',
+  // Muted text. #6F7985 was 3.61:1 on the concrete background and 4.42:1 on a
+  // white card — both under the 4.5:1 that text up to 17pt needs, and it is
+  // used at 11–14pt in 27 places. #5C646E is 4.89:1 on concrete, 5.99:1 on
+  // paper: same cool grey, now readable on the darkest surface it sits on.
+  ink3: '#5C646E',
   rule: '#CBD0C8',
   ruleSoft: '#DFE3DC',
   chalk: '#1F4FD1',
