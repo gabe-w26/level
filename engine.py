@@ -493,6 +493,11 @@ def accept_quote(db, job, quote_id, act_ack=False, at=None):
     notify(db, q['trade_id'], f'You won “{job["title"]}”. The customer’s contact details are on the job.',
            f'/trade/jobs/{job["id"]}', at)
     db.commit()
+    # If this trade keeps their jobs in Docket, put it there now. It can fail
+    # without anybody noticing — the sweep tries again, and nothing about
+    # winning a job depends on another system being up.
+    import docket
+    docket.push(db, get_job(db, job['id']), q['trade_id'], at)
 
 
 def close_job(db, job, outcome, at=None):
@@ -668,6 +673,9 @@ def sweep(db, at=None):
 
     import outreach
     report['topped_up'] = outreach.topup_round(db, at)
+
+    import docket
+    report['docket_retried'] = docket.retry_failed(db, at)
     return report
 
 

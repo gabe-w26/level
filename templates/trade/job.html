@@ -258,4 +258,33 @@
 </div>
 {% if site_on %}<div class="wrap" style="padding-bottom:60px">{% include '_site.html' %}</div>{% endif %}
 
+{% if docket_state or docket_on %}
+<div class="wrap" style="padding-bottom:20px">
+  <div class="card">
+    <h3 style="margin-top:0">Docket</h3>
+    {% if docket_state and docket_state.sent %}
+      <p style="margin:0">Sent to Docket{% if docket_state.ref %} as <b>{{ docket_state.ref }}</b>{% endif %},
+        {{ docket_state.at|when }}.</p>
+    {% elif docket_state and docket_state.error %}
+      <p class="notice error" style="margin:0 0 10px">Couldn’t send this to Docket: {{ docket_state.error }}</p>
+      {% if docket_state.gave_up %}
+      <p class="small muted" style="margin:0 0 10px">We’ve stopped trying on its own. Fix the connection on
+        <a href="{{ url_for('trade_docket') }}">your Docket page</a>, then send it again.</p>
+      {% else %}
+      <p class="small muted" style="margin:0 0 10px">We’ll keep trying in the background.</p>
+      {% endif %}
+      <form method="post" action="{{ url_for('trade_push_docket', job_id=job.id) }}" class="inline">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="btn btn-sm">Send it now</button>
+      </form>
+    {% else %}
+      <form method="post" action="{{ url_for('trade_push_docket', job_id=job.id) }}" class="inline">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-ghost">Send this job to Docket</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}

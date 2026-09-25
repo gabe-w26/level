@@ -525,6 +525,16 @@ MIGRATIONS = [
 
     # When we last told the customer their job is proving hard to fill.
     'ALTER TABLE jobs ADD COLUMN quiet_told_at TEXT',
+
+    # Sending a won job to the trade's own Docket. The key only ever lets us
+    # create a job over there — see docket.py.
+    'ALTER TABLE trades ADD COLUMN docket_url TEXT',
+    'ALTER TABLE trades ADD COLUMN docket_key TEXT',
+    'ALTER TABLE trades ADD COLUMN docket_name TEXT',
+    'ALTER TABLE jobs ADD COLUMN docket_at TEXT',
+    'ALTER TABLE jobs ADD COLUMN docket_ref TEXT',
+    'ALTER TABLE jobs ADD COLUMN docket_error TEXT',
+    'ALTER TABLE jobs ADD COLUMN docket_tries INTEGER NOT NULL DEFAULT 0',
 ]
 
 

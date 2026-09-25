@@ -28,6 +28,7 @@ import ai
 import backup
 import billing
 import compare
+import docket
 import config
 import engine
 import integrations
@@ -1263,6 +1264,8 @@ def _render_trade_job(job_id, form=None, error=None):
                            units=quoting.UNITS,
                            template_items={r['id']: quoting.template_items(r) for r in _templates(t['user_id'])},
                            **(_progress(job) if job['hired_trade_id'] == t['user_id'] else {}),
+                           docket_state=docket.state(job) if job['hired_trade_id'] == t['user_id'] else None,
+                           docket_on=bool(t['docket_url']),
                            **_worksite(job, t['user_id'], 'trade'))
 
 
@@ -1618,6 +1621,57 @@ def save_site_check(job_id):
     except worksite.SiteError as e:
         flash(str(e), 'error')
     return redirect(url_for('trade_job', job_id=job_id) + '#site')
+
+
+@app.route('/trade/docket', methods=['GET', 'POST'])
+@requires('trade')
+def trade_docket():
+    """Connect this trade's own Docket, so a job they win lands there too.
+
+    The key only ever lets us create a job over there — it can't read anything
+    out of their business, which is the whole reason it's safe to hold.
+    """
+    t = current_trade()
+    error = tested = None
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'disconnect':
+            db().execute('UPDATE trades SET docket_url = NULL, docket_key = NULL, docket_name = NULL '
+                         'WHERE user_id = ?', (t['user_id'],))
+            db().commit()
+            flash('Disconnected. Jobs you win stay on Level only.')
+            return redirect(url_for('trade_docket'))
+        url = docket.clean_url(request.form.get('url'))
+        key = (request.form.get('key') or '').strip()
+        if key == '••••••' and t['docket_key']:
+            key = t['docket_key']                       # they didn't retype it, which is fine
+        try:
+            tested = docket.test(url, key)
+            db().execute('UPDATE trades SET docket_url = ?, docket_key = ?, docket_name = ? WHERE user_id = ?',
+                         (url, key, tested, t['user_id']))
+            db().commit()
+            flash(f'Connected to {tested}. Jobs you win will turn up in Docket.')
+            return redirect(url_for('trade_docket'))
+        except docket.DocketError as e:
+            error = str(e)
+    sent = db().execute("SELECT COUNT(*) AS n FROM jobs WHERE hired_trade_id = ? AND docket_at IS NOT NULL",
+                        (t['user_id'],)).fetchone()['n']
+    return render_template('trade/docket.html', t=current_trade(), error=error, sent=sent,
+                           form=request.form if request.method == 'POST' else {})
+
+
+@app.post('/trade/jobs/<int:job_id>/docket')
+@requires('trade')
+def trade_push_docket(job_id):
+    """Send a won job to Docket by hand — after fixing a key, or when a retry gave up."""
+    job = engine.get_job(db(), job_id)
+    if not job or job['hired_trade_id'] != current_trade()['user_id']:
+        abort(404)
+    db().execute('UPDATE jobs SET docket_tries = 0 WHERE id = ?', (job_id,))
+    db().commit()
+    ok, message = docket.push(db(), engine.get_job(db(), job_id), current_trade()['user_id'])
+    flash(message or 'Connect Docket first.', None if ok else 'error')
+    return redirect(url_for('trade_job', job_id=job_id))
 
 
 @app.get('/trade/trust')

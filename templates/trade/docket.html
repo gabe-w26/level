@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% block title %}Send jobs to Docket — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page narrow">
+  <div class="page-head">
+    <div>
+      <h1>Send jobs to Docket</h1>
+      <p class="muted">Win a job here and it turns up in your Docket — the customer as a client, the address,
+        how to get in, and what you quoted. No retyping.</p>
+    </div>
+    {% if t.docket_url %}<span class="pill hired">Connected</span>{% endif %}
+  </div>
+
+  {% if t.docket_url %}
+  <div class="card">
+    <dl class="kv">
+      <dt>Business</dt><dd>{{ t.docket_name or 'connected' }}</dd>
+      <dt>Docket address</dt><dd>{{ t.docket_url }}</dd>
+      <dt>Jobs sent</dt><dd>{{ sent }}</dd>
+    </dl>
+    <form method="post" class="inline">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="btn btn-sm btn-ghost" name="action" value="disconnect">Disconnect</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h3>{{ 'Change the connection' if t.docket_url else 'Connect Docket' }}</h3>
+    <ol class="checklist" style="margin:10px 0 16px">
+      <li>In Docket, open <b>Integrations → Level</b> and press <b>Make a key</b>.</li>
+      <li>Copy the key — Docket only shows it once.</li>
+      <li>Paste it below along with your Docket web address, and press Connect.</li>
+    </ol>
+    {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" class="form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div>
+        <label for="url">Your Docket address <span class="hint">The web address you log in at.</span></label>
+        <input id="url" name="url" type="text" inputmode="url" placeholder="yourbusiness.docket.co.nz"
+               value="{{ form.get('url', t.docket_url or '') }}" required>
+      </div>
+      <div>
+        <label for="key">The key from Docket</label>
+        <input id="key" name="key" type="text" autocomplete="off" spellcheck="false"
+               placeholder="{{ '••••••' if t.docket_key else 'lvl_…' }}"
+               value="{{ form.get('key', '') }}">
+        {% if t.docket_key %}<span class="hint">Leave it blank to keep the key you’ve already got.</span>{% endif %}
+      </div>
+      <div class="form-foot">
+        <span class="small muted">We check it works before saving it.</span>
+        <button class="btn" type="submit">{{ 'Check and save' if t.docket_url else 'Connect' }}</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>What this can and can’t do</h3>
+    <ul class="checklist">
+      <li><b>It only ever creates jobs in your Docket.</b> It can’t read your clients, your staff, your
+        timesheets or anything else, and it can’t delete a thing.</li>
+      <li><b>It only sends jobs you’ve won.</b> Nothing goes across about a job you merely quoted on.</li>
+      <li><b>Sending twice is safe.</b> If we’re not sure a job arrived we send it again, and Docket updates
+        the one that’s there rather than making a second.</li>
+      <li><b>If Docket is down, nothing here breaks.</b> We keep trying in the background, and you can send a
+        job by hand from the job itself.</li>
+      <li><b>You can disconnect whenever you like.</b> Jobs already in Docket stay where they are.</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}
