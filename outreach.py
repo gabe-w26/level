@@ -170,7 +170,7 @@ def matches(db, job, widen=False):
         (job['area_id'], job['category_id'], MAX_LEADS, job['id'])).fetchall()
 
 
-def default_summary(description, limit=180):
+def default_summary(description, limit=400):
     """First sentence or so of the job, for the email. The admin edits it before sending."""
     text = re.sub(r'\s+', ' ', description or '').strip()
     if len(text) <= limit:
@@ -186,6 +186,47 @@ def links(prospect, job_id=None):
     return join, f'{site}/o/{prospect["token"]}/stop'
 
 
+def _get(row, key, default=None):
+    """A column from a row that may or may not have it. sqlite3.Row has no .get(),
+    and raises rather than returning None for a name it doesn't know."""
+    try:
+        value = row[key]
+    except (KeyError, IndexError, TypeError):
+        return default
+    return default if value is None else value
+
+
+def standing(job):
+    """How this job is doing right now, in the words a tradie actually weighs up.
+
+    A lead email with no urgency in it is a newsletter. These are the three
+    things a tradie decides on — is it still open, how long have I got, and how
+    fresh is it — and every one of them is a fact, not a sales line. Nothing here
+    is invented: if a job is nearly full we say so, which loses us some sign-ups
+    and keeps the email honest.
+    """
+    quotes = _get(job, 'quote_count') or 0
+    left = max(0, config.MAX_QUOTES - quotes)
+    if left == 0:
+        spots = (f'All {config.MAX_QUOTES} quote slots are taken — but the next one in '
+                 f'{_get(job, "area_name") or "your area"} is yours')
+    elif quotes == 0:
+        spots = f'No quotes on it yet. {left} of {config.MAX_QUOTES} slots open'
+    else:
+        spots = (f'{quotes} quote{"s" if quotes != 1 else ""} already in, '
+                 f'{left} of {config.MAX_QUOTES} slot{"s" if left != 1 else ""} left')
+    posted = None
+    try:
+        hours = (utcnow() - parse_ts(_get(job, 'job_created_at') or _get(job, 'created_at'))
+                 ).total_seconds() / 3600
+        posted = ('Posted in the last hour' if hours < 1 else
+                  f'Posted {int(hours)} hours ago' if hours < 24 else
+                  f'Posted {int(hours // 24)} day{"s" if hours >= 48 else ""} ago')
+    except Exception:
+        pass
+    return spots, posted
+
+
 def compose(prospect, job, summary, sender_name):
     """Subject and body for one business. `job` needs category_name and area_name."""
     join, stop = links(prospect, job['id'])
@@ -193,16 +234,28 @@ def compose(prospect, job, summary, sender_name):
     size = config.VALUE_BANDS.get(job['value_band'], {}).get('label', '')
     place = job['suburb'] or job['area_name']
     site = re.sub(r'^https?://(www\.)?', '', (prospect['website'] or '').rstrip('/'))
+    spots, posted = standing(job)
+    when = config.TIMING.get(_get(job, 'timing') or '', '')
+    details = [f'Where: {place}', f'Size: {size}']
+    if when:
+        details.append(f'Wanted: {when.lower()}')
+    if posted:
+        details.append(posted)
+    details.append(spots)
+
     subject = f'Free {job["category_name"].lower()} lead in {place}: {job["title"]}'
     body = (
         f'Hi {first or "there"},\n\n'
-        f'A homeowner in {place} has just posted a job on {config.BRAND} that looks like your kind of work:\n\n'
-        f'{job["title"]}\n{summary}\nSize: {size}\n\n'
+        f'A homeowner in {place} has posted a job on {config.BRAND} that looks like your kind of work:\n\n'
+        f'{job["title"]}\n{summary}\n\n'
+        + '\n'.join(f'· {d}' for d in details) + '\n\n'
         f'{config.BRAND} is new in Wellington and we’re running a free pilot — no card, no tokens, no lead fees. '
         f'Each job goes to up to {config.TRADES_PER_JOB} local trades and closes at {config.MAX_QUOTES} quotes, '
-        f'first in first served.\n\n'
-        f'Sign up free (takes 2 minutes) and if there’s still a spot on this job it comes straight to you. '
-        f'New trades go to the front of the queue for the next one too:\n{join}\n\n'
+        f'first in first served. You get {config.OFFER_WINDOW_HOURS} hours to quote once it’s yours.\n\n'
+        f'Sign up free — it takes about two minutes, and if there’s still a slot on this job it comes '
+        f'straight to you:\n{join}\n\n'
+        f'You’ll see the full job and the photos once you’re in. We don’t pass on anyone’s address or phone '
+        f'number until the homeowner chooses you.\n\n'
         f'I got your email from {site or "your website"}. If you’d rather not hear from us, use the link below '
         f'or just reply “unsubscribe”, and we won’t email you again.\n\n'
         f'Cheers,\n{sender_name}\n{config.BRAND} — {integrations.site_url()}\nWellington, New Zealand'
@@ -337,6 +390,7 @@ def _flush(db, limit):
         "SELECT s.id AS send_id, s.summary, s.sender_name, s.reply_to, s.created_at AS queued_at, "
         "p.id AS prospect_id, p.token, p.first_name, p.business_name, p.email, p.website, p.status AS p_status, "
         "p.do_not_contact, j.id, j.title, j.suburb, j.value_band, j.status AS job_status, "
+        "j.quote_count, j.timing, j.created_at AS job_created_at, "
         "c.name AS category_name, a.name AS area_name "
         "FROM prospect_sends s JOIN prospects p ON p.id = s.prospect_id JOIN jobs j ON j.id = s.job_id "
         "JOIN categories c ON c.id = j.category_id JOIN areas a ON a.id = j.area_id "

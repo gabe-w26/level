@@ -262,5 +262,50 @@ class OutreachTest(unittest.TestCase):
         self.assertEqual(c.get('/o/nonsense/stop').status_code, 200)
 
 
+
+class StandingTest(unittest.TestCase):
+    """What the email says about how the job is doing. All of it has to be true."""
+
+    def job(self, **over):
+        row = {'quote_count': 0, 'area_name': 'Wellington City',
+               'created_at': ts(datetime.utcnow() - timedelta(hours=3))}
+        row.update(over)
+        return row
+
+    def test_an_untouched_job_says_so(self):
+        spots, posted = outreach.standing(self.job())
+        self.assertIn('No quotes on it yet', spots)
+        self.assertIn('3 of 3', spots)
+        self.assertEqual(posted, 'Posted 3 hours ago')
+
+    def test_a_nearly_full_job_admits_it(self):
+        """Losing a sign-up is cheaper than a tradie finding out we oversold it."""
+        spots, _ = outreach.standing(self.job(quote_count=2))
+        self.assertIn('2 quotes already in', spots)
+        self.assertIn('1 of 3 slot left', spots)
+
+    def test_a_full_job_does_not_pretend_there_is_room(self):
+        spots, _ = outreach.standing(self.job(quote_count=3))
+        self.assertIn('All 3 quote slots are taken', spots)
+        self.assertIn('Wellington City', spots)
+
+    def test_freshness_reads_naturally(self):
+        now = datetime.utcnow()
+        self.assertEqual(outreach.standing(self.job(created_at=ts(now)))[1], 'Posted in the last hour')
+        self.assertEqual(outreach.standing(self.job(created_at=ts(now - timedelta(hours=30))))[1],
+                         'Posted 1 day ago')
+        self.assertEqual(outreach.standing(self.job(created_at=ts(now - timedelta(hours=60))))[1],
+                         'Posted 2 days ago')
+
+    def test_a_row_missing_the_columns_loses_a_line_not_the_email(self):
+        """The send path builds the email from a joined row. If that row is ever
+        short a column again, the email must still go."""
+        spots, posted = outreach.standing({'area_name': 'Wellington City'})
+        self.assertIn('No quotes on it yet', spots)
+        self.assertIsNone(posted)
+
+    def test_a_broken_date_loses_the_line_rather_than_the_email(self):
+        self.assertIsNone(outreach.standing(self.job(created_at='not a date'))[1])
+
 if __name__ == '__main__':
     unittest.main()
