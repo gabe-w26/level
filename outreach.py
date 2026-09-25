@@ -31,7 +31,10 @@ SEND_WINDOW_HOURS = 24     # a queued email older than this is dropped, not sent
 AUTO_TOPUP = os.environ.get('AUTO_TOPUP', '1') == '1'
 TOPUP_MIN_GAP = 3          # don't email anyone over one or two empty slots
 TOPUP_PER_SLOT = 3         # most people who get an email don't sign up today
-TOPUP_MAX = 20             # never more than this off the back of one job
+TOPUP_MAX = 20             # never more than this in one round
+TOPUP_ROUNDS = 3           # and no more than this many rounds on one job
+TOPUP_RETRY_HOURS = 6      # leave it a while before going again
+TOPUP_WIDEN_AFTER = 1      # from round 2, look across the whole region
 
 STATUSES = {
     'new': 'Not contacted',
@@ -146,11 +149,19 @@ def import_rows(db, rows):
 
 # ── Matching and sending ──────────────────────────────────────────────────────
 
-def matches(db, job):
-    """Businesses we could send this job to, least-contacted first."""
+def matches(db, job, widen=False):
+    """Businesses we could send this job to, least-contacted first.
+
+    `widen` looks across the job's whole region instead of just its area. It is
+    only used on later top-up rounds: a Karori job is better done by someone in
+    Lower Hutt than by nobody, but the nearest people should always be asked
+    first.
+    """
+    where_area = ('pa.area_id IN (SELECT id FROM areas WHERE region = '
+                  '(SELECT region FROM areas WHERE id = ?))' if widen else 'pa.area_id = ?')
     return db.execute(
-        "SELECT p.* FROM prospects p "
-        "JOIN prospect_areas pa ON pa.prospect_id = p.id AND pa.area_id = ? "
+        "SELECT DISTINCT p.* FROM prospects p "
+        f"JOIN prospect_areas pa ON pa.prospect_id = p.id AND {where_area} "
         "WHERE p.category_id = ? AND p.email IS NOT NULL AND p.email <> '' "
         "AND p.do_not_contact = 0 AND p.status IN ('new','sent','replied') AND p.leads_sent < ? "
         "AND NOT EXISTS (SELECT 1 FROM prospect_sends s WHERE s.prospect_id = p.id AND s.job_id = ?) "
@@ -204,9 +215,14 @@ def reply_address(sender):
     return integrations.get('smtp_user') or sender['email']
 
 
-def queue(db, job, prospect_ids, summary, sender):
-    """Queue one email per chosen business. Only businesses that still match go."""
-    allowed = {p['id'] for p in matches(db, job)}
+def queue(db, job, prospect_ids, summary, sender, widen=False):
+    """Queue one email per chosen business. Only businesses that still match go.
+
+    `widen` must match how the list was drawn up, or the re-check here quietly
+    throws away every business outside the job's own area — which is exactly the
+    set a later top-up round is reaching for.
+    """
+    allowed = {p['id'] for p in matches(db, job, widen=widen)}
     now = ts(utcnow())
     sender_name = (sender['name'] or 'The team').split(' ')[0]
     n = 0
@@ -236,12 +252,18 @@ def maybe_topup(db, job, at=None):
     opt-out list, one email per business per job — because it goes through the
     same `matches()` and `queue()`.
 
-    Once per job. A job that stays short doesn't get a second round: if the first
-    email didn't move anyone, a reminder is just spam.
+    It goes again if the job is still short hours later, up to TOPUP_ROUNDS, each
+    time reaching further out. It stops the moment the slots fill, the job closes,
+    or there is nobody left to ask — a job nobody answers doesn't get nagged about.
     """
     at = at or utcnow()
-    if not AUTO_TOPUP or job['status'] != 'open' or job['topup_at']:
+    if not AUTO_TOPUP or job['status'] != 'open':
         return 0
+    rounds = job['topup_rounds'] or 0
+    if rounds >= TOPUP_ROUNDS:
+        return 0
+    if job['topup_at'] and parse_ts(job['topup_at']) > at - timedelta(hours=TOPUP_RETRY_HOURS):
+        return 0                                     # went recently; give it time to work
     gap = shortfall(db, job)
     if gap < TOPUP_MIN_GAP:
         return 0
@@ -251,13 +273,51 @@ def maybe_topup(db, job, at=None):
         return 0
     # More than the gap, because most people who get an email don't sign up today.
     want = min(gap * TOPUP_PER_SLOT, TOPUP_MAX)
-    picks = [p['id'] for p in matches(db, job)[:want]]
+    widen = rounds >= TOPUP_WIDEN_AFTER
+    picks = [p['id'] for p in matches(db, job, widen=widen)[:want]]
     now = ts(at)
-    db.execute('UPDATE jobs SET topup_at = ?, topup_sent = ? WHERE id = ?', (now, len(picks), job['id']))
+    db.execute('UPDATE jobs SET topup_at = ?, topup_rounds = ?, topup_sent = topup_sent + ? WHERE id = ?',
+               (now, rounds + 1, len(picks), job['id']))
     db.commit()
     if not picks:
         return 0
-    return queue(db, job, picks, default_summary(job['description']), sender)
+    return queue(db, job, picks, default_summary(job['description']), sender, widen=widen)
+
+
+def topup_round(db, at=None, limit=10):
+    """Go again on jobs that are still short. Runs with the other background work.
+
+    Only jobs old enough to have given the first round a chance, newest first —
+    a job posted today matters more than one from last week.
+    """
+    at = at or utcnow()
+    if not AUTO_TOPUP:
+        return 0
+    cutoff = ts(at - timedelta(hours=TOPUP_RETRY_HOURS))
+    rows = db.execute("SELECT id FROM jobs WHERE status = 'open' AND topup_rounds > 0 "
+                      'AND topup_rounds < ? AND topup_at <= ? ORDER BY id DESC LIMIT ?',
+                      (TOPUP_ROUNDS, cutoff, limit)).fetchall()
+    sent = 0
+    for row in rows:
+        job = db.execute('SELECT * FROM jobs WHERE id = ?', (row['id'],)).fetchone()
+        sent += maybe_topup(db, job, at)
+    return sent
+
+
+def topup_story(db, job_id):
+    """What we've done to fill this job's slots, for the admin job page."""
+    row = db.execute('SELECT topup_at, topup_rounds, topup_sent FROM jobs WHERE id = ?', (job_id,)).fetchone()
+    if not row or not row['topup_rounds']:
+        return None
+    stats = db.execute("SELECT COUNT(*) AS emailed, "
+                       "SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent, "
+                       'SUM(CASE WHEN clicked_at IS NOT NULL THEN 1 ELSE 0 END) AS clicked '
+                       'FROM prospect_sends WHERE job_id = ?', (job_id,)).fetchone()
+    joined = db.execute("SELECT COUNT(*) AS n FROM prospects p JOIN prospect_sends s ON s.prospect_id = p.id "
+                        "WHERE s.job_id = ? AND p.status = 'signed_up'", (job_id,)).fetchone()['n']
+    return {'rounds': row['topup_rounds'], 'last_at': row['topup_at'], 'max_rounds': TOPUP_ROUNDS,
+            'emailed': stats['emailed'] or 0, 'sent': stats['sent'] or 0,
+            'clicked': stats['clicked'] or 0, 'joined': joined}
 
 
 def flush(db, limit=20):

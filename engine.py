@@ -130,6 +130,35 @@ def _candidate_rows(db, job, at):
     return sorted(rows, key=lambda r: (r['recent'], r['last_offered_at'] or '', rng.random()))
 
 
+def offer_waiting_jobs(db, trade_id, at=None, limit=10):
+    """Offer a trade every open job they're a fit for, right now.
+
+    Called the moment a trade becomes able to take work — usually a business who
+    signed up off the back of a free-lead email. Waiting two minutes for the next
+    sweep is two minutes of the four-hour clock, and the job they were emailed
+    about is the whole reason they're here.
+    """
+    at = at or utcnow()
+    rows = db.execute(
+        "SELECT j.id FROM jobs j "
+        'JOIN trade_categories tc ON tc.category_id = j.category_id AND tc.trade_id = ? '
+        'JOIN trade_areas ta ON ta.area_id = j.area_id AND ta.trade_id = ? '
+        "WHERE j.status = 'open' AND j.closes_at > ? AND j.quote_count < ? "
+        'AND (SELECT COUNT(*) FROM offers o WHERE o.job_id = j.id '
+        "     AND o.status IN ('active','quoted')) < ? "
+        'AND NOT EXISTS (SELECT 1 FROM offers o2 WHERE o2.job_id = j.id AND o2.trade_id = ?) '
+        # The job that brought them here first, then the freshest.
+        'ORDER BY (SELECT COUNT(*) FROM prospect_sends s JOIN prospects p ON p.id = s.prospect_id '
+        '          WHERE s.job_id = j.id AND p.user_id = ?) DESC, j.id DESC LIMIT ?',
+        (trade_id, trade_id, ts(at), config.MAX_QUOTES, config.TRADES_PER_JOB,
+         trade_id, trade_id, limit)).fetchall()
+    offered = 0
+    for row in rows:
+        offered += fill_slots(db, get_job(db, row['id']), at)
+    db.commit()
+    return offered
+
+
 def _candidates(db, job, at):
     return [r['user_id'] for r in _candidate_rows(db, job, at)]
 
@@ -212,6 +241,10 @@ def post_job(db, customer_id, f, at=None, hold=False):
          f['title'], f['description'], f['value_band'], f.get('timing'), f.get('property_type'),
          'held' if hold else 'open', ts(at), ts(at + timedelta(days=config.JOB_OPEN_DAYS))))
     job_id = cur.lastrowid
+    # Read the job before it goes anywhere. A wrong trade caught now costs
+    # nothing; caught two minutes later it has already burned fifteen slots and
+    # fifteen people's attention. It never changes the category — see matching.py.
+    _check_routing_one(db, job_id, at)
     offered = 0 if hold else fill_slots(db, get_job(db, job_id), at)
     db.commit()
     return job_id, offered
@@ -225,6 +258,7 @@ def release_held(db, customer_id, at=None):
     for row in db.execute("SELECT id FROM jobs WHERE customer_id = ? AND status = 'held'", (customer_id,)).fetchall():
         db.execute("UPDATE jobs SET status = 'open', created_at = ?, closes_at = ? WHERE id = ?",
                    (ts(at), ts(at + timedelta(days=config.JOB_OPEN_DAYS)), row['id']))
+        _check_routing_one(db, row['id'], at)
         offered += fill_slots(db, get_job(db, row['id']), at)
     db.commit()
     return offered
@@ -617,15 +651,32 @@ def sweep(db, at=None):
     import trust
     report['trust_rescored'] = trust.refresh(db, at)
     report['routed'] = _check_routing(db, at)
+
+    import outreach
+    report['topped_up'] = outreach.topup_round(db, at)
     return report
 
 
-def _check_routing(db, at, limit=5):
-    """Read the newest jobs and say whether they went to the right trade.
+def _check_routing_one(db, job_id, at):
+    """Check one job's trade, before it is offered to anybody.
 
-    Deliberately after distribution, not before it: a tradie seeing a job four
-    minutes sooner is worth more than a machine's opinion, and the check catches
-    a wrong category inside one sweep anyway — long before the four hours are up.
+    Must never raise and must never hold the job up: `matching.review` swallows
+    everything and returns "not checked", and with no API key it doesn't even
+    make a request. A job still goes out if this does nothing at all.
+    """
+    import matching
+    if not matching.enabled():
+        return False
+    job = get_job(db, job_id)
+    cats = db.execute('SELECT id, slug, name FROM categories').fetchall()
+    matching.apply_to(db, job, matching.review(db, job, cats), at)
+    return True
+
+
+def _check_routing(db, at, limit=5):
+    """Catch any job the check missed at posting — a held job released later, a
+    key added after the job went out, or a request that failed at the time.
+
     Capped per sweep so a flood of jobs can't run up a bill.
     """
     import matching
@@ -633,11 +684,9 @@ def _check_routing(db, at, limit=5):
         return 0
     rows = db.execute("SELECT id FROM jobs WHERE routed_at IS NULL AND status IN ('open','full') "
                       'ORDER BY id DESC LIMIT ?', (limit,)).fetchall()
-    cats = db.execute('SELECT id, slug, name FROM categories').fetchall()
     done = 0
     for row in rows:
-        job = get_job(db, row['id'])
-        matching.apply_to(db, job, matching.review(db, job, cats), at)
+        _check_routing_one(db, row['id'], at)
         done += 1
     return done
 

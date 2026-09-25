@@ -62,4 +62,33 @@
     </form>
   </div>
 </div>
+
+  {% if job.routed_at or topup %}
+  <div class="section-title"><h2>Getting it to the right people</h2></div>
+  <div class="card">
+    {% if job.routed_at %}
+    <p style="margin:0 0 6px"><b>Trade check:</b> {{ job.routed_note }}</p>
+    {% if extra and extra.confidence %}<p class="small muted" style="margin:0 0 10px">Confidence: {{ extra.confidence }}. It only ever suggests — the customer decides on their own job page.</p>{% endif %}
+    {% endif %}
+    {% if topup %}
+    <p style="margin:0 0 6px"><b>Filling the slots:</b> round {{ topup.rounds }} of {{ topup.max_rounds }},
+      last {{ topup.last_at|when }}.</p>
+    <div class="admin-stats" style="margin-top:6px">
+      <div><b>{{ topup.emailed }}</b><span class="small muted">businesses emailed</span></div>
+      <div><b>{{ topup.sent }}</b><span class="small muted">actually sent</span></div>
+      <div><b>{{ topup.clicked }}</b><span class="small muted">clicked through</span></div>
+      <div><b>{{ topup.joined }}</b><span class="small muted">joined {{ cfg.BRAND }}</span></div>
+    </div>
+    {% if topup.emailed and not topup.sent %}
+    <p class="small muted" style="margin:10px 0 0">Nothing has actually gone out — email isn’t set up yet.
+      Add it in <a href="{{ url_for('admin_setup') }}">Setup</a> and the queue will flush.</p>
+    {% endif %}
+    {% if topup.rounds >= topup.max_rounds %}
+    <p class="small muted" style="margin:10px 0 0">That’s the last round for this job. If it’s still short,
+      the prospect list has run dry for this trade and area — that’s where to go looking.</p>
+    {% endif %}
+    {% endif %}
+  </div>
+  {% endif %}
+
 {% endblock %}

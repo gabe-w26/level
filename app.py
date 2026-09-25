@@ -838,8 +838,12 @@ def customer_job(job_id):
     if job['routed_category_id'] and job['routed_category_id'] != job['category_id'] and job['status'] == 'open':
         suggest = db().execute('SELECT id, name FROM categories WHERE id = ?',
                                (job['routed_category_id'],)).fetchone()
+    # The rest of what the check found: other trades this job may need, and
+    # whether the work legally needs a registered person. Worth more to the
+    # customer than to us.
+    extra = matching.extra_for(job)
     return render_template('customer/job.html', job=job, quotes=quotes, stats=offer_stats(job_id),
-                           photos=_photos(job_id), reviewed=bool(reviewed), suggest=suggest,
+                           photos=_photos(job_id), reviewed=bool(reviewed), suggest=suggest, extra=extra,
                            notes=compare.notes_for(quotes, guide),
                            trust={q['trade_id']: trust.summary(db(), trade_row(q['trade_id']))
                                   for q in quotes},
@@ -2006,7 +2010,8 @@ def admin_job(job_id):
     quotes = db().execute('SELECT q.*, t.business_name FROM quotes q JOIN trades t ON t.user_id = q.trade_id '
                           'WHERE q.job_id = ? ORDER BY q.id', (job_id,)).fetchall()
     customer = db().execute('SELECT * FROM users WHERE id = ?', (job['customer_id'],)).fetchone()
-    return render_template('admin/job.html', job=job, offers=offers, quotes=quotes, customer=customer)
+    return render_template('admin/job.html', job=job, offers=offers, quotes=quotes, customer=customer,
+                           topup=outreach.topup_story(db(), job['id']), extra=matching.extra_for(job))
 
 
 @app.route('/admin/inspect')

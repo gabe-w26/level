@@ -74,6 +74,11 @@ def choose_plan(db, trade, email, tier, success_url, cancel_url, at=None):
                    'period_start = ?, period_end = ? WHERE user_id = ?', (tier, start, end, trade['user_id']))
         _record_payment(db, trade['user_id'], tier, amount, start, end, kind, at=at)
     db.commit()
+    # They can take work now, so give them the jobs that are waiting — starting
+    # with the one that brought them here. Two minutes of a four-hour clock is
+    # not a thing to spend on a background sweep.
+    import engine
+    engine.offer_waiting_jobs(db, trade['user_id'], at)
     return None
 
 

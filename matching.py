@@ -265,7 +265,29 @@ def apply_to(db, job, result, at=None):
     job_id = job if isinstance(job, int) else _val(job, 'id')
     if not job_id:
         return
-    db.execute('UPDATE jobs SET routed_note = ?, routed_category_id = ?, routed_at = ? WHERE id = ?',
-               (result.get('note') or NOT_CHECKED, result.get('category_id'),
+    extra = json.dumps({'also': result.get('also') or [], 'licence': bool(result.get('licence')),
+                        'confidence': result.get('confidence'), 'band': result.get('band')})
+    db.execute('UPDATE jobs SET routed_note = ?, routed_category_id = ?, routed_extra = ?, routed_at = ? '
+               'WHERE id = ?',
+               (result.get('note') or NOT_CHECKED, result.get('category_id'), extra,
                 ts(at or utcnow()), job_id))
     db.commit()
+
+
+def extra_for(job):
+    """The stored non-sentence parts of the check, with the trade slugs turned into
+    names a customer reads. Never raises on a row that predates the column."""
+    raw = _val(job, 'routed_extra')
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return {'also': [{'slug': s, 'name': name_for(s)} for s in (data.get('also') or [])
+                     if isinstance(s, str)],
+            'licence': bool(data.get('licence')),
+            'confidence': data.get('confidence'),
+            'band': data.get('band')}

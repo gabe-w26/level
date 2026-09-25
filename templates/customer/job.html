@@ -69,6 +69,23 @@
       </details>
       {% endif %}
 
+      {% if extra and (extra.licence or extra.also) %}
+      <div class="card notice">
+        {% if extra.licence %}
+        <p style="margin:0 0 8px"><b>This kind of work needs a registered or licensed person.</b>
+          Electrical, gas and sanitary plumbing work must be done by someone on the public register, and
+          restricted building work needs a Licensed Building Practitioner. Check a badge is there before
+          you accept, and check the number yourself on the trade’s profile — it takes a minute.</p>
+        {% endif %}
+        {% if extra.also %}
+        <p style="margin:0">A job like this often needs
+          {% for a in extra.also %}<b>a {{ a.name|lower }}</b>{% if not loop.last %} and {% endif %}{% endfor %}
+          as well. If your quotes don’t cover that, it’s worth
+          <a href="{{ url_for('post_job') }}">posting it as a second job</a> rather than finding out halfway through.</p>
+        {% endif %}
+      </div>
+      {% endif %}
+
       {% if suggest %}
       <div class="card notice notice-chalk">
         <p style="margin:0 0 8px"><b>This might be the wrong trade.</b> Reading what you wrote, this looks more like

@@ -289,15 +289,60 @@ class TopUpTest(Base):
                                  (job_id,)).fetchone()['n']
         self.assertEqual(queued, 4)
 
-    def test_it_only_happens_once_per_job(self):
+    def test_it_does_not_go_again_straight_away(self):
         self.prospect()
         job_id = self.job(self.user())
         before = self.db.execute('SELECT COUNT(*) AS n FROM prospect_sends').fetchone()['n']
         engine.sweep(self.db, at=T0 + timedelta(minutes=5))
         engine.sweep(self.db, at=T0 + timedelta(minutes=10))
         after = self.db.execute('SELECT COUNT(*) AS n FROM prospect_sends').fetchone()['n']
-        self.assertEqual(before, after, 'a job that stays short must not be emailed about again')
+        self.assertEqual(before, after, 'give the first email a chance to work before going again')
         self.assertIsNotNone(job_id)
+
+    def test_it_goes_again_later_and_reaches_further_out(self):
+        near = self.prospect('near@example.co.nz')
+        # Same region, different area: only reachable once we widen.
+        far_area = self.db.execute(
+            'SELECT id FROM areas WHERE region = (SELECT region FROM areas WHERE id = ?) AND id <> ?',
+            (self.area, self.area)).fetchone()
+        far = self.prospect('far@example.co.nz')
+        self.db.execute('UPDATE prospect_areas SET area_id = ? WHERE prospect_id = ?', (far_area['id'], far))
+        self.db.commit()
+
+        job_id = self.job(self.user())
+        first = [r['prospect_id'] for r in self.db.execute('SELECT prospect_id FROM prospect_sends')]
+        self.assertEqual(first, [near], 'the nearest people get asked first')
+
+        engine.sweep(self.db, at=T0 + timedelta(hours=outreach.TOPUP_RETRY_HOURS, minutes=1))
+        now = {r['prospect_id'] for r in self.db.execute('SELECT prospect_id FROM prospect_sends')}
+        self.assertEqual(now, {near, far}, 'a later round reaches across the region')
+        self.assertEqual(engine.get_job(self.db, job_id)['topup_rounds'], 2)
+
+    def test_it_stops_after_the_last_round(self):
+        for i in range(30):
+            self.prospect(f'p{i}@example.co.nz')
+        self.job(self.user())
+        at = T0
+        for _ in range(6):
+            at += timedelta(hours=outreach.TOPUP_RETRY_HOURS + 1)
+            engine.sweep(self.db, at=at)
+        rounds = self.db.execute('SELECT topup_rounds FROM jobs').fetchone()['topup_rounds']
+        self.assertEqual(rounds, outreach.TOPUP_ROUNDS, 'a job nobody answers must not be nagged about forever')
+
+    def test_a_business_that_joins_gets_the_job_that_brought_them_in(self):
+        """The whole point of the email. Waiting for the next sweep spends the clock."""
+        pid = self.prospect()
+        job_id = self.job(self.user())
+        self.assertEqual(self.db.execute('SELECT COUNT(*) AS n FROM prospect_sends WHERE job_id = ?',
+                                         (job_id,)).fetchone()['n'], 1)
+
+        # They sign up and pick a plan — which is the moment they can take work.
+        trade = self.user('trade')
+        self.db.execute('UPDATE prospects SET user_id = ?, status = ? WHERE id = ?', (trade, 'signed_up', pid))
+        self.db.commit()
+        offered = [r['trade_id'] for r in self.db.execute(
+            "SELECT trade_id FROM offers WHERE job_id = ? AND status = 'active'", (job_id,))]
+        self.assertIn(trade, offered, 'they should already hold the job, not wait for a sweep')
 
     def test_opt_outs_are_never_topped_up_to(self):
         pid = self.prospect()
@@ -323,6 +368,48 @@ class RoutingTest(Base):
         result = matching.review(self.db, job, self.db.execute('SELECT id, slug, name FROM categories').fetchall())
         self.assertIsNone(result['category'])
         self.assertIn('not checked', result['note'].lower())
+
+    def test_the_check_runs_before_the_job_is_offered_to_anybody(self):
+        """A wrong trade caught after distribution has already burned fifteen slots."""
+        import matching
+        seen = {}
+        real_enabled, real_review = matching.enabled, matching.review
+
+        def fake_review(db, job, cats):
+            # How many people already hold this job at the moment we're asked?
+            seen['offers'] = db.execute('SELECT COUNT(*) AS n FROM offers WHERE job_id = ?',
+                                        (job['id'],)).fetchone()['n']
+            return {'category': None, 'confidence': 'sure', 'reason': '', 'licence': False,
+                    'also': [], 'band': None, 'note': 'Looks right.', 'category_id': None}
+
+        matching.enabled, matching.review = (lambda: True), fake_review
+        try:
+            for _ in range(3):
+                self.user('trade')
+            self.job(self.user())
+        finally:
+            matching.enabled, matching.review = real_enabled, real_review
+        self.assertEqual(seen.get('offers'), 0, 'the check must run before anyone is offered the job')
+
+    def test_the_other_trades_a_job_needs_are_kept_and_named(self):
+        import matching
+        job_id = self.job(self.user())
+        job = engine.get_job(self.db, job_id)
+        matching.apply_to(self.db, job, {
+            'category': None, 'confidence': 'likely', 'reason': 'It is a bathroom.',
+            'licence': True, 'also': ['plumber', 'tiler'], 'band': None, 'note': 'Looks right.'}, T0)
+        extra = matching.extra_for(engine.get_job(self.db, job_id))
+        self.assertTrue(extra['licence'])
+        self.assertEqual([a['name'] for a in extra['also']], ['Plumber', 'Tiler'])
+
+        page = self.client(job['customer_id']).get(f'/me/jobs/{job_id}').data.decode()
+        self.assertIn('needs a registered or licensed person', page)
+        self.assertIn('plumber', page.lower())
+
+    def test_extra_survives_a_row_that_predates_the_column(self):
+        import matching
+        job = engine.get_job(self.db, self.job(self.user()))
+        self.assertIsNone(matching.extra_for(job))
 
     def test_a_job_is_never_rerouted_without_the_customer(self):
         customer = self.user()

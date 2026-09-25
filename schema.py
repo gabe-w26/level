@@ -514,6 +514,14 @@ MIGRATIONS = [
 
     # Quote line items are optional; a quote with none behaves exactly as before.
     'ALTER TABLE quote_templates ADD COLUMN items TEXT',
+
+    # Filling empty slots from businesses not on Level yet: how many rounds we've
+    # done, and how wide we've had to cast.
+    'ALTER TABLE jobs ADD COLUMN topup_rounds INTEGER NOT NULL DEFAULT 0',
+
+    # The parts of the trade check that aren't a sentence: the other trades this
+    # job may need, and whether the work legally needs a registered person.
+    'ALTER TABLE jobs ADD COLUMN routed_extra TEXT',
 ]
 
 
