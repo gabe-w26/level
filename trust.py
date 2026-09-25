@@ -5,7 +5,8 @@ A number out of 100 shown beside a tradie's name, built from three things:
 
   1. what we have checked        — licence on the register, NZBN, insurance, ID;
   2. what they have done here    — updates kept, replies, jobs finished, disputes;
-  3. what they have volunteered  — a photo, a police vetting result, referees.
+  3. tickets and memberships     — Site Safe, first aid, heights, association membership;
+  4. what they have volunteered  — a photo, a police vetting result, referees.
 
 Rules this sticks to, because a score that decides someone's income has to be
 defensible to the person it is about:
@@ -27,14 +28,22 @@ defensible to the person it is about:
 """
 import json
 
+import config
+
 # ── what each thing is worth ────────────────────────────────────────────────
-# Checked facts, 50. Conduct, 30. Volunteered, 20.
+# Checked facts, 40. Conduct, 30. Tickets, 15. Volunteered, 15.
 CHECKED = [
-    ('licence',   'Licence checked on the public register', 18),
-    ('insurance', 'Public liability insurance seen',        14),
-    ('nzbn',      'NZBN checked on the Companies Office',   10),
-    ('business',  'Business register looked at',             8),
+    ('licence',   'Licence checked on the public register', 14),
+    ('insurance', 'Public liability insurance seen',        11),
+    ('nzbn',      'NZBN checked on the Companies Office',    8),
+    ('business',  'Business register looked at',             7),
 ]
+
+# Each ticket we've seen and that hasn't run out. Capped, because five tickets
+# doesn't make someone a better builder than three — it is evidence of keeping
+# on top of things, and the first couple say that as well as the last.
+TICKET_EACH = config.TICKET_POINTS
+TICKET_CAP = 3
 CONDUCT = [
     ('updates',   'Progress updates kept on time', 10),
     ('replies',   'Replies to customers',           8),
@@ -42,10 +51,10 @@ CONDUCT = [
     ('clean',     'No disputes or upheld reports',  4),
 ]
 VOLUNTEERED = [
-    ('photo',     'A photo of the person who turns up', 6),
-    ('id',        'Photo ID matched to that face',      6),
-    ('vetting',   'Police vetting shared',              5),
-    ('referees',  'Referees who vouch for them',        3),
+    ('photo',     'A photo of the person who turns up', 5),
+    ('id',        'Photo ID matched to that face',      5),
+    ('vetting',   'Police vetting shared',              3),
+    ('referees',  'Referees who vouch for them',        2),
 ]
 
 # How each thing reads inside a sentence, which is not how it reads as a heading.
@@ -121,6 +130,28 @@ def conduct(db, trade_id, stats=None):
     return out
 
 
+def tickets(db, trade_id, at=None):
+    """Tickets and memberships we've seen, that haven't run out.
+
+    One row per ticket rather than a single "has tickets" line, because the
+    tradie's page is the one place they can see exactly what is and isn't
+    counting — and an expired card counting for nothing needs to be visible,
+    not silent.
+    """
+    import credentials
+    live = credentials.counting(db, trade_id, at)
+    rows = []
+    for doc in live[:TICKET_CAP]:
+        rows.append({'key': f'ticket-{doc["id"]}', 'label': doc['label'], 'worth': TICKET_EACH,
+                     'got': TICKET_EACH, 'done': True,
+                     'note': doc['status']['detail'] if doc['status']['key'] == 'expiring' else None})
+    for i in range(len(rows), TICKET_CAP):
+        rows.append({'key': f'ticket-slot-{i}', 'label': 'A ticket, card or membership',
+                     'worth': TICKET_EACH, 'got': 0, 'done': False,
+                     'note': 'Site Safe, first aid, heights, Master Builders…' if i == len(live) else None})
+    return rows
+
+
 def volunteered(trade, referees=0):
     """Things the tradie chose to add. Each one is opt-in and can be taken away again."""
     keys = trade.keys()
@@ -190,6 +221,9 @@ def explain(db, trade):
          'note': 'Verified by us against the public registers and the documents supplied.'},
         {'key': 'conduct', 'title': 'How they work', 'rows': conduct(db, tid, stats),
          'note': 'Counted from what has actually happened on Level.'},
+        {'key': 'tickets', 'title': 'Tickets and memberships', 'rows': tickets(db, tid),
+         'note': 'We’ve seen each of these and they haven’t run out. An expired one stops counting '
+                 'the day it expires.'},
         {'key': 'added', 'title': 'What they’ve added themselves', 'rows': volunteered(trade, referee_count(db, tid)),
          'note': 'Optional. Each one is the tradie’s choice, and they can remove it.'},
     ]
@@ -263,7 +297,10 @@ def summary(db, trade):
         lines.append('; '.join(bits) + '.')
     else:
         lines.append('New to Level — not enough finished jobs to judge how they work yet.')
-    added = [SHORT.get(r['key'], r['label'].lower()) for r in e['sections'][2]['rows'] if r['done']]
+    got = [r['label'].lower() for r in e['sections'][2]['rows'] if r['done']]
+    if got:
+        lines.append('Tickets we’ve seen: ' + _and(got) + '.')
+    added = [SHORT.get(r['key'], r['label'].lower()) for r in e['sections'][3]['rows'] if r['done']]
     if added:
         lines.append('They’ve also given us ' + _and(added) + '.')
     return {'score': e['score'], 'band': e['band'], 'lines': lines}

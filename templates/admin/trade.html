@@ -121,6 +121,27 @@
             <a href="https://companies-register.companiesoffice.govt.nz/" target="_blank" rel="noopener">Companies Office ↗</a>
             {% if t.business_note %}<p class="small">{{ t.business_note }}</p>{% endif %}
           </dd>
+          <dt>Tickets</dt>
+          <dd>
+            {% if documents %}
+            <ul class="plain-list">
+              {% for d in documents %}
+              <li>
+                <b>{{ d.name }}</b> <span class="small muted">{{ d.label }}{% if d.issuer %} · {{ d.issuer }}{% endif %}{% if d.reference %} · {{ d.reference }}{% endif %}</span>
+                {% if d.expires_on %}<span class="small muted">· expires {{ d.expires_on|day }}</span>{% endif %}
+                {% if d.filename %}<a href="{{ url_for('document_file', doc_id=d.id) }}" target="_blank" rel="noopener">open the file ↗</a>{% endif %}
+                <form method="post" action="{{ url_for('admin_document_checked', doc_id=d.id) }}" class="inline">
+                  {{ m.csrf() }}<input type="hidden" name="ok" value="{{ '0' if d.checked_at else '1' }}">
+                  {% if d.checked_at %}<span class="badge" style="cursor:default">✓ seen {{ d.checked_at|day }}</span>
+                    <button class="linkish small" type="submit">Undo</button>
+                  {% else %}<button class="btn btn-quiet btn-sm" type="submit">I’ve seen this document</button>{% endif %}
+                </form>
+                <span class="small muted">{{ d.status.word }} — {{ d.status.detail }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}<span class="muted">None added</span>{% endif %}
+          </dd>
           <dt>Referees</dt>
           <dd>
             {% if referees %}

@@ -120,9 +120,12 @@ class TrustScoreTest(Base):
         self.db.commit()
         e = trust.explain(self.db, self.trade(tid))
         rows = {r['key']: r for r in e['sections'][0]['rows']}
-        self.assertEqual(rows['licence']['got'], 18)
-        self.assertEqual(rows['insurance']['got'], 14)
+        worth = dict((k, w) for k, _label, w in trust.CHECKED)
+        self.assertEqual(rows['licence']['got'], worth['licence'])
+        self.assertEqual(rows['insurance']['got'], worth['insurance'])
         self.assertEqual(rows['nzbn']['got'], 0)
+        self.assertGreater(worth['licence'], worth['nzbn'],
+                           'a licence is the thing that matters most; keep it weighted that way')
         self.assertEqual(rows['licence']['when'], ts(T0))
         self.assertGreater(e['score'], 0)
 
@@ -133,14 +136,16 @@ class TrustScoreTest(Base):
         self.db.execute("UPDATE trades SET photo = 'x.jpg', vetting_status = 'offered', vetting_at = ? "
                         'WHERE user_id = ?', (ts(T0), tid))
         self.db.commit()
+        worth = dict((k, w) for k, _label, w in trust.VOLUNTEERED)
         rows = {r['key']: r for r in trust.volunteered(self.trade(tid))}
-        self.assertEqual(rows['photo']['got'], 6)
+        self.assertEqual(rows['photo']['got'], worth['photo'])
         self.assertEqual(rows['id']['got'], 0)
         self.assertEqual(rows['vetting']['got'], 0, 'merely saying you have one must not score')
 
         self.db.execute("UPDATE trades SET vetting_status = 'seen' WHERE user_id = ?", (tid,))
         self.db.commit()
-        self.assertEqual({r['key']: r['got'] for r in trust.volunteered(self.trade(tid))}['vetting'], 5)
+        self.assertEqual({r['key']: r['got'] for r in trust.volunteered(self.trade(tid))}['vetting'],
+                         dict((k, w) for k, _l, w in trust.VOLUNTEERED)['vetting'])
 
     def test_referees_count_only_after_we_have_rung_them(self):
         tid = self.user('trade')
@@ -152,10 +157,10 @@ class TrustScoreTest(Base):
         self.db.execute('UPDATE trade_referees SET checked_at = ?', (ts(T0),))
         self.db.commit()
         self.assertEqual(trust.referee_count(self.db, tid), 2)
-        self.assertEqual({r['key']: r['got'] for r in
-                          trust.volunteered(self.trade(tid), 2)}['referees'], 3)
+        self.assertEqual({r['key']: r['got'] for r in trust.volunteered(self.trade(tid), 2)}['referees'],
+                         dict((k, w) for k, _l, w in trust.VOLUNTEERED)['referees'])
 
-    def test_everything_checked_scores_near_full_marks(self):
+    def test_everything_checked_scores_full_marks(self):
         tid = self.user('trade')
         self.db.execute('UPDATE trades SET licence_checked_at = ?, insurance_checked_at = ?, nzbn_checked_at = ?, '
                         "business_checked_at = ?, photo = 'x.jpg', photo_checked_at = ?, id_checked_at = ?, "
@@ -164,12 +169,20 @@ class TrustScoreTest(Base):
         for i in range(2):
             self.db.execute('INSERT INTO trade_referees (trade_id, name, checked_at, created_at) VALUES (?,?,?,?)',
                             (tid, f'Ref {i}', ts(T0), ts(T0)))
+        for i in range(trust.TICKET_CAP):
+            self.db.execute('INSERT INTO trade_documents (trade_id, kind, name, checked_at, created_at) '
+                            'VALUES (?,?,?,?,?)', (tid, 'site_safe', f'Ticket {i}', ts(T0), ts(T0)))
         self.db.commit()
         e = trust.explain(self.db, self.trade(tid))
         # Conduct is excluded while unproven, so a fully checked newcomer reads 100.
         self.assertEqual(e['score'], 100)
         self.assertEqual(e['band'], 'Well checked')
         self.assertIsNone(e['next'])
+
+    def test_the_four_sections_add_up_to_a_hundred(self):
+        total = (sum(w for _k, _l, w in trust.CHECKED) + sum(w for _k, _l, w in trust.CONDUCT)
+                 + trust.TICKET_EACH * trust.TICKET_CAP + sum(w for _k, _l, w in trust.VOLUNTEERED))
+        self.assertEqual(total, 100, 'a score out of 100 has to be out of 100')
 
     def test_the_next_step_is_the_most_valuable_missing_thing(self):
         tid = self.user('trade')

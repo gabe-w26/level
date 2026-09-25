@@ -676,6 +676,9 @@ def sweep(db, at=None):
 
     import docket
     report['docket_retried'] = docket.retry_failed(db, at)
+
+    import credentials
+    report['tickets_warned'] = credentials.warn_about_expiries(db, at)
     return report
 
 

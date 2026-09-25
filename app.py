@@ -28,6 +28,7 @@ import ai
 import backup
 import billing
 import compare
+import credentials
 import docket
 import config
 import engine
@@ -419,7 +420,8 @@ def pro_profile(trade_id):
                            rating=engine.trade_rating(db(), trade_id), done=done,
                            report_record=reporting.trade_record(db(), trade_id),
                            report_plan=reporting.describe(t['report_plan']),
-                           trust=trust.explain(db(), t))
+                           trust=trust.explain(db(), t),
+                           tickets=credentials.public_list(db(), trade_id))
 
 
 # ── Accounts ──────────────────────────────────────────────────────────────────
@@ -1138,7 +1140,8 @@ def trade_home():
                            subscribed=engine.is_subscribed(t, now),
                            invite_url=f'{integrations.site_url()}/join/{_invite_code(t)}',
                            invited=db().execute('SELECT COUNT(*) AS n FROM users WHERE referred_by = ?',
-                                                (t['user_id'],)).fetchone()['n'])
+                                                (t['user_id'],)).fetchone()['n'],
+                           docket_hint=docket.worth_mentioning(db(), t['user_id']))
 
 
 @app.route('/trade/quotes')
@@ -1660,6 +1663,15 @@ def trade_docket():
                            form=request.form if request.method == 'POST' else {})
 
 
+@app.post('/trade/docket/hide')
+@requires('trade')
+def trade_hide_docket():
+    """They don't want to hear about it. That's the end of it."""
+    db().execute('UPDATE trades SET docket_hidden = 1 WHERE user_id = ?', (current_trade()['user_id'],))
+    db().commit()
+    return redirect(request.referrer or url_for('trade_home'))
+
+
 @app.post('/trade/jobs/<int:job_id>/docket')
 @requires('trade')
 def trade_push_docket(job_id):
@@ -1685,10 +1697,87 @@ def trade_trust():
     """
     t = current_trade()
     return render_template('trade/trust.html', t=t, trust=trust.explain(db(), t),
+                           documents=credentials.for_trade(db(), t['user_id']),
+                           doc_kinds=credentials.KINDS,
                            referees=db().execute('SELECT * FROM trade_referees WHERE trade_id = ? ORDER BY id',
                                                  (t['user_id'],)).fetchall(),
                            vetting_url='https://www.police.govt.nz/advice-services/businesses-and-organisations/'
                                        'vetting')
+
+
+@app.post('/trade/documents')
+@requires('trade')
+def trade_add_document():
+    """Put up a ticket, card or membership."""
+    t = current_trade()
+    names, error = _save_documents(request.files.getlist('file'))
+    if error:
+        flash(error, 'error')
+        return redirect(url_for('trade_trust'))
+    try:
+        credentials.add(db(), t['user_id'], request.form, names[0] if names else None)
+        flash('Added. We’ll check it and mark it seen — it starts counting once we have.')
+    except credentials.CredentialError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('trade_trust'))
+
+
+@app.post('/trade/documents/<int:doc_id>/remove')
+@requires('trade')
+def trade_remove_document(doc_id):
+    try:
+        name = credentials.remove(db(), doc_id, current_trade()['user_id'])
+        if name:
+            try:
+                os.remove(os.path.join(UPLOAD_DIR, name))
+            except OSError:
+                pass                     # the row is gone; a stray file isn't worth an error page
+        flash('Removed.')
+    except credentials.CredentialError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('trade_trust'))
+
+
+@app.get('/documents/<int:doc_id>/file')
+@requires()
+def document_file(doc_id):
+    """The document itself. Only its owner and an admin, ever.
+
+    A certificate has somebody's full name and a registration number on it. The
+    customer is told that a ticket was checked and when it runs out; the file is
+    none of their business, so it is not served from the public uploads folder.
+    """
+    row = db().execute('SELECT trade_id, filename FROM trade_documents WHERE id = ?', (doc_id,)).fetchone()
+    u = current_user()
+    if not row or not row['filename'] or (u['role'] != 'admin' and u['id'] != row['trade_id']):
+        abort(404)
+    return send_from_directory(UPLOAD_DIR, row['filename'])
+
+
+def _save_documents(files):
+    """Like _save_photos, but a ticket is often a PDF."""
+    picked = [f for f in files if f and f.filename]
+    if not picked:
+        return [], None
+    if len(picked) > 1:
+        return [], 'One file at a time.'
+    ext = picked[0].filename.rsplit('.', 1)[-1].lower()
+    if ext not in credentials.FILE_TYPES:
+        return [], 'Upload a PDF or a photo (JPG, PNG, WEBP or HEIC).'
+    name = f'{uuid.uuid4().hex}.{ext}'
+    picked[0].save(os.path.join(UPLOAD_DIR, name))
+    return [name], None
+
+
+@app.post('/admin/documents/<int:doc_id>/checked')
+@requires('admin')
+def admin_document_checked(doc_id):
+    row = db().execute('SELECT trade_id FROM trade_documents WHERE id = ?', (doc_id,)).fetchone()
+    if not row:
+        abort(404)
+    credentials.mark_checked(db(), doc_id, request.form.get('ok') == '1', request.form.get('note'))
+    flash('Document updated.')
+    return redirect(request.referrer or url_for('admin_trade', trade_id=row['trade_id']))
 
 
 @app.post('/trade/referees')
@@ -2205,6 +2294,7 @@ def admin_trade(trade_id):
                               'WHERE r.trade_id = ? ORDER BY r.id DESC LIMIT 10', (trade_id,)).fetchall(),
         referees=db().execute('SELECT * FROM trade_referees WHERE trade_id = ? ORDER BY id',
                               (trade_id,)).fetchall(),
+        documents=credentials.for_trade(db(), trade_id),
         trust=trust.explain(db(), t),
         rating=engine.trade_rating(db(), trade_id),
         progress=engine.guarantee_progress(db(), trade_id, now),

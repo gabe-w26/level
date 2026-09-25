@@ -278,6 +278,7 @@
         <button class="btn btn-sm">Send it now</button>
       </form>
     {% else %}
+      <p class="small muted" style="margin:0 0 10px">Connected, but this one hasn’t gone across yet.</p>
       <form method="post" action="{{ url_for('trade_push_docket', job_id=job.id) }}" class="inline">
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
         <button class="btn btn-sm btn-ghost">Send this job to Docket</button>

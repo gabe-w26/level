@@ -152,6 +152,23 @@ def _site_url():
     return integrations.site_url()
 
 
+def worth_mentioning(db, trade_id):
+    """Should we tell this trade about Docket, and with what to show for it?
+
+    Only once they have actually won work here — a tradie with no jobs doesn't
+    need job management, and saying so before they've had a win is an advert
+    rather than a suggestion. They can turn it off for good.
+    """
+    row = db.execute('SELECT docket_url, docket_hidden FROM trades WHERE user_id = ?', (trade_id,)).fetchone()
+    if not row or row['docket_url'] or row['docket_hidden']:
+        return None
+    won = db.execute("SELECT COUNT(*) AS n FROM jobs WHERE hired_trade_id = ? AND status = 'hired'",
+                     (trade_id,)).fetchone()['n'] or 0
+    if won < 1:
+        return None
+    return {'won': won}
+
+
 # ── Sending, and not minding when it fails ──────────────────────────────────
 
 def settings_for(db, trade_id):

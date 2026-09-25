@@ -67,6 +67,64 @@
   </div>
 
   <div class="card">
+    <h3>Tickets, cards and memberships</h3>
+    <p class="muted">Site Safe, first aid, working at heights, Master Builders — the things you already
+      have that nobody ever gets to see. Each one we check is worth {{ cfg.TICKET_POINTS }} points, up to
+      three.</p>
+    <p class="small muted"><b>If it has an expiry date, put it in.</b> It stops counting the day it runs
+      out, and we’ll tell you a month before so you can renew it. A card that quietly expired is worse
+      than no card.</p>
+
+    {% if documents %}
+    <ul class="plain-list">
+      {% for d in documents %}
+      <li>
+        <div class="head-row" style="min-height:0">
+          <div>
+            <b>{{ d.name }}</b>
+            <span class="pill {{ 'hired' if d.status.key == 'ok' }}{{ ' full' if d.status.key == 'expiring' }}{{ ' declined' if d.status.key == 'expired' }}">{{ d.status.word }}</span>
+          </div>
+          <span class="small muted">{{ d.status.detail }}</span>
+        </div>
+        <p class="small muted" style="margin:2px 0 0">
+          {{ d.label }}{% if d.issuer %} · {{ d.issuer }}{% endif %}{% if d.reference %} · {{ d.reference }}{% endif %}
+          {% if d.filename %} · <a href="{{ url_for('document_file', doc_id=d.id) }}" target="_blank" rel="noopener">see the file</a>{% endif %}
+        </p>
+        {% if d.checked_note %}<p class="small">{{ d.checked_note }}</p>{% endif %}
+        <form method="post" action="{{ url_for('trade_remove_document', doc_id=d.id) }}" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-ghost">Remove</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('trade_add_document') }}" enctype="multipart/form-data" class="stack">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="row">
+        <label>What is it?
+          <select name="kind" required>
+            {% for key, label, issuer, dated in doc_kinds %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Name it (optional)<input name="name" maxlength="120" placeholder="e.g. Site Safe passport"></label>
+      </div>
+      <div class="row">
+        <label>Who issued it<input name="issuer" maxlength="120" placeholder="Site Safe New Zealand"></label>
+        <label>Number (optional)<input name="reference" maxlength="80"></label>
+      </div>
+      <div class="row">
+        <label>When does it run out?<span class="hint">Leave blank if it doesn’t</span>
+          <input name="expires_on" type="date"></label>
+        <label>The card or certificate<span class="hint">PDF or a photo. Only you and we ever see it.</span>
+          <input type="file" name="file" accept=".pdf,image/*"></label>
+      </div>
+      <button class="btn btn-sm">Add it</button>
+    </form>
+  </div>
+
+  <div class="card">
     <h3>Police vetting</h3>
     <p class="muted">You request it yourself from the New Zealand Police — we can’t do it for you, and we don’t
       want a copy. Show us the result and we’ll note that we saw it, and when. <b>We never record what it says</b>,

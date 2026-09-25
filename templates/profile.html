@@ -46,6 +46,20 @@
         {% endif %}
       </div>
 
+      {% if tickets %}
+      <div class="card">
+        <h4 style="margin:0 0 8px">Tickets we’ve seen</h4>
+        <ul class="checklist">
+          {% for tk in tickets %}
+          <li class="yes">{{ tk.label }}{% if tk.issuer %} <span class="muted small">· {{ tk.issuer }}</span>{% endif %}
+            {% if tk.expires_on %}<span class="muted small">· current until {{ tk.expires_on|day }}</span>{% endif %}</li>
+          {% endfor %}
+        </ul>
+        <p class="small muted" style="margin:8px 0 0">We’ve seen each of these and they hadn’t run out when we
+          looked. That’s all it means — {{ cfg.BRAND }} doesn’t issue or assess any of them.</p>
+      </div>
+      {% endif %}
+
       <div class="section-title"><h2>Reviews</h2><span class="label">Only from customers who hired them here</span></div>
       {% if rating.n and rating.n >= 3 %}
       <div class="card" style="margin-bottom:14px">

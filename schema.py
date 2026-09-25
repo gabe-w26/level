@@ -387,6 +387,21 @@ CREATE INDEX IF NOT EXISTS idx_offers_expiry   ON offers (status, expires_at);
 CREATE INDEX IF NOT EXISTS idx_quotes_job      ON quotes (job_id);
 CREATE INDEX IF NOT EXISTS idx_quotes_trade    ON quotes (trade_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_status     ON jobs (status, closes_at);
+CREATE TABLE IF NOT EXISTS trade_documents (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    trade_id        INTEGER NOT NULL,
+    kind            TEXT NOT NULL,
+    name            TEXT,
+    issuer          TEXT,
+    reference       TEXT,
+    expires_on      TEXT,
+    filename        TEXT,
+    checked_at      TEXT,
+    checked_note    TEXT,
+    warned_at       TEXT,
+    created_at      TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS trade_referees (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     trade_id        INTEGER NOT NULL,
@@ -535,6 +550,7 @@ MIGRATIONS = [
     'ALTER TABLE jobs ADD COLUMN docket_ref TEXT',
     'ALTER TABLE jobs ADD COLUMN docket_error TEXT',
     'ALTER TABLE jobs ADD COLUMN docket_tries INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE trades ADD COLUMN docket_hidden INTEGER NOT NULL DEFAULT 0',
 ]
 
 

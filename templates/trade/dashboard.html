@@ -20,6 +20,25 @@
 
   <div class="two">
     <div>
+      {% if docket_hint %}
+      <div class="card notice notice-chalk" style="margin-bottom:16px">
+        <p style="margin:0 0 6px"><b>You’ve won {{ docket_hint.won }} job{{ 's' if docket_hint.won != 1 }} here.
+          Who’s running {{ 'them' if docket_hint.won != 1 else 'it' }}?</b></p>
+        <p style="margin:0 0 8px">Docket does the part {{ cfg.BRAND }} doesn’t: job scheduling, timesheets,
+          site safety and pre-starts, invoices, and the paperwork that comes with residential work.
+          Connect it and every job you win here turns up there on its own — customer, address, access
+          notes and your quote — with nothing retyped.</p>
+        <p class="small muted" style="margin:0 0 10px">Straight up: Docket is made by the same people who
+          built {{ cfg.BRAND }}. It’s a separate product you pay for separately, and nothing here works any
+          differently whether you use it or not.</p>
+        <a class="btn btn-sm" href="{{ url_for('trade_docket') }}">Have a look</a>
+        <form method="post" action="{{ url_for('trade_hide_docket') }}" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-ghost">Not interested</button>
+        </form>
+      </div>
+      {% endif %}
+
       <div class="section-title" style="margin-top:0"><h2>Waiting on you</h2><span class="label">{{ leads|length }} job{{ 's' if leads|length != 1 }}</span></div>
       {% if leads %}
       <div class="jobs">
