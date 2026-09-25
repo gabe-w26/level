@@ -382,6 +382,20 @@ class WorksiteTest(Base):
         self.assertEqual(len(checks[0]['flags']), 1)
         self.assertIn('asbestos', checks[0]['flags'][0])
 
+    def test_every_question_is_phrased_so_that_no_is_the_concern(self):
+        """A mixed polarity flags a tradie for a good answer.
+
+        The consent item used to ask "does this need a consent?", where "no" is
+        the reassuring answer — and it was flagged alongside "no, I haven't
+        found the mains switch". Found by filling the form in on a phone.
+        """
+        for key, question, _why in worksite.CHECK_ITEMS:
+            flags = worksite.flags({k: ('no' if k == key else 'yes') for k in worksite.CHECK_KEYS})
+            self.assertEqual(len(flags), 1, f'{key}: answering no should raise exactly one thing')
+            yes_only = worksite.flags({k: 'yes' for k in worksite.CHECK_KEYS})
+            self.assertEqual(yes_only, [], f'{key}: all yes must raise nothing')
+            self.assertTrue(question.endswith('?'))
+
     def test_an_unanswered_check_is_refused(self):
         trade = self.user('trade')
         job = self.hire(self.user(), trade)

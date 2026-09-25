@@ -280,7 +280,10 @@ CHECK_ITEMS = [
      'hitting a gas, power or fibre line is expensive at best'),
     ('neighbours_pets', 'Are neighbours, pets and anyone else on site sorted?',
      'a gate left open or a blocked driveway ends up costing the job'),
-    ('consent',        'Does this work need a building consent, or a Record of Work?',
+    # Phrased as "have you sorted it", not "does it need one", so that — like
+    # every other item here — "no" is the answer that needs attention. A mixed
+    # polarity means a tradie answering honestly gets flagged for a good answer.
+    ('consent',        'If this needs a building consent or a Record of Work, is that sorted?',
      'restricted building work and unconsented work come back on both of you'),
 ]
 
@@ -294,7 +297,7 @@ FLAG_TEXT = {
     'hazards':        'hazards haven’t been ruled out — asbestos, lead paint, live wiring, height or confined space',
     'services':       'underground services haven’t been located and there’s digging to do',
     'neighbours_pets': 'neighbours, pets or others on site still need sorting',
-    'consent':        'this may need a building consent or a Record of Work',
+    'consent':        'a building consent or Record of Work may still be needed',
 }
 
 

@@ -48,6 +48,14 @@ VOLUNTEERED = [
     ('referees',  'Referees who vouch for them',        3),
 ]
 
+# How each thing reads inside a sentence, which is not how it reads as a heading.
+# "Checked: their licence, insurance and NZBN" — not "licence checked on the
+# public register, public liability insurance seen, nzbn".
+SHORT = {'licence': 'their licence', 'insurance': 'insurance', 'nzbn': 'their NZBN',
+         'business': 'the business register',
+         'photo': 'a photo of themselves', 'id': 'photo ID', 'vetting': 'police vetting',
+         'referees': 'referees we rang'}
+
 MIN_JOBS = 3          # below this, conduct is "not enough jobs yet" rather than a low mark
 GOOD = 75             # at or above this we say so in words
 FAIR = 50
@@ -244,9 +252,9 @@ def summary(db, trade):
     """Two or three short lines for a customer, naming only what was actually done."""
     e = explain(db, trade)
     lines = []
-    done = [r['label'] for r in e['sections'][0]['rows'] if r['done']]
+    done = [SHORT.get(r['key'], r['label'].lower()) for r in e['sections'][0]['rows'] if r['done']]
     if done:
-        lines.append('Checked: ' + ', '.join(l.split(' checked')[0].split(' seen')[0].lower() for l in done) + '.')
+        lines.append('We’ve checked ' + _and(done) + '.')
     if e['proven']:
         s = e['stats']
         bits = [f"{s['finished']} job{'s' if s['finished'] != 1 else ''} finished through Level"]
@@ -255,10 +263,17 @@ def summary(db, trade):
         lines.append('; '.join(bits) + '.')
     else:
         lines.append('New to Level — not enough finished jobs to judge how they work yet.')
-    added = [r['label'] for r in e['sections'][2]['rows'] if r['done']]
+    added = [SHORT.get(r['key'], r['label'].lower()) for r in e['sections'][2]['rows'] if r['done']]
     if added:
-        lines.append('They’ve also added: ' + ', '.join(a.lower() for a in added) + '.')
+        lines.append('They’ve also given us ' + _and(added) + '.')
     return {'score': e['score'], 'band': e['band'], 'lines': lines}
+
+
+def _and(words):
+    """"a, b and c" — an Oxford comma is not how anyone writes this out loud."""
+    if len(words) == 1:
+        return words[0]
+    return ', '.join(words[:-1]) + ' and ' + words[-1]
 
 
 def as_json(db, trade):
