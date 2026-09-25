@@ -13,3 +13,6 @@ mobile/.expo/
 mobile/ios/
 mobile/android/
 mobile/dist/
+
+# Database backups. These hold real customer data — they never go in git.
+backups/

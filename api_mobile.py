@@ -255,6 +255,7 @@ def quote_json(q, with_contact=False):
     out['act_docs_promised'] = bool(q['act_docs_promised']) if 'act_docs_promised' in keys else False
     out['price_text'] = engine.price_text(q)
     for k in ('business_name', 'licence_type', 'licence_number', 'years_trading', 'workmanship_guarantee',
+              'photo', 'trust_score',
               'msg_count', 'rating', 'needs_act', 'title', 'suburb', 'area_name', 'category_name', 'job_status',
               'unread', 'value_band', 'quote_count'):
         if k in keys:

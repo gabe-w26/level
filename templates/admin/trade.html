@@ -73,6 +73,77 @@
         </dl>
       </div>
 
+      <div class="section-title"><h2>The person</h2>
+        <span class="label">trust {{ trust.score }}/100 · {{ trust.band }}</span></div>
+      <div class="card">
+        <p class="small muted">Everything here is opt-in and supplied by them. Confirm only what you have actually
+          seen with your own eyes — the score is shown to customers, and it has to be true.</p>
+        <dl class="kv">
+          <dt>Photo</dt>
+          <dd>
+            {% if t.photo %}
+              <img class="face" style="width:64px;height:64px" src="{{ url_for('upload', name=t.photo) }}" alt="">
+              <form method="post" action="{{ url_for('admin_trade_action', trade_id=t.user_id, action='check') }}" class="inline">
+                {{ m.csrf() }}<input type="hidden" name="what" value="photo"><input type="hidden" name="ok" value="{{ '0' if t.photo_checked_at else '1' }}">
+                {% if t.photo_checked_at %}<span class="badge" style="cursor:default">✓ {{ t.photo_checked_at|day }}</span> <button class="linkish small" type="submit">Undo</button>
+                {% else %}<button class="btn btn-quiet btn-sm" type="submit">It’s a clear photo of a person</button>{% endif %}
+              </form>
+            {% else %}<span class="muted">None added</span>{% endif %}
+          </dd>
+          <dt>Photo ID</dt>
+          <dd>
+            <form method="post" action="{{ url_for('admin_trade_action', trade_id=t.user_id, action='check') }}" class="inline">
+              {{ m.csrf() }}<input type="hidden" name="what" value="id"><input type="hidden" name="ok" value="{{ '0' if t.id_checked_at else '1' }}">
+              {% if t.id_checked_at %}<span class="badge" style="cursor:default">✓ matched {{ t.id_checked_at|day }}</span> <button class="linkish small" type="submit">Undo</button>
+              {% else %}<button class="btn btn-quiet btn-sm" type="submit">I’ve seen ID matching that face</button>{% endif %}
+            </form>
+            <span class="small muted">We don’t keep the document.</span>
+          </dd>
+          <dt>Police vetting</dt>
+          <dd>
+            <form method="post" action="{{ url_for('admin_trade_vetting', trade_id=t.user_id) }}" class="inline">
+              {{ m.csrf() }}
+              {% if t.vetting_status == 'seen' %}<span class="badge" style="cursor:default">✓ seen {{ t.vetting_at|day }}</span>
+                <button class="linkish small" name="choice" value="clear">Undo</button>
+              {% elif t.vetting_status == 'offered' %}<span class="muted">They say they have one</span>
+                <button class="btn btn-quiet btn-sm" name="choice" value="seen">I’ve seen it</button>
+              {% else %}<span class="muted">Not offered</span>{% endif %}
+            </form>
+            <span class="small muted">Record that you saw it — never what it said.</span>
+          </dd>
+          <dt>Business register</dt>
+          <dd>
+            <form method="post" action="{{ url_for('admin_trade_action', trade_id=t.user_id, action='check') }}" class="inline">
+              {{ m.csrf() }}<input type="hidden" name="what" value="business"><input type="hidden" name="ok" value="{{ '0' if t.business_checked_at else '1' }}">
+              {% if t.business_checked_at %}<span class="badge" style="cursor:default">✓ {{ t.business_checked_at|day }}</span> <button class="linkish small" type="submit">Undo</button>
+              {% else %}<button class="btn btn-quiet btn-sm" type="submit">Mark looked at</button>{% endif %}
+            </form>
+            <a href="https://companies-register.companiesoffice.govt.nz/" target="_blank" rel="noopener">Companies Office ↗</a>
+            {% if t.business_note %}<p class="small">{{ t.business_note }}</p>{% endif %}
+          </dd>
+          <dt>Referees</dt>
+          <dd>
+            {% if referees %}
+            <ul class="plain-list">
+              {% for r in referees %}
+              <li>
+                <b>{{ r.name }}</b>{% if r.relationship %} · {{ r.relationship }}{% endif %}
+                {% if r.phone %} · {{ r.phone }}{% endif %}{% if r.email %} · {{ r.email }}{% endif %}
+                <form method="post" action="{{ url_for('admin_referee_checked', ref_id=r.id) }}" class="inline">
+                  {{ m.csrf() }}<input type="hidden" name="ok" value="{{ '0' if r.checked_at else '1' }}">
+                  {% if r.checked_at %}<span class="badge" style="cursor:default">✓ rung {{ r.checked_at|day }}</span>
+                    <button class="linkish small" type="submit">Undo</button>
+                  {% else %}<button class="btn btn-quiet btn-sm" type="submit">I’ve rung them</button>{% endif %}
+                </form>
+                {% if r.checked_note %}<p class="small muted">{{ r.checked_note }}</p>{% endif %}
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}<span class="muted">None given</span>{% endif %}
+          </dd>
+        </dl>
+      </div>
+
       <div class="section-title"><h2>Jobs they were offered</h2></div>
       <div class="card table-wrap" style="padding:6px 10px">
         <table>

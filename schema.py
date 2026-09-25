@@ -387,6 +387,69 @@ CREATE INDEX IF NOT EXISTS idx_offers_expiry   ON offers (status, expires_at);
 CREATE INDEX IF NOT EXISTS idx_quotes_job      ON quotes (job_id);
 CREATE INDEX IF NOT EXISTS idx_quotes_trade    ON quotes (trade_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_status     ON jobs (status, closes_at);
+CREATE TABLE IF NOT EXISTS trade_referees (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    trade_id        INTEGER NOT NULL,
+    name            TEXT NOT NULL,
+    relationship    TEXT,
+    phone           TEXT,
+    email           TEXT,
+    note            TEXT,
+    checked_at      TEXT,
+    checked_note    TEXT,
+    created_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS job_sites (
+    job_id          INTEGER PRIMARY KEY,
+    address         TEXT,
+    access          TEXT,
+    parking         TEXT,
+    pets            TEXT,
+    hazards         TEXT,
+    power_water     TEXT,
+    notes           TEXT,
+    updated_by      INTEGER,
+    updated_at      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS site_notes (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id          INTEGER NOT NULL,
+    author_id       INTEGER NOT NULL,
+    body            TEXT NOT NULL,
+    shared          INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS site_note_photos (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    note_id         INTEGER NOT NULL,
+    filename        TEXT NOT NULL,
+    created_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS site_checks (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id          INTEGER NOT NULL,
+    trade_id        INTEGER NOT NULL,
+    answers         TEXT NOT NULL,
+    hazards         TEXT,
+    notes           TEXT,
+    created_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS quote_items (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    quote_id        INTEGER NOT NULL,
+    position        INTEGER NOT NULL DEFAULT 0,
+    description     TEXT NOT NULL,
+    qty             REAL,
+    unit            TEXT,
+    unit_price      REAL,
+    created_at      TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_jobs_customer   ON jobs (customer_id);
 CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages (job_id, trade_id);
 CREATE INDEX IF NOT EXISTS idx_notes_user      ON notifications (user_id, read_at);
@@ -422,6 +485,35 @@ MIGRATIONS = [
     'ALTER TABLE jobs ADD COLUMN work_started_on TEXT',
     'ALTER TABLE jobs ADD COLUMN work_done_on TEXT',
     'ALTER TABLE notifications ADD COLUMN pushed_at TEXT',
+
+    # Profile photo (a face, the way Uber does it) and what we've confirmed about the person.
+    'ALTER TABLE trades ADD COLUMN photo TEXT',
+    'ALTER TABLE trades ADD COLUMN photo_at TEXT',
+    'ALTER TABLE trades ADD COLUMN photo_checked_at TEXT',
+    'ALTER TABLE trades ADD COLUMN id_checked_at TEXT',
+    'ALTER TABLE trades ADD COLUMN vetting_status TEXT',
+    'ALTER TABLE trades ADD COLUMN vetting_at TEXT',
+    'ALTER TABLE trades ADD COLUMN vetting_note TEXT',
+
+    # What the public business register showed, and when we looked.
+    'ALTER TABLE trades ADD COLUMN nzbn_status TEXT',
+    'ALTER TABLE trades ADD COLUMN nzbn_registered_on TEXT',
+    'ALTER TABLE trades ADD COLUMN business_note TEXT',
+    'ALTER TABLE trades ADD COLUMN business_checked_at TEXT',
+
+    # The trust score, recomputed in the sweep so a page load never waits on it.
+    'ALTER TABLE trades ADD COLUMN trust_score INTEGER',
+    'ALTER TABLE trades ADD COLUMN trust_at TEXT',
+
+    # Routing: what the matcher made of the job, and when we topped the slots up.
+    'ALTER TABLE jobs ADD COLUMN routed_note TEXT',
+    'ALTER TABLE jobs ADD COLUMN routed_category_id INTEGER',
+    'ALTER TABLE jobs ADD COLUMN routed_at TEXT',
+    'ALTER TABLE jobs ADD COLUMN topup_at TEXT',
+    'ALTER TABLE jobs ADD COLUMN topup_sent INTEGER NOT NULL DEFAULT 0',
+
+    # Quote line items are optional; a quote with none behaves exactly as before.
+    'ALTER TABLE quote_templates ADD COLUMN items TEXT',
 ]
 
 

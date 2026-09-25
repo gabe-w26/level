@@ -139,6 +139,32 @@ def live_slots(db, job_id):
                       (job_id,)).fetchone()['n']
 
 
+def change_category(db, job, category_id, at=None):
+    """Move a job to a different trade, at the customer's say-so.
+
+    Everything already offered is closed and the job starts again: the trades who
+    had it can't do it, and leaving them holding a slot they'll never quote on is
+    how a board fills with dead jobs. Quotes already sent are left alone — someone
+    took the time to write them, and the customer can still read them.
+    """
+    at = at or utcnow()
+    if job['status'] not in ('open', 'full'):
+        raise RuleError('This job has already closed.')
+    if job['quote_count'] >= config.MAX_QUOTES:
+        raise RuleError('This job already has all its quotes.')
+    if not db.execute('SELECT 1 FROM categories WHERE id = ?', (category_id,)).fetchone():
+        raise RuleError('We don’t know that trade.')
+    db.execute("UPDATE offers SET status = 'closed', resolved_at = ? WHERE job_id = ? AND status = 'active'",
+               (ts(at), job['id']))
+    db.execute('UPDATE jobs SET category_id = ?, routed_category_id = NULL, routed_at = NULL WHERE id = ?',
+               (category_id, job['id']))
+    db.commit()
+    # fill_slots leaves its inserts for the caller to commit.
+    n = fill_slots(db, get_job(db, job['id']), at)
+    db.commit()
+    return n
+
+
 def fill_slots(db, job, at=None):
     """Top a job back up to TRADES_PER_JOB live slots. Returns how many trades were offered it."""
     at = at or utcnow()
@@ -150,6 +176,11 @@ def fill_slots(db, job, at=None):
     if need <= 0:
         return 0
     picks = _candidates(db, job, at)[:need]
+    if len(picks) < need:
+        # Not enough trades on Level to fill this job. Ask the ones who aren't
+        # here yet — there is a real job with a real empty slot to offer them.
+        import outreach
+        outreach.maybe_topup(db, job, at)
     if not picks:
         return 0
     wave = db.execute('SELECT COALESCE(MAX(wave), 0) AS w FROM offers WHERE job_id = ?',
@@ -580,7 +611,35 @@ def sweep(db, at=None):
     _ask_who_they_hired(db, at)
     db.commit()
     report['months_settled'] = evaluate_guarantees(db, at)
+
+    # Trust scores are recomputed here rather than on page load, so nobody waits
+    # on them and every page in a request sees the same number.
+    import trust
+    report['trust_rescored'] = trust.refresh(db, at)
+    report['routed'] = _check_routing(db, at)
     return report
+
+
+def _check_routing(db, at, limit=5):
+    """Read the newest jobs and say whether they went to the right trade.
+
+    Deliberately after distribution, not before it: a tradie seeing a job four
+    minutes sooner is worth more than a machine's opinion, and the check catches
+    a wrong category inside one sweep anyway — long before the four hours are up.
+    Capped per sweep so a flood of jobs can't run up a bill.
+    """
+    import matching
+    if not matching.enabled():
+        return 0
+    rows = db.execute("SELECT id FROM jobs WHERE routed_at IS NULL AND status IN ('open','full') "
+                      'ORDER BY id DESC LIMIT ?', (limit,)).fetchall()
+    cats = db.execute('SELECT id, slug, name FROM categories').fetchall()
+    done = 0
+    for row in rows:
+        job = get_job(db, row['id'])
+        matching.apply_to(db, job, matching.review(db, job, cats), at)
+        done += 1
+    return done
 
 
 def try_lock(db, name, seconds, at=None):

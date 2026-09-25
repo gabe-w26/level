@@ -10,6 +10,7 @@
   'card': '<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/>',
   'profile': '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2.2"/><path d="M5.5 17c.6-1.9 2-2.8 3.5-2.8s2.9.9 3.5 2.8M15 9.5h4M15 13.5h4"/>',
   'bell': '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  'shield': '<path d="M12 3.2 5 6v5.5c0 4.3 2.9 7.6 7 9.3 4.1-1.7 7-5 7-9.3V6z"/><path d="m9 12 2.2 2.2L15.5 10"/>',
   'gift': '<rect x="3.5" y="8" width="17" height="4" rx="1"/><path d="M5 12v8.5h14V12M12 8v12.5M12 8c-1.5-3.5-5.5-3.8-5.5-1.5 0 1.3 2 1.5 5.5 1.5zM12 8c1.5-3.5 5.5-3.8 5.5-1.5 0 1.3-2 1.5-5.5 1.5z"/>'
 } -%}
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ paths.get(name, '')|safe }}</svg>
@@ -60,6 +61,27 @@
   {% if t.insurance_checked_at %}<li class="badge" title="We saw a public liability certificate from {{ t.insurance_insurer }}{% if t.insurance_expiry %}, valid to {{ t.insurance_expiry|day }}{% endif %}. Checked {{ t.insurance_checked_at|day }}.">✓ Insured{% if t.insurance_expiry %} to {{ t.insurance_expiry|day }}{% endif %}</li>
   {% elif t.insurance_insurer and show_waiting %}<li class="badge wait">Insurance not yet checked</li>{% endif %}
 </ul>
+{% endmacro %}
+
+{# The trust score, small. Always a link to the workings — a number nobody can
+   interrogate is a number nobody should trust. #}
+{% macro trust_chip(t, summary=None, href=None) %}
+{%- set score = summary.score if summary else t.trust_score -%}
+{%- if score is not none -%}
+<span class="trust-chip{{ ' low' if score < 50 }}{{ ' good' if score >= 75 }}"
+      title="{{ (summary.lines|join(' ')) if summary else 'How well checked this business is.' }}">
+  <b>{{ score }}</b><span>/100</span>
+  {%- if summary %} {{ summary.band }}{% endif -%}
+</span>
+{%- endif -%}
+{% endmacro %}
+
+{# A tradie's face, where there is one. Customers let a stranger into the house. #}
+{% macro face(t, size=44) %}
+{%- if t.photo -%}
+<img class="face" style="width:{{ size }}px;height:{{ size }}px" src="{{ url_for('upload', name=t.photo) }}"
+     alt="{{ t.business_name }}"{% if not t.photo_checked_at %} title="Not yet confirmed by us"{% endif %}>
+{%- endif -%}
 {% endmacro %}
 
 {# Stars only appear from 3 reviews, so one early review can't make or break a trade. #}

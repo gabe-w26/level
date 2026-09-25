@@ -506,3 +506,54 @@ body.is-offline .offline-banner { display: block; }
 .choose-help { margin-bottom: 16px; }
 .choose-help summary { cursor: pointer; font-size: 17px; }
 .choose-help[open] summary { margin-bottom: 4px; }
+
+
+/* ── The trust score ──────────────────────────────────────────────────────── */
+/* A face, because customers let a stranger into the house. Square-ish and small:
+   this is a person, not a logo. */
+.face { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; background: var(--slab);
+        border: 1px solid var(--rule); flex: none; vertical-align: middle; }
+.profile-head { display: flex; align-items: flex-start; gap: 14px; }
+
+.trust-chip { display: inline-flex; align-items: baseline; gap: 3px; white-space: nowrap; padding: 4px 8px;
+              border-radius: 6px; background: var(--slab); border: 1px solid var(--rule);
+              font: 600 12px/1 var(--f-mono); color: var(--ink-2); }
+.trust-chip b { font-size: 15px; color: var(--ink); }
+.trust-chip.good { background: var(--pine-wash); border-color: transparent; color: var(--pine); }
+.trust-chip.good b { color: var(--pine); }
+.trust-chip.low { background: var(--slab); }
+.trust-link { text-decoration: none; }
+.trust-lines { list-style: none; margin: 8px 0 0; padding: 0; }
+.trust-lines li { font-size: 14px; color: var(--ink-2); margin-top: 3px; }
+
+.score-badge { text-align: right; line-height: 1.1; }
+.score-badge b { display: block; font-size: 40px; }
+.score-badge span { font-size: 12px; color: var(--ink-3); }
+.score-badge em { display: block; font-style: normal; font-weight: 700; margin-top: 4px; }
+
+.score-table { width: 100%; border-collapse: collapse; }
+.score-table td { padding: 7px 4px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+.score-table tr:last-child td { border-bottom: 0; }
+.score-table .tick { width: 22px; color: var(--ink-3); font-weight: 700; }
+.score-table tr.got .tick { color: var(--pine); }
+.score-table tr.not-yet { color: var(--ink-2); }
+.score-table .pts { text-align: right; white-space: nowrap; font: 600 13px/1.4 var(--f-mono); }
+.next-step { border-left: 3px solid var(--chalk); }
+.trust-group { margin-bottom: 14px; }
+.trust-group h4 { margin: 0 0 6px; font-size: 14px; }
+.plain-list { list-style: none; margin: 0 0 12px; padding: 0; }
+.plain-list li { padding: 8px 0; border-bottom: 1px solid var(--rule-soft); }
+.plain-list li:last-child { border-bottom: 0; }
+
+/* ── The site: notes and the pre-start check ─────────────────────────────── */
+.check-item { border: 0; margin: 0 0 14px; padding: 0; }
+.check-item legend { font-weight: 700; padding: 0; }
+.check-item .choices { margin-top: 8px; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+.check-record { padding: 12px 0; border-bottom: 1px solid var(--rule-soft); }
+.check-record:last-of-type { border-bottom: 0; }
+.checklist.warn li::marker { color: var(--paint); }
+.notes-log { list-style: none; margin: 16px 0 0; padding: 0; }
+.notes-log li { padding: 12px 0; border-top: 1px solid var(--rule-soft); }
+.notes-log li p { margin: 4px 0 0; white-space: pre-wrap; }
+.notes-log li.private { border-left: 3px solid var(--rule); padding-left: 12px; }
+.notes-log .photos { margin-top: 8px; }

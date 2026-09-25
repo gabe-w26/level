@@ -1,0 +1,133 @@
+{# The work itself: site details, notes and the pre-start check.
+   Shared by the customer's job page and the tradie's, because both sides are
+   looking at the same site. `role` is 'customer' or 'trade'. #}
+
+<div class="section-title" id="site"><h2>The site</h2><span class="label">just the two of you</span></div>
+
+<div class="card">
+  <div class="head-row">
+    <h3 style="margin:0">Getting in and getting on with it</h3>
+    <span class="small muted">{{ site_filled }} of {{ site_fields|length }} filled in</span>
+  </div>
+  <p class="small muted">The practical things a tradie needs before turning up. Either of you can fill this in,
+    and only the two of you can see it.</p>
+  <form method="post" action="{{ url_for('save_site', job_id=job.id) }}" class="stack">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    {% for key, label, hint in site_fields %}
+    <label>
+      {{ label }}
+      <span class="hint">{{ hint }}</span>
+      {% if key == 'address' %}
+        <input value="{{ site[key] or job.address or '' }}" disabled>
+      {% else %}
+        <textarea name="{{ key }}" rows="2" maxlength="600">{{ site[key] or '' }}</textarea>
+      {% endif %}
+    </label>
+    {% endfor %}
+    <button class="btn btn-sm">Save site details</button>
+  </form>
+</div>
+
+{% if role == 'trade' %}
+<div class="card">
+  <div class="head-row">
+    <h3 style="margin:0">Pre-start check</h3>
+    {% if checks %}<span class="small muted">Last done {{ checks[0].created_at|when }}</span>{% endif %}
+  </div>
+  <p class="small muted">A record of what you found when you got there — not advice, and no substitute for your
+    own duties under the Health and Safety at Work Act. The customer sees your answers.</p>
+  <form method="post" action="{{ url_for('save_site_check', job_id=job.id) }}" class="stack check-form">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    {% for key, question, why in check_items %}
+    <fieldset class="check-item">
+      <legend>{{ question }}</legend>
+      <span class="hint">{{ why }}</span>
+      <div class="choices">
+        {% for value, word in (('yes', 'Yes'), ('no', 'No'), ('na', 'Not applicable')) %}
+        <label class="choice">
+          <input type="radio" name="{{ key }}" value="{{ value }}" required>
+          <span>{{ word }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    {% endfor %}
+    <label>Hazards you found<span class="hint">What they are and what you did about them</span>
+      <textarea name="hazards" rows="2" maxlength="1000"></textarea></label>
+    <label>Anything else<textarea name="notes" rows="2" maxlength="1000"></textarea></label>
+    <button class="btn btn-sm btn-pine">Save the check</button>
+  </form>
+</div>
+{% endif %}
+
+{% if checks %}
+<div class="card">
+  <h3>{{ 'Their site checks' if role == 'customer' else 'Checks you’ve done' }}</h3>
+  {% for c in checks %}
+  <div class="check-record">
+    <div class="head-row">
+      <b>{{ c.created_at|when }}</b>
+      {% if c.flags %}<span class="pill full">{{ c.flags|length }} to sort</span>
+      {% else %}<span class="pill">Nothing marked “no”</span>{% endif %}
+    </div>
+    {% if c.flags %}
+    <ul class="checklist warn">{% for f in c.flags %}<li>{{ f }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if c.hazards %}<p><b>Hazards:</b> {{ c.hazards }}</p>{% endif %}
+    {% if c.notes %}<p class="muted">{{ c.notes }}</p>{% endif %}
+    <details>
+      <summary class="small muted">All {{ c.items|length }} answers</summary>
+      <dl class="kv">{% for i in c.items %}<dt>{{ i.question }}</dt><dd>{{ i.label }}</dd>{% endfor %}</dl>
+    </details>
+  </div>
+  {% endfor %}
+  <p class="small muted" style="margin:10px 0 0">A check with nothing marked “no” is a record of what the tradie
+    said they found. It isn’t {{ cfg.BRAND }} saying the site is safe.</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3>Site notes</h3>
+  <p class="small muted">A running log on this job — what was done, what came up, what got decided.
+    Photos welcome.</p>
+  <form method="post" action="{{ url_for('add_site_note', job_id=job.id) }}" enctype="multipart/form-data" class="stack">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <label class="vh" for="note-body">Your note</label>
+    <textarea id="note-body" name="body" rows="3" maxlength="2000" required
+              placeholder="{{ 'Lifted the old boards, three joists need replacing — sent a photo.' if role == 'trade' else 'Left the side gate unlocked for you.' }}"></textarea>
+    <label class="small">Photos (up to 6)<input type="file" name="photos" accept="image/*" multiple></label>
+    {% if role == 'trade' %}
+    <label class="choice"><input type="checkbox" name="shared" value="private">
+      <span>Keep this one to myself — the customer won’t see it</span></label>
+    {% endif %}
+    <button class="btn btn-sm">Add note</button>
+  </form>
+
+  {% if site_notes %}
+  <ul class="notes-log">
+    {% for n in site_notes %}
+    <li class="{{ 'private' if not n.shared }}">
+      <div class="head-row">
+        <b>{{ n.who }}</b>
+        <span class="small muted">{{ n.created_at|when }}{% if not n.shared %} · only you{% endif %}</span>
+      </div>
+      <p>{{ n.body }}</p>
+      {% if n.photos %}
+      <div class="photos">
+        {% for p in n.photos %}<a href="{{ url_for('upload', name=p.filename) }}" target="_blank" rel="noopener">
+          <img src="{{ url_for('upload', name=p.filename) }}" alt=""></a>{% endfor %}
+      </div>
+      {% endif %}
+      {% if n.can_delete %}
+      <form method="post" action="{{ url_for('delete_site_note', job_id=job.id, note_id=n.id) }}" class="inline">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-ghost">Delete</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted small" style="margin:10px 0 0">Nothing yet.</p>
+  {% endif %}
+</div>

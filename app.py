@@ -38,7 +38,10 @@ import outreach
 import push
 import referrals
 import reporting
+import matching
 import sms
+import trust
+import worksite
 from db import _USE_PG, get_db, release_db
 from engine import RuleError, parse_ts, ts, utcnow
 from schema import hash_password, init_db
@@ -203,14 +206,16 @@ def home_for(u):
     return url_for({'customer': 'customer_home', 'trade': 'trade_home', 'admin': 'admin_home'}[u['role']])
 
 
-def requires(role):
+def requires(role=None):
+    """Signed in, and in the given role. No role means either side of a job — the
+    route itself works out which, because the answer depends on the job."""
     def deco(fn):
         @functools.wraps(fn)
         def inner(*args, **kwargs):
             u = current_user()
             if not u:
                 return redirect(url_for('login', next=request.full_path))
-            if u['role'] != role:
+            if role and u['role'] != role:
                 abort(403)
             return fn(*args, **kwargs)
         return inner
@@ -405,7 +410,8 @@ def pro_profile(trade_id):
     return render_template('profile.html', t=t, cats=cats, areas=areas, reviews=reviews,
                            rating=engine.trade_rating(db(), trade_id), done=done,
                            report_record=reporting.trade_record(db(), trade_id),
-                           report_plan=reporting.describe(t['report_plan']))
+                           report_plan=reporting.describe(t['report_plan']),
+                           trust=trust.explain(db(), t))
 
 
 # ── Accounts ──────────────────────────────────────────────────────────────────
@@ -794,11 +800,15 @@ def offer_stats(job_id):
                 next_expiry=nxt)
 
 
+def trade_row(trade_id):
+    return db().execute('SELECT * FROM trades WHERE user_id = ?', (trade_id,)).fetchone()
+
+
 def quotes_for_job(job):
     rows = db().execute(
         'SELECT q.*, t.business_name, t.licence_type, t.licence_number, t.licence_checked_at, '
         't.insurance_insurer, t.insurance_expiry, t.insurance_checked_at, t.nzbn, t.nzbn_checked_at, '
-        't.years_trading, t.workmanship_guarantee, u.phone, u.email, u.name AS contact_name, '
+        't.years_trading, t.workmanship_guarantee, t.photo, t.trust_score, u.phone, u.email, u.name AS contact_name, '
         '(SELECT COUNT(*) FROM messages m WHERE m.job_id = q.job_id AND m.trade_id = q.trade_id) AS msg_count '
         'FROM quotes q JOIN trades t ON t.user_id = q.trade_id JOIN users u ON u.id = q.trade_id '
         'WHERE q.job_id = ? ORDER BY q.created_at, q.id', (job['id'],)).fetchall()
@@ -821,9 +831,18 @@ def customer_job(job_id):
     # What this kind of job usually costs here, as a fallback when there are too
     # few quotes to compare against each other.
     guide = _spread(_price_points(job['category_id'], job['value_band']))
+    # The routing check runs in the sweep; if it disagreed with the category the
+    # customer picked, this is where they get asked about it.
+    suggest = None
+    if job['routed_category_id'] and job['routed_category_id'] != job['category_id'] and job['status'] == 'open':
+        suggest = db().execute('SELECT id, name FROM categories WHERE id = ?',
+                               (job['routed_category_id'],)).fetchone()
     return render_template('customer/job.html', job=job, quotes=quotes, stats=offer_stats(job_id),
-                           photos=_photos(job_id), reviewed=bool(reviewed),
-                           notes=compare.notes_for(quotes, guide), **_progress(job))
+                           photos=_photos(job_id), reviewed=bool(reviewed), suggest=suggest,
+                           notes=compare.notes_for(quotes, guide),
+                           trust={q['trade_id']: trust.summary(db(), trade_row(q['trade_id']))
+                                  for q in quotes},
+                           **_worksite(job, current_user()['id'], 'customer'), **_progress(job))
 
 
 @app.post('/me/jobs/<int:job_id>/quotes/<int:quote_id>/<action>')
@@ -848,6 +867,29 @@ def quote_action(job_id, quote_id, action):
     except RuleError as e:
         flash(str(e), 'error')
     return redirect(url_for('customer_job', job_id=job_id) + f'#q{quote_id}')
+
+
+@app.post('/me/jobs/<int:job_id>/reroute')
+@requires('customer')
+def reroute_job(job_id):
+    """The customer's answer to "did you mean a Plumber?".
+
+    Only they can move their own job. Saying no is recorded too, so we stop
+    asking — and so we can see how often the check was wrong.
+    """
+    job = _my_job(job_id)
+    choice = request.form.get('category_id', '')
+    if choice == 'keep' or not choice.isdigit():
+        db().execute('UPDATE jobs SET routed_category_id = NULL WHERE id = ?', (job_id,))
+        db().commit()
+        flash('Righto — we’ll leave it with the trade you picked.')
+        return redirect(url_for('customer_job', job_id=job_id))
+    try:
+        engine.change_category(db(), job, int(choice))
+        flash('Moved. The job has gone out to trades in that trade instead, and the old offers are closed.')
+    except RuleError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('customer_job', job_id=job_id))
 
 
 @app.post('/me/jobs/<int:job_id>/close')
@@ -1135,6 +1177,9 @@ def trade_setup():
         years = f.get('years_trading', '').strip()
         if years and not years.isdigit():
             errors['years_trading'] = 'Enter a whole number of years.'
+        photo, photo_error = _save_photos(request.files.getlist('photo'), 1)
+        if photo_error:
+            errors['photo'] = photo_error
         if not errors:
             lic_no = f.get('licence_number', '').strip() if lic != 'none' else None
             insurer = f.get('insurance_insurer', '').strip() or None
@@ -1158,6 +1203,13 @@ def trade_setup():
                 db().execute('INSERT INTO trade_areas (trade_id, area_id) VALUES (?,?)', (tid, a))
             db().execute('UPDATE trades SET report_plan = ? WHERE user_id = ?',
                          (reporting.clean(f.getlist('report_plan')), tid))
+            if photo:
+                # A new face means the old confirmation no longer applies.
+                db().execute('UPDATE trades SET photo = ?, photo_at = ?, photo_checked_at = NULL, '
+                             'id_checked_at = NULL WHERE user_id = ?', (photo[0], ts(utcnow()), tid))
+            elif f.get('remove_photo') == '1':
+                db().execute('UPDATE trades SET photo = NULL, photo_at = NULL, photo_checked_at = NULL, '
+                             'id_checked_at = NULL WHERE user_id = ?', (tid,))
             db().commit()
             session.pop('setup_hint', None)
             flash('Profile saved.')
@@ -1190,7 +1242,8 @@ def _render_trade_job(job_id, form=None, error=None):
                            can_quote=can_quote, reported=bool(reported), form=form or {}, error=error,
                            threshold=config.CONTRACT_THRESHOLD, templates=_templates(t['user_id']),
                            default_plan=reporting.parse(t['report_plan']) if 'report_plan' in t.keys() else [],
-                           **(_progress(job) if job['hired_trade_id'] == t['user_id'] else {}))
+                           **(_progress(job) if job['hired_trade_id'] == t['user_id'] else {}),
+                           **_worksite(job, t['user_id'], 'trade'))
 
 
 @app.route('/trade/jobs/<int:job_id>')
@@ -1421,6 +1474,200 @@ def _save_template(trade_id, name, q):
                  (trade_id, name.strip()[:60], q.get('price_type'), q.get('message'), q.get('inclusions'),
                   q.get('exclusions'), q.get('warranty'), q.get('duration'), ts(utcnow())))
     db().commit()
+
+
+# ── The work itself: site information, notes and the pre-start check ─────────
+# Only ever the two people on the job. `worksite` enforces that too; the routes
+# check first so a stranger gets a 404 rather than an error page.
+
+def _worksite(job, uid, role):
+    """Everything the site section needs, or nothing at all before anyone is hired."""
+    if job['status'] != 'hired' or not job['hired_trade_id']:
+        return {'site_on': False}
+    notes = worksite.notes_for(db(), job['id'], uid, role == 'customer')
+    names = {r['id']: r['name'] for r in db().execute(
+        'SELECT id, name FROM users WHERE id IN (?,?)', (job['customer_id'], job['hired_trade_id']))}
+    for n in notes:
+        n['who'] = 'You' if n['author_id'] == uid else names.get(n['author_id'], 'Them')
+    site = worksite.get_site(db(), job['id'])
+    # `site_notes`, not `notes`: the customer's job page already passes the quote
+    # comparison notes under that name.
+    return {'site_on': True, 'site': site, 'site_fields': worksite.SITE_FIELDS,
+            'site_filled': worksite.site_done(site), 'check_items': worksite.CHECK_ITEMS,
+            'checks': worksite.checks_for(db(), job['id']), 'site_notes': notes, 'role': role}
+
+
+def _site_job(job_id):
+    """The job, if the person asking is either side of it. 404 otherwise."""
+    job = engine.get_job(db(), job_id)
+    uid = (current_user() or {})['id'] if current_user() else None
+    if not job or not uid or not worksite.can_view(job, uid):
+        abort(404)
+    return job, uid
+
+
+def _site_back(job, uid):
+    return (url_for('customer_job', job_id=job['id']) if worksite.is_customer(job, uid)
+            else url_for('trade_job', job_id=job['id'])) + '#site'
+
+
+@app.post('/jobs/<int:job_id>/site')
+@requires()
+def save_site(job_id):
+    job, uid = _site_job(job_id)
+    try:
+        worksite.save_site(db(), job, uid, request.form)
+        flash('Site details saved.')
+    except worksite.SiteError as e:
+        flash(str(e), 'error')
+    return redirect(_site_back(job, uid))
+
+
+@app.post('/jobs/<int:job_id>/notes')
+@requires()
+def add_site_note(job_id):
+    job, uid = _site_job(job_id)
+    names, error = _save_photos(request.files.getlist('photos'), 6)
+    if error:
+        flash(error, 'error')
+        return redirect(_site_back(job, uid))
+    try:
+        worksite.add_note(db(), job, uid, request.form.get('body'), names,
+                          shared=request.form.get('shared') != 'private')
+        flash('Note added.')
+    except worksite.SiteError as e:
+        flash(str(e), 'error')
+    return redirect(_site_back(job, uid))
+
+
+@app.post('/jobs/<int:job_id>/notes/<int:note_id>/delete')
+@requires()
+def delete_site_note(job_id, note_id):
+    job, uid = _site_job(job_id)
+    try:
+        for name in worksite.delete_note(db(), note_id, uid) or []:
+            try:
+                os.remove(os.path.join(UPLOAD_DIR, name))
+            except OSError:
+                pass                     # the row is gone; a stray file is not worth an error page
+        flash('Note deleted.')
+    except worksite.SiteError as e:
+        flash(str(e), 'error')
+    return redirect(_site_back(job, uid))
+
+
+@app.post('/trade/jobs/<int:job_id>/site-check')
+@requires('trade')
+def save_site_check(job_id):
+    job = engine.get_job(db(), job_id)
+    tid = current_trade()['user_id']
+    if not job or job['hired_trade_id'] != tid:
+        abort(404)
+    try:
+        worksite.save_check(db(), job, tid, worksite.clean_answers(request.form),
+                            request.form.get('hazards'), request.form.get('notes'))
+        flash('Site check saved. The customer can see it.')
+    except worksite.SiteError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('trade_job', job_id=job_id) + '#site')
+
+
+@app.get('/trade/trust')
+@requires('trade')
+def trade_trust():
+    """The tradie's own score, with every point shown and where the next ones are.
+
+    A score somebody can't see is a score they can't argue with, which is the
+    thing that makes automated judgement unfair. So this is the same breakdown
+    a customer sees, plus the one useful sentence about what to do next.
+    """
+    t = current_trade()
+    return render_template('trade/trust.html', t=t, trust=trust.explain(db(), t),
+                           referees=db().execute('SELECT * FROM trade_referees WHERE trade_id = ? ORDER BY id',
+                                                 (t['user_id'],)).fetchall(),
+                           vetting_url='https://www.police.govt.nz/advice-services/businesses-and-organisations/'
+                                       'vetting')
+
+
+@app.post('/trade/referees')
+@requires('trade')
+def trade_add_referee():
+    t = current_trade()
+    f = request.form
+    name, phone, email = f.get('name', '').strip(), f.get('phone', '').strip(), f.get('email', '').strip()
+    n = db().execute('SELECT COUNT(*) AS n FROM trade_referees WHERE trade_id = ?', (t['user_id'],)).fetchone()['n']
+    if n >= 5:
+        flash('Five referees is plenty.', 'error')
+    elif len(name) < 2:
+        flash('Give your referee’s name.', 'error')
+    elif not (phone or email):
+        flash('We need a phone number or an email so we can actually ring them.', 'error')
+    else:
+        db().execute('INSERT INTO trade_referees (trade_id, name, relationship, phone, email, note, created_at) '
+                     'VALUES (?,?,?,?,?,?,?)',
+                     (t['user_id'], name, f.get('relationship', '').strip() or None, phone or None,
+                      email or None, f.get('note', '').strip() or None, ts(utcnow())))
+        db().commit()
+        flash('Referee added. We’ll ring them before it counts towards your score.')
+    return redirect(url_for('trade_trust'))
+
+
+@app.post('/trade/referees/<int:ref_id>/remove')
+@requires('trade')
+def trade_remove_referee(ref_id):
+    db().execute('DELETE FROM trade_referees WHERE id = ? AND trade_id = ?', (ref_id, current_trade()['user_id']))
+    db().commit()
+    flash('Referee removed.')
+    return redirect(url_for('trade_trust'))
+
+
+@app.post('/trade/vetting')
+@requires('trade')
+def trade_vetting():
+    """A police vetting result the tradie asked for themselves and chose to share.
+
+    We never hold the document and we never record what is in it — only that one
+    was shown and when. Anything more would be us keeping criminal record
+    information about someone, which is not a thing a job board should do.
+    """
+    t = current_trade()
+    if request.form.get('choice') == 'remove':
+        db().execute('UPDATE trades SET vetting_status = NULL, vetting_at = NULL, vetting_note = NULL '
+                     'WHERE user_id = ?', (t['user_id'],))
+        flash('Removed. It no longer counts towards your score.')
+    else:
+        db().execute("UPDATE trades SET vetting_status = 'offered', vetting_at = ? WHERE user_id = ?",
+                     (ts(utcnow()), t['user_id']))
+        flash('Thanks — bring it along or email it, and we’ll mark it seen. We don’t keep a copy.')
+    db().commit()
+    return redirect(url_for('trade_trust'))
+
+
+@app.post('/admin/trades/<int:trade_id>/vetting')
+@requires('admin')
+def admin_trade_vetting(trade_id):
+    """An admin confirming they were shown a vetting result. No copy is kept."""
+    seen = request.form.get('choice') == 'seen'
+    db().execute('UPDATE trades SET vetting_status = ?, vetting_at = ?, vetting_note = ? WHERE user_id = ?',
+                 ('seen' if seen else None, ts(utcnow()) if seen else None,
+                  request.form.get('note', '').strip()[:200] or None, trade_id))
+    db().commit()
+    flash('Vetting marked as seen.' if seen else 'Vetting cleared.')
+    return redirect(url_for('admin_trade', trade_id=trade_id))
+
+
+@app.post('/admin/referees/<int:ref_id>/checked')
+@requires('admin')
+def admin_referee_checked(ref_id):
+    row = db().execute('SELECT * FROM trade_referees WHERE id = ?', (ref_id,)).fetchone()
+    if not row:
+        abort(404)
+    ok = request.form.get('ok') == '1'
+    db().execute('UPDATE trade_referees SET checked_at = ?, checked_note = ? WHERE id = ?',
+                 (ts(utcnow()) if ok else None, request.form.get('note', '').strip()[:300] or None, ref_id))
+    db().commit()
+    flash('Referee updated.')
+    return redirect(url_for('admin_trade', trade_id=row['trade_id']))
 
 
 @app.route('/trade/templates', methods=['GET', 'POST'])
@@ -1832,6 +2079,9 @@ def admin_trade(trade_id):
                             (trade_id,)).fetchall(),
         reported=db().execute('SELECT r.*, j.title FROM job_reports r JOIN jobs j ON j.id = r.job_id '
                               'WHERE r.trade_id = ? ORDER BY r.id DESC LIMIT 10', (trade_id,)).fetchall(),
+        referees=db().execute('SELECT * FROM trade_referees WHERE trade_id = ? ORDER BY id',
+                              (trade_id,)).fetchall(),
+        trust=trust.explain(db(), t),
         rating=engine.trade_rating(db(), trade_id),
         progress=engine.guarantee_progress(db(), trade_id, now),
         subscribed=engine.is_subscribed(t, now))
@@ -1847,7 +2097,8 @@ def admin_trade_action(trade_id, action):
     f = request.form
     if action == 'check':
         field = {'nzbn': 'nzbn_checked_at', 'licence': 'licence_checked_at',
-                 'insurance': 'insurance_checked_at'}.get(f.get('what'))
+                 'insurance': 'insurance_checked_at', 'photo': 'photo_checked_at',
+                 'id': 'id_checked_at', 'business': 'business_checked_at'}.get(f.get('what'))
         if not field:
             abort(400)
         db().execute(f'UPDATE trades SET {field} = ? WHERE user_id = ?',

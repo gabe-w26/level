@@ -69,16 +69,42 @@
       </details>
       {% endif %}
 
+      {% if suggest %}
+      <div class="card notice notice-chalk">
+        <p style="margin:0 0 8px"><b>This might be the wrong trade.</b> Reading what you wrote, this looks more like
+          a job for a <b>{{ suggest.name }}</b> than a {{ job.category_name }}.
+          {% if job.routed_note %}<span class="muted">{{ job.routed_note }}</span>{% endif %}</p>
+        <p class="small muted" style="margin:0 0 10px">You know your job better than we do — if you meant what you
+          picked, ignore this. Changing it starts the job again with {{ cfg.TRADES_PER_JOB }} {{ suggest.name|lower }}s.</p>
+        <form method="post" action="{{ url_for('reroute_job', job_id=job.id) }}" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="category_id" value="{{ suggest.id }}">
+          <button class="btn btn-sm">Yes, send it to {{ suggest.name|lower }}s instead</button>
+        </form>
+        <form method="post" action="{{ url_for('reroute_job', job_id=job.id) }}" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="category_id" value="keep">
+          <button class="btn btn-sm btn-ghost">No, it’s right</button>
+        </form>
+      </div>
+      {% endif %}
+
       {% for q in quotes %}
       <article class="quote {{ q.status }}" id="q{{ q.id }}">
         <div class="quote-head">
+          {{ m.face(q, 52) }}
           <div>
             <span class="quote-order">Quote {{ loop.index }} · {{ q.created_at|when }}</span>
             <h3><a href="{{ url_for('pro_profile', trade_id=q.trade_id) }}">{{ q.business_name }}</a></h3>
             {{ m.stars(q.rating) }}
             {{ m.badges(q) }}
           </div>
+          {% set ts = trust.get(q.trade_id) %}
+          {% if ts %}<a class="trust-link" href="{{ url_for('pro_profile', trade_id=q.trade_id) }}#trust">{{ m.trust_chip(q, ts) }}</a>{% endif %}
         </div>
+        {% if ts and ts.lines %}
+        <ul class="trust-lines">{% for line in ts.lines %}<li>{{ line }}</li>{% endfor %}</ul>
+        {% endif %}
         <div class="quote-body">
           <p class="desc" style="margin:0">{{ q.message }}</p>
           <dl class="kv">
@@ -210,4 +236,6 @@
     </aside>
   </div>
 </div>
+{% if site_on %}<div class="wrap" style="padding-bottom:60px">{% include '_site.html' %}</div>{% endif %}
+
 {% endblock %}

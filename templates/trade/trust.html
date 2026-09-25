@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% block title %}How you look to customers — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>How you look to customers</h1>
+      <p class="muted">Every point below is either something we checked, something you did on {{ cfg.BRAND }},
+        or something you chose to add. Nothing here is guessed, and nothing comes from anywhere you didn’t give us.</p>
+    </div>
+    <div class="score-badge">
+      <b>{{ trust.score }}</b><span>out of 100</span>
+      <em>{{ trust.band }}</em>
+    </div>
+  </div>
+
+  <div class="card notice notice-chalk">
+    <p style="margin:0"><b>This never changes which jobs you’re offered.</b> Jobs go out on fair rotation —
+      whoever has been offered the fewest goes first. Your score, your reviews and how much you pay us make
+      no difference to that, and they never will.</p>
+  </div>
+
+  {% if trust.next %}
+  <div class="card next-step">
+    <span class="label">Worth doing next</span>
+    <p><b>{{ trust.next.label }}</b> — worth {{ trust.next.worth }} point{{ 's' if trust.next.worth != 1 }}.</p>
+  </div>
+  {% endif %}
+
+  {% for s in trust.sections %}
+  <div class="section-title"><h2>{{ s.title }}</h2></div>
+  <p class="small muted" style="margin:-6px 0 10px">{{ s.note }}</p>
+  <div class="card">
+    <table class="score-table">
+      <tbody>
+      {% for r in s.rows %}
+        <tr class="{{ 'got' if r.got else 'not-yet' }}">
+          <td class="tick">{% if r.got %}✓{% else %}○{% endif %}</td>
+          <td>
+            {{ r.label }}
+            {% if r.note %}<span class="small muted">— {{ r.note }}</span>
+            {% elif r.rate is defined and r.rate is not none %}<span class="small muted">— {{ (r.rate * 100)|round|int }}%</span>
+            {% elif r.when %}<span class="small muted">— checked {{ r.when|when }}</span>{% endif %}
+          </td>
+          <td class="pts">{{ r.got }}<span class="muted">/{{ r.worth }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+
+  <div class="section-title"><h2>Things you can add</h2><span class="label">all optional</span></div>
+
+  <div class="card">
+    <h3>A photo of you</h3>
+    <p class="muted">The person who turns up at someone’s door. Customers let a stranger into their home —
+      a face makes that easier, the same way it does in a taxi app. Add it on your
+      <a href="{{ url_for('trade_setup') }}">profile page</a>.</p>
+    {% if t.photo %}
+      <p><img class="face" src="{{ url_for('upload', name=t.photo) }}" alt="Your profile photo">
+        {% if t.photo_checked_at %}<b>Confirmed</b> — we’ve matched it to your ID.
+        {% else %}Waiting for us to confirm it’s a clear photo of you.{% endif %}</p>
+    {% else %}
+      <p><a class="btn btn-sm" href="{{ url_for('trade_setup') }}">Add a photo</a></p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h3>Police vetting</h3>
+    <p class="muted">You request it yourself from the New Zealand Police — we can’t do it for you, and we don’t
+      want a copy. Show us the result and we’ll note that we saw it, and when. <b>We never record what it says</b>,
+      and you can take it off your profile whenever you like.</p>
+    <p class="small muted"><a href="{{ vetting_url }}" target="_blank" rel="noopener">How police vetting works →</a></p>
+    <form method="post" action="{{ url_for('trade_vetting') }}">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      {% if t.vetting_status == 'seen' %}
+        <p><b>Seen {{ t.vetting_at|when }}.</b> It’s counting towards your score.</p>
+        <button class="btn btn-sm btn-ghost" name="choice" value="remove">Take it off my profile</button>
+      {% elif t.vetting_status == 'offered' %}
+        <p>You’ve told us you have one. Email it to {{ cfg.SUPPORT_EMAIL }} or bring it in, and we’ll mark it seen.</p>
+        <button class="btn btn-sm btn-ghost" name="choice" value="remove">Never mind</button>
+      {% else %}
+        <button class="btn btn-sm" name="choice" value="offer">I have one to show you</button>
+      {% endif %}
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Referees</h3>
+    <p class="muted">Two people who’ll vouch for your work. We ring them — nothing counts until we have.
+      Pick people who’ve actually paid you for a job.</p>
+    {% if referees %}
+    <ul class="plain-list">
+      {% for r in referees %}
+      <li>
+        <b>{{ r.name }}</b>{% if r.relationship %} · {{ r.relationship }}{% endif %}
+        {% if r.checked_at %}<span class="pill hired">Rung {{ r.checked_at|when }}</span>
+        {% else %}<span class="pill">Not rung yet</span>{% endif %}
+        <form method="post" action="{{ url_for('trade_remove_referee', ref_id=r.id) }}" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-ghost">Remove</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if referees|length < 5 %}
+    <form method="post" action="{{ url_for('trade_add_referee') }}" class="stack">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="row">
+        <label>Their name<input name="name" required maxlength="80"></label>
+        <label>How they know you<input name="relationship" placeholder="Customer, 2025 bathroom" maxlength="80"></label>
+      </div>
+      <div class="row">
+        <label>Phone<input name="phone" type="tel" maxlength="30"></label>
+        <label>Email<input name="email" type="email" maxlength="120"></label>
+      </div>
+      <button class="btn btn-sm">Add referee</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h3>Something wrong?</h3>
+    <p class="muted">If any of this is out of date or you think a number is wrong, tell us and we’ll look at it.
+      It’s your record — you’re entitled to see how it was worked out and to have a mistake fixed.</p>
+    <p><a class="btn btn-sm btn-ghost" href="mailto:{{ cfg.SUPPORT_EMAIL }}?subject=My%20score">Email us about my score</a></p>
+  </div>
+</div>
+{% endblock %}

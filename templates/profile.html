@@ -5,9 +5,14 @@
 <div class="wrap page">
   <div class="two">
     <div>
-      <p class="label">{{ cats|map(attribute='name')|join(' · ') }}</p>
-      <h1 style="font-size:clamp(30px,4vw,46px)">{{ t.business_name }}</h1>
-      <p>{{ m.stars(rating) }}</p>
+      <div class="profile-head">
+        {{ m.face(t, 72) }}
+        <div>
+          <p class="label">{{ cats|map(attribute='name')|join(' · ') }}</p>
+          <h1 style="font-size:clamp(30px,4vw,46px);margin:0">{{ t.business_name }}</h1>
+          <p style="margin:6px 0 0">{{ m.stars(rating) }}</p>
+        </div>
+      </div>
       {{ m.badges(t) }}
       {% if report_record or report_plan %}
       <div class="notice small" style="margin-top:14px">
@@ -16,6 +21,30 @@
       </div>
       {% endif %}
       {% if t.about %}<p class="desc" style="margin-top:16px">{{ t.about }}</p>{% endif %}
+
+      <div class="section-title" id="trust"><h2>How well checked they are</h2>
+        <span class="label">{{ trust.score }}/100 · {{ trust.band }}</span></div>
+      <div class="card">
+        <p class="small muted" style="margin:0 0 12px">Built from what we’ve checked, what they’ve done on
+          {{ cfg.BRAND }}, and what they chose to add. It never affects which jobs they’re offered — that’s
+          fair rotation, and nothing buys a place in it.</p>
+        {% for s in trust.sections %}
+        <div class="trust-group">
+          <h4>{{ s.title }}</h4>
+          <ul class="checklist">
+            {% for r in s.rows %}
+            <li class="{{ 'yes' if r.got else 'no' }}">{{ r.label }}{% if r.note %} <span class="muted small">— {{ r.note }}</span>
+              {% elif r.rate is defined and r.rate is not none %} <span class="muted small">— {{ (r.rate * 100)|round|int }}%</span>
+              {% elif r.when %} <span class="muted small">— {{ r.when|day }}</span>{% endif %}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endfor %}
+        {% if not trust.proven %}
+        <p class="small muted" style="margin:10px 0 0">New to {{ cfg.BRAND }} — not enough finished jobs yet to
+          judge how they work. That isn’t a mark against them.</p>
+        {% endif %}
+      </div>
 
       <div class="section-title"><h2>Reviews</h2><span class="label">Only from customers who hired them here</span></div>
       {% if rating.n and rating.n >= 3 %}

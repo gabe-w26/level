@@ -14,6 +14,7 @@ Kept honest and legal (NZ Unsolicited Electronic Messages Act):
 """
 import csv
 import io
+import os
 import re
 import secrets
 from datetime import timedelta
@@ -25,6 +26,12 @@ from engine import parse_ts, try_lock, ts, utcnow
 
 MAX_LEADS = 3              # stop after this many unanswered leads
 SEND_WINDOW_HOURS = 24     # a queued email older than this is dropped, not sent late
+
+# Filling empty slots from the businesses who aren't on Level yet.
+AUTO_TOPUP = os.environ.get('AUTO_TOPUP', '1') == '1'
+TOPUP_MIN_GAP = 3          # don't email anyone over one or two empty slots
+TOPUP_PER_SLOT = 3         # most people who get an email don't sign up today
+TOPUP_MAX = 20             # never more than this off the back of one job
 
 STATUSES = {
     'new': 'Not contacted',
@@ -212,6 +219,45 @@ def queue(db, job, prospect_ids, summary, sender):
         n += 1
     db.commit()
     return n
+
+
+def shortfall(db, job):
+    """How many of this job's slots we couldn't fill from trades already on Level."""
+    from engine import live_slots
+    return max(0, config.TRADES_PER_JOB - live_slots(db, job['id']))
+
+
+def maybe_topup(db, job, at=None):
+    """Not enough local trades for this job? Ask the ones who aren't on Level yet.
+
+    This is the honest version of a cold email: there is a real job, in their
+    trade, in their area, right now, and the slot is genuinely empty. Every rule
+    that governs a hand-sent lead governs this one too — the three-email cap, the
+    opt-out list, one email per business per job — because it goes through the
+    same `matches()` and `queue()`.
+
+    Once per job. A job that stays short doesn't get a second round: if the first
+    email didn't move anyone, a reminder is just spam.
+    """
+    at = at or utcnow()
+    if not AUTO_TOPUP or job['status'] != 'open' or job['topup_at']:
+        return 0
+    gap = shortfall(db, job)
+    if gap < TOPUP_MIN_GAP:
+        return 0
+    sender = db.execute("SELECT id, name, email FROM users WHERE role = 'admin' AND closed_at IS NULL "
+                        'ORDER BY id').fetchone()
+    if not sender:
+        return 0
+    # More than the gap, because most people who get an email don't sign up today.
+    want = min(gap * TOPUP_PER_SLOT, TOPUP_MAX)
+    picks = [p['id'] for p in matches(db, job)[:want]]
+    now = ts(at)
+    db.execute('UPDATE jobs SET topup_at = ?, topup_sent = ? WHERE id = ?', (now, len(picks), job['id']))
+    db.commit()
+    if not picks:
+        return 0
+    return queue(db, job, picks, default_summary(job['description']), sender)
 
 
 def flush(db, limit=20):
