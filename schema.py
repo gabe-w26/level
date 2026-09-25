@@ -9,7 +9,7 @@ import os
 import re
 import sqlite3
 
-from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 import config
 from db import get_db, _USE_PG
@@ -546,8 +546,33 @@ def init_db():
     _ensure_admin(db, 'ADMIN2', default_password=config.BOOTSTRAP_ADMIN['password'],
                   default_username=config.BOOTSTRAP_ADMIN['username'],
                   default_name=config.BOOTSTRAP_ADMIN['name'])
+    _warn_about_leaked_passwords(db)
     db.commit()
     db.close()
+
+
+def _warn_about_leaked_passwords(db):
+    """Shout on every start about any account still using a password that was
+    once a default in this source file.
+
+    The repository is public, so those passwords are published. We can't change
+    somebody's password for them — that is theirs to do — but silence here would
+    let a live admin account sit open indefinitely.
+    """
+    leaked = getattr(config, 'LEAKED_PASSWORDS', [])
+    if not leaked:
+        return
+    for row in db.execute("SELECT id, email, username, password_hash FROM users "
+                          "WHERE role = 'admin' AND closed_at IS NULL").fetchall():
+        if any(check_password_hash(row['password_hash'], pw) for pw in leaked):
+            who = row['username'] or row['email']
+            print('', flush=True)
+            print('  ' + '!' * 68, flush=True)
+            print(f'  !!  ADMIN "{who}" IS USING A PASSWORD PUBLISHED IN THIS SOURCE CODE.', flush=True)
+            print('  !!  Anyone who can read the repository can sign in as an admin.', flush=True)
+            print('  !!  Change it in Settings, or remove the account in Admin -> Team.', flush=True)
+            print('  ' + '!' * 68, flush=True)
+            print('', flush=True)
 
 
 def _ensure_admin(db, prefix, default_email=None, default_password=None,

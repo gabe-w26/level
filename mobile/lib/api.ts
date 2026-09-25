@@ -183,6 +183,10 @@ export interface Quote {
   act_docs_promised: boolean;
   /** What this quote covers that the others don't, and the GST trap. From compare.py. */
   notes?: { kind: string; text: string }[];
+  /** Where the money goes, when the trade broke the price down. */
+  items?: QuoteItem[];
+  /** How well checked this business is. Shown, never used to pick who gets a job. */
+  trust?: TrustSummary;
   business_name?: string;
   licence_type?: string | null;
   licence_checked?: boolean;
@@ -217,6 +221,7 @@ export interface CustomerJobDetail {
   can_close: boolean;
   held: boolean;
   progress: Progress | null;
+  site: Site | null;
 }
 
 export interface Offer extends Job {
@@ -230,6 +235,42 @@ export interface Offer extends Job {
 export interface QuoteTemplate {
   id: number; name: string; price_type: string | null; message: string | null;
   inclusions: string | null; exclusions: string | null; warranty: string | null; duration: string | null;
+  items?: QuoteItem[];
+}
+
+export interface QuoteItem {
+  description: string;
+  qty: number | null;
+  unit: string | null;
+  unit_price: number | null;
+  total?: number | null;
+}
+
+export interface TrustSummary {
+  score: number;
+  band: string;
+  /** Two or three plain sentences naming only what was actually checked. */
+  lines: string[];
+}
+
+/** The site, once someone is hired. Null before that. */
+export interface Site {
+  fields: { key: string; label: string; hint: string; value: string }[];
+  filled: number;
+  notes: SiteNote[];
+  check_items: { key: string; question: string; why: string }[];
+  checks: SiteCheck[];
+}
+
+export interface SiteNote {
+  id: number; body: string; shared: boolean; who: string; created_at: string;
+  can_delete: boolean; photos: string[];
+}
+
+export interface SiteCheck {
+  id: number; created_at: string; flags: string[];
+  hazards: string | null; notes: string | null;
+  items: { question: string; label: string }[];
 }
 
 export interface TradeJobDetail {
@@ -245,6 +286,9 @@ export interface TradeJobDetail {
   contract_threshold: number;
   default_report_plan: ReportKind[];
   progress: Progress | null;
+  items: QuoteItem[];
+  units: string[];
+  site: Site | null;
 }
 
 export interface Thread {
@@ -362,6 +406,14 @@ export const api = {
   // Trade
   offers: () => get<{ offers: Offer[]; server_time: string; trade: TradeStatus }>('/trade/offers'),
   tradeJob: (id: number) => get<TradeJobDetail>(`/trade/jobs/${id}`),
+  saveSite: (jobId: number, fields: Record<string, string>) =>
+    post<{ ok: true; message: string }>(`/jobs/${jobId}/site`, fields),
+  addSiteNote: (jobId: number, body: string, isPrivate = false) =>
+    post<{ ok: true; message: string }>(`/jobs/${jobId}/notes`, { body, private: isPrivate }),
+  deleteSiteNote: (jobId: number, noteId: number) =>
+    del<{ ok: true; message: string }>(`/jobs/${jobId}/notes/${noteId}`),
+  saveSiteCheck: (jobId: number, answers: Record<string, string>, hazards: string, notes: string) =>
+    post<{ ok: true; message: string }>(`/trade/jobs/${jobId}/site-check`, { answers, hazards, notes }),
   sendQuote: (jobId: number, q: QuoteInput) =>
     post<{ ok: true; quote_number: number; max_quotes: number; message: string }>(`/trade/jobs/${jobId}/quote`, q),
   editQuote: (jobId: number, q: QuoteInput) => post<Ok>(`/trade/jobs/${jobId}/quote/edit`, q),

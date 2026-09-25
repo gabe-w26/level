@@ -43,8 +43,8 @@ Demo logins (after `seed.py`):
 | Rule | Code | Setting in `config.py` |
 |---|---|---|
 | 15 live slots per job, refill when a slot frees | `engine.fill_slots` | `TRADES_PER_JOB` |
-| 24 h offer window, handover | `engine.sweep` | `OFFER_WINDOW_HOURS` |
-| 6-quote cap (race-safe conditional UPDATE) | `engine.submit_quote` | `MAX_QUOTES` |
+| 4 h offer window, running 24/7, handover | `engine.sweep` | `OFFER_WINDOW_HOURS` |
+| 3-quote cap (race-safe conditional UPDATE) | `engine.submit_quote` | `MAX_QUOTES` |
 | Fair rotation | `engine._candidates` | `ROTATION_LOOKBACK_DAYS` |
 | Stacking tiers | `engine.tiers_that_see` | `TIERS`, `VALUE_BANDS` |
 | Auto-pause after 5 ignored jobs | `engine._maybe_auto_pause` | `AUTO_PAUSE_AFTER` |

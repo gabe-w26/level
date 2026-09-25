@@ -8,6 +8,7 @@ import { Body, Button, Card, ErrorText, Label, Loading, Notice, Pill, QuoteMeter
 import { Countdown } from '../../components/Countdown';
 import { colors, radius, space } from '../../lib/theme';
 import { ProgressSection } from '../../components/Progress';
+import { SiteSection } from '../../components/Site';
 
 export default function TradeJob() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -94,6 +95,7 @@ export default function TradeJob() {
       ) : null}
 
       {data.progress ? <ProgressSection progress={data.progress} role="trade" jobId={jobId} onChanged={reload} /> : null}
+      {data.site ? <SiteSection site={data.site} jobId={jobId} role="trade" onChanged={reload} /> : null}
 
       {lostSlot ? (
         <Notice tone="muted">

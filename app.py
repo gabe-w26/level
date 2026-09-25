@@ -1974,7 +1974,25 @@ def admin_home():
         'ORDER BY j.id DESC LIMIT 25').fetchall()
     offset = db().execute("SELECT value FROM settings WHERE key = 'clock_offset_hours'").fetchone()
     return render_template('admin/index.html', stats=stats, by_tier=by_tier, jobs=jobs,
+                           open_admins=_admins_with_published_passwords(),
                            offset=float(offset['value']) if offset else 0, now=utcnow())
+
+
+def _admins_with_published_passwords():
+    """Admin accounts still using a password that was once written into the source.
+
+    The repository is public, so those passwords are published. Shown on the
+    dashboard because nobody reads the deploy log.
+    """
+    leaked = getattr(config, 'LEAKED_PASSWORDS', [])
+    if not leaked:
+        return []
+    rows = db().execute("SELECT id, name, email, username FROM users "
+                        "WHERE role = 'admin' AND closed_at IS NULL").fetchall()
+    hashes = db().execute("SELECT id, password_hash FROM users "
+                          "WHERE role = 'admin' AND closed_at IS NULL").fetchall()
+    by_id = {r['id']: r['password_hash'] for r in hashes}
+    return [r for r in rows if any(check_password_hash(by_id[r['id']], pw) for pw in leaked)]
 
 
 @app.route('/admin/jobs/<int:job_id>')

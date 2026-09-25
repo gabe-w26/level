@@ -3,6 +3,17 @@
 {% block title %}Admin — {{ cfg.BRAND }}{% endblock %}
 {% block main %}
 <div class="wrap page">
+  {% if open_admins %}
+  <div class="notice error" role="alert" style="margin-bottom:18px">
+    <p style="margin:0 0 6px"><b>An admin account is using a password that is published in the source code.</b></p>
+    <p style="margin:0 0 6px">This repository is public, so anyone who finds the file can sign in as
+      {% for a in open_admins %}<b>{{ a.username or a.email }}</b>{% if not loop.last %}, {% endif %}{% endfor %}
+      and see every customer and tradie on {{ cfg.BRAND }}.</p>
+    <p style="margin:0"><a href="{{ url_for('settings') }}">Change the password</a>, or remove the account in
+      <a href="{{ url_for('admin_team') }}">Team</a>. This notice disappears once it's done.</p>
+  </div>
+  {% endif %}
+
   <div class="page-head">
     <div>
       <h1>Overview</h1>

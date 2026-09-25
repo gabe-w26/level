@@ -8,6 +8,7 @@ import { ago, day, JOB_STATUS, QUOTE_STATUS } from '../../lib/format';
 import { Body, Button, Card, Empty, ErrorText, Label, Loading, Notice, Pill, QuoteMeter, Row, Screen, Title } from '../../components/ui';
 import { colors, radius, space } from '../../lib/theme';
 import { PromiseLine, ProgressSection } from '../../components/Progress';
+import { SiteSection } from '../../components/Site';
 
 export default function CustomerJob() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -119,6 +120,10 @@ export default function CustomerJob() {
           onMessage={() => router.push(`/thread/${jobId}/${q.trade_id}`)} />
       ))}
 
+      {data.site ? (
+        <SiteSection site={data.site} jobId={jobId} role="customer" onChanged={reload} />
+      ) : null}
+
       {data.can_review ? (
         <Button title="Leave a review" icon="star-outline" variant="pine" onPress={() => router.push(`/review/${jobId}`)} />
       ) : data.reviewed ? <Notice tone="pine">Thanks — you’ve reviewed this job.</Notice> : null}
@@ -202,6 +207,17 @@ function QuoteCard({ q, n, jobOpen, busy, onShare, onAccept, onDecline, onMessag
           {badges.map((b) => <Pill key={b} label={b} tone="pine" />)}
         </View>
       ) : null}
+      {q.trust ? (
+        <View style={{ marginTop: 10, padding: 10, backgroundColor: colors.slab, borderRadius: radius }}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+            <Text style={{ fontWeight: '800', fontSize: 16, color: colors.ink }}>{q.trust.score}</Text>
+            <Text style={{ fontSize: 12, color: colors.ink3 }}>/100 · {q.trust.band}</Text>
+          </View>
+          {q.trust.lines.map((line, i) => (
+            <Text key={i} style={{ fontSize: 13, color: colors.ink2, marginTop: 2 }}>{line}</Text>
+          ))}
+        </View>
+      ) : null}
       <PromiseLine text={q.report_plan_text} record={q.report_record} />
       <Body style={{ marginTop: 10 }} selectable>{q.message}</Body>
       <View style={{ height: 6 }} />
@@ -210,6 +226,24 @@ function QuoteCard({ q, n, jobOpen, busy, onShare, onAccept, onDecline, onMessag
       <Row label="Warranty" value={q.warranty || ''} />
       <Row label="Can start" value={q.available_from || ''} />
       <Row label="Takes about" value={q.duration || ''} />
+      {q.items?.length ? (
+        <View style={{ marginTop: 10 }}>
+          <Text style={{ fontSize: 12, color: colors.ink3, fontWeight: '700' }}>WHERE THE MONEY GOES</Text>
+          {q.items.map((it, i) => (
+            <View key={i} style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+              <Text style={{ flex: 1, fontSize: 14, color: colors.ink2 }}>
+                {it.description}
+                {it.qty ? <Text style={{ color: colors.ink3 }}>  {it.qty}{it.unit ? ` ${it.unit}` : ''}</Text> : null}
+              </Text>
+              {it.total != null ? (
+                <Text style={{ fontSize: 14, color: colors.ink, fontVariant: ['tabular-nums'] }}>
+                  ${it.total.toFixed(2)}
+                </Text>
+              ) : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
       {/* The price sits with what you get for it, not in the heading — the cheapest quote is
           usually the smallest one, and putting it on top invites people to read it alone. */}
       <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 10, paddingTop: 10,

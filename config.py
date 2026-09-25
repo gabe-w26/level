@@ -11,14 +11,24 @@ BRAND = os.environ.get('BRAND_NAME', 'Level')
 TAGLINE = 'Fair work for NZ trades'
 SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'help@level.co.nz')
 
-# A second admin created on first start, so someone can always get in without
-# touching the hosting dashboard. They should change this password in Settings
-# once they're in — after that, this can be deleted.
+# A second admin, so someone else can always get in.
+#
+# There is deliberately NO default password. There used to be one, written here
+# in the source — and this repository is public, so the password to a live admin
+# account was readable by anyone who found the file. A password in source control
+# is a published password, however short-lived you intend it to be.
+#
+# To create this account, set ADMIN2_PASSWORD in the hosting dashboard. Without
+# it nothing is created and nothing is logged in to.
 BOOTSTRAP_ADMIN = {
     'username': os.environ.get('ADMIN2_USERNAME', 'admin 2'),
-    'password': os.environ.get('ADMIN2_PASSWORD', 'Sanjay2026'),
+    'password': os.environ.get('ADMIN2_PASSWORD', ''),
     'name': os.environ.get('ADMIN2_NAME', 'Thomas'),
 }
+
+# Passwords that were once a default in this file. Any account still using one is
+# wide open, so `schema` shouts about it on every start until it is changed.
+LEAKED_PASSWORDS = ['Sanjay2026']
 
 # ── Job distribution ──────────────────────────────────────────────────────────
 TRADES_PER_JOB = 15          # live slots per job (trades with an open offer + trades who quoted)

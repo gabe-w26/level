@@ -234,16 +234,92 @@ def job_json(j, include_address=False):
 
 
 def _with_notes(job, quotes):
-    """Quotes for the customer, each carrying the same comparison notes the website shows."""
+    """Quotes for the customer, carrying everything the website shows beside them:
+    the comparison notes, the line items, and how well checked the trade is."""
     import compare
+    import quoting
+    import trust
     guide = web._spread(web._price_points(job['category_id'], job['value_band']))
     notes = compare.notes_for(quotes, guide)
+    items = quoting.items_for_many(db(), [q['id'] for q in quotes])
     out = []
     for q in quotes:
         item = quote_json(q, with_contact=True)
         item['notes'] = [{'kind': n['kind'], 'text': n['text']} for n in notes.get(q['id'], [])]
+        item['items'] = [{'description': i['description'], 'qty': i['qty'], 'unit': i['unit'],
+                          'unit_price': i['unit_price'], 'total': i['total']}
+                         for i in items.get(q['id'], [])]
+        item['trust'] = trust.summary(db(), web.trade_row(q['trade_id']))
         out.append(item)
     return out
+
+
+def _items_from(f, gst_included):
+    """Line items out of a JSON body. The app sends a list of objects; the website
+    sends parallel form fields. Same rules either way, so the maths lives in one
+    place and only the reading differs."""
+    quoting = _quoting()
+    raw = f.get('items')
+    if not isinstance(raw, list):
+        return [], None
+    items = []
+    for row in raw[:quoting.MAX_ITEMS + 1]:
+        if not isinstance(row, dict):
+            continue
+        description = str(row.get('description') or '').strip()
+        if not description:
+            continue
+        if len(items) >= quoting.MAX_ITEMS:
+            raise quoting.QuoteError(f'That’s more than {quoting.MAX_ITEMS} lines — '
+                                     'put the small stuff together.')
+        items.append({'description': description[:200],
+                      'qty': quoting._num(row.get('qty'), 3),
+                      'unit': (str(row.get('unit') or '').strip()[:20] or None),
+                      'unit_price': quoting._num(row.get('unit_price'))})
+    if not items:
+        return [], None
+    priced = quoting.price_from_items(items, gst_included)
+    if not priced:
+        raise quoting.QuoteError('Put a price against at least one line, or take the breakdown off.')
+    return items, priced
+
+
+def _quoting():
+    import quoting
+    return quoting
+
+
+def _quote_items(quote):
+    return [] if not quote else [
+        {'description': i['description'], 'qty': i['qty'], 'unit': i['unit'],
+         'unit_price': i['unit_price'], 'total': i['total']}
+        for i in _quoting().items_for(db(), quote['id'])]
+
+
+def site_json(job, user_id, is_customer):
+    """The site section, or None before anyone is hired."""
+    import worksite
+    if job['status'] != 'hired' or not job['hired_trade_id']:
+        return None
+    notes = worksite.notes_for(db(), job['id'], user_id, is_customer)
+    names = {r['id']: r['name'] for r in db().execute(
+        'SELECT id, name FROM users WHERE id IN (?,?)', (job['customer_id'], job['hired_trade_id']))}
+    site = worksite.get_site(db(), job['id'])
+    return {
+        'fields': [{'key': k, 'label': label, 'hint': hint, 'value': site[k] or ''}
+                   for k, label, hint in worksite.SITE_FIELDS],
+        'filled': worksite.site_done(site),
+        'notes': [{'id': n['id'], 'body': n['body'], 'shared': bool(n['shared']),
+                   'who': 'You' if n['author_id'] == user_id else names.get(n['author_id'], 'Them'),
+                   'created_at': n['created_at'], 'can_delete': n['can_delete'],
+                   'photos': [photo_url(p['filename']) for p in n['photos']]}
+                  for n in notes],
+        'check_items': [{'key': k, 'question': q, 'why': w} for k, q, w in worksite.CHECK_ITEMS],
+        'checks': [{'id': c['id'], 'created_at': c['created_at'], 'flags': c['flags'],
+                    'hazards': c['hazards'], 'notes': c['notes'],
+                    'items': [{'question': i['question'], 'label': i['label']} for i in c['items']]}
+                   for c in worksite.checks_for(db(), job['id'])],
+    }
 
 
 def quote_json(q, with_contact=False):
@@ -692,7 +768,8 @@ def customer_job(job_id):
             'photos': [photo_url(p['filename']) for p in web._photos(job_id)],
             'reviewed': reviewed, 'can_review': job['status'] == 'hired' and not reviewed,
             'can_close': job['status'] in ('open', 'full', 'expired'),
-            'held': job['status'] == 'held', 'progress': progress_json(job)}
+            'held': job['status'] == 'held', 'progress': progress_json(job),
+            'site': site_json(job, me()['id'], True)}
 
 
 @bp.post('/customer/jobs/<int:job_id>/quotes/<int:quote_id>/<action>')
@@ -818,10 +895,14 @@ def trade_job(job_id):
             'photos': [photo_url(p['filename']) for p in web._photos(job_id)],
             'templates': [{'id': t['id'], 'name': t['name'], 'price_type': t['price_type'], 'message': t['message'],
                            'inclusions': t['inclusions'], 'exclusions': t['exclusions'],
-                           'warranty': t['warranty'], 'duration': t['duration']} for t in templates],
+                           'warranty': t['warranty'], 'duration': t['duration'],
+                           'items': _quoting().template_items(t)} for t in templates],
+            'items': _quote_items(quote),
+            'units': _quoting().UNITS,
             'contract_threshold': config.CONTRACT_THRESHOLD, 'server_time': ts(now),
             'default_report_plan': _default_plan(uid),
-            'progress': progress_json(job) if job['hired_trade_id'] == uid else None}
+            'progress': progress_json(job) if job['hired_trade_id'] == uid else None,
+            'site': site_json(job, uid, False)}
 
 
 def _default_plan(uid):
@@ -850,11 +931,19 @@ def trade_quote(job_id):
     f = payload()
     q = _quote_fields(f)
     try:
+        items, priced = _items_from(f, q['gst_included'])
+        if priced:
+            q.update(priced)                     # a breakdown sets the price
         n = engine.submit_quote(db(), job_id, me()['id'], q)
-    except RuleError as e:
+    except (RuleError, _quoting().QuoteError) as e:
         return fail(str(e))
+    if items:
+        row = db().execute('SELECT id FROM quotes WHERE job_id = ? AND trade_id = ?',
+                           (job_id, me()['id'])).fetchone()
+        _quoting().save(db(), row['id'], items)
+        db().commit()
     if truthy(f.get('save_template')) and text(f, 'template_name').strip():
-        web._save_template(me()['id'], text(f, 'template_name'), q)
+        web._save_template(me()['id'], text(f, 'template_name'), q, items)
     return {'ok': True, 'quote_number': n, 'max_quotes': config.MAX_QUOTES,
             'message': f'Quote sent. It’s quote {n} of {config.MAX_QUOTES} for this job.'}, 201
 
@@ -865,11 +954,102 @@ def trade_quote_edit(job_id):
     job = engine.get_job(db(), job_id)
     if not job or not engine.get_offer(db(), job_id, me()['id']):
         return fail('Not found. It may have closed or been removed.', 404)
+    f = payload()
+    fields = _quote_fields(f)
     try:
-        engine.revise_quote(db(), job, me()['id'], _quote_fields(payload()))
-    except RuleError as e:
+        items, priced = _items_from(f, fields['gst_included'])
+        if priced:
+            fields.update(priced)
+        engine.revise_quote(db(), job, me()['id'], fields)
+    except (RuleError, _quoting().QuoteError) as e:
         return fail(str(e))
+    row = db().execute('SELECT id FROM quotes WHERE job_id = ? AND trade_id = ?',
+                       (job_id, me()['id'])).fetchone()
+    _quoting().save(db(), row['id'], items)
+    db().commit()
     return {'ok': True, 'message': 'Quote updated. The customer has been told.'}
+
+
+# ── The site, for both sides ─────────────────────────────────────────────────
+
+def _site_job(job_id):
+    """The job, if the caller is either side of it."""
+    import worksite
+    job = engine.get_job(db(), job_id)
+    if not job or not worksite.can_view(job, me()['id']):
+        return None
+    return job
+
+
+@bp.post('/jobs/<int:job_id>/site')
+@auth()
+def api_save_site(job_id):
+    import worksite
+    job = _site_job(job_id)
+    if not job:
+        return fail('Not found. It may have closed or been removed.', 404)
+    try:
+        worksite.save_site(db(), job, me()['id'], _FormLike(payload()))
+    except worksite.SiteError as e:
+        return fail(str(e))
+    return {'ok': True, 'message': 'Site details saved.'}
+
+
+@bp.post('/jobs/<int:job_id>/notes')
+@auth()
+def api_add_note(job_id):
+    import worksite
+    job = _site_job(job_id)
+    if not job:
+        return fail('Not found. It may have closed or been removed.', 404)
+    f = payload()
+    names, error = web._save_photos(request.files.getlist('photos'), 6) if request.files else ([], None)
+    if error:
+        return fail(error)
+    try:
+        worksite.add_note(db(), job, me()['id'], text(f, 'body'), names,
+                          shared=not truthy(f.get('private')))
+    except worksite.SiteError as e:
+        return fail(str(e))
+    return {'ok': True, 'message': 'Note added.'}, 201
+
+
+@bp.delete('/jobs/<int:job_id>/notes/<int:note_id>')
+@auth()
+def api_delete_note(job_id, note_id):
+    import worksite
+    if not _site_job(job_id):
+        return fail('Not found. It may have closed or been removed.', 404)
+    try:
+        worksite.delete_note(db(), note_id, me()['id'])
+    except worksite.SiteError as e:
+        return fail(str(e))
+    return {'ok': True, 'message': 'Note deleted.'}
+
+
+@bp.post('/trade/jobs/<int:job_id>/site-check')
+@auth('trade')
+def api_site_check(job_id):
+    import worksite
+    job = engine.get_job(db(), job_id)
+    if not job or job['hired_trade_id'] != me()['id']:
+        return fail('Not found. It may have closed or been removed.', 404)
+    f = payload()
+    answers = f.get('answers') if isinstance(f.get('answers'), dict) else {}
+    try:
+        worksite.save_check(db(), job, me()['id'], worksite.clean_answers(answers),
+                            text(f, 'hazards'), text(f, 'notes'))
+    except worksite.SiteError as e:
+        return fail(str(e))
+    return {'ok': True, 'message': 'Site check saved. The customer can see it.'}, 201
+
+
+class _FormLike(dict):
+    """`worksite.save_site` reads a web form; the app sends JSON. Same keys."""
+
+    def get(self, key, default=''):
+        value = dict.get(self, key, default)
+        return '' if value is None else str(value)
 
 
 @bp.post('/trade/jobs/<int:job_id>/pass')

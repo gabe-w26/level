@@ -67,7 +67,10 @@ class BackupTest(unittest.TestCase):
         self.assertIn('manifest.json', names)
         for table in backup.table_names():
             self.assertIn(f'{table}.csv', names, table)
-        self.assertGreaterEqual(manifest['tables']['users'], 3)     # two admins and the customer
+        # The local admin and the customer. There is no second admin unless
+        # ADMIN2_PASSWORD is set — the hardcoded default was removed once the
+        # repository turned out to be public.
+        self.assertGreaterEqual(manifest['tables']['users'], 2)
         self.assertIn('users', json.loads(z.read('manifest.json'))['holds_personal_details'])
 
     def test_rows_come_back_readable(self):
