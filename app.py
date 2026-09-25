@@ -1950,7 +1950,10 @@ def admin_setup():
         return redirect(url_for('admin_setup'))
     status = {'email': mailer.enabled(), 'texts': sms.enabled(), 'ai': ai.enabled()}
     return render_template('admin/setup.html', groups=SETUP_GROUPS, status=status, integrations=integrations,
-                           backups=backup.status(db()))
+                           backups=backup.status(db()),
+                           mail=dict(sent_today=mailer.sent_today(db()), cap=config.MAIL_DAILY_CAP,
+                                     alerts_left=mailer.allowance(db(), 'alert'),
+                                     leads_left=mailer.allowance(db(), 'outreach')))
 
 
 @app.route('/admin/backup')

@@ -19,6 +19,7 @@ os.environ.setdefault('DATABASE', tempfile.NamedTemporaryFile(suffix='.db', dele
 os.environ['RUN_SWEEPER'] = '0'
 
 import app as A  # noqa: E402
+import config  # noqa: E402
 import db as dbmod  # noqa: E402
 import engine  # noqa: E402
 import integrations  # noqa: E402
@@ -402,6 +403,60 @@ class FunnelTest(unittest.TestCase):
         self.db.execute("UPDATE jobs SET status = 'expired' WHERE id = ?", (job_id,))
         self.db.commit()
         self.assertIsNone(outreach.the_job(self.db, job_id))
+
+
+class DailyCapTest(unittest.TestCase):
+    """Going past a free Gmail's daily limit locks the mailbox for 24 hours and
+    takes password resets down with it. So we stop first — and leads stop well
+    before anything a person is waiting on."""
+
+    def setUp(self):
+        self.tmp = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
+        self.tmp.close()
+        dbmod._DATABASE = self.tmp.name
+        init_db()
+        self.db = dbmod.get_db()
+
+    def tearDown(self):
+        self.db.close()
+        os.unlink(self.tmp.name)
+
+    def already_sent(self, n, hours_ago=1):
+        """Pretend n emails went out that recently."""
+        when = ts(utcnow() - timedelta(hours=hours_ago))
+        uid = self.db.execute('INSERT INTO users (role, email, password_hash, name, created_at) '
+                              "VALUES ('customer','x@test.nz','x','X',?)", (when,)).lastrowid
+        for _ in range(n):
+            self.db.execute('INSERT INTO notifications (user_id, body, created_at, emailed_at) '
+                            'VALUES (?,?,?,?)', (uid, 'hi', when, when))
+        self.db.commit()
+
+    def test_it_counts_what_actually_went_out(self):
+        self.assertEqual(mailer.sent_today(self.db), 0)
+        self.already_sent(5)
+        self.assertEqual(mailer.sent_today(self.db), 5)
+
+    def test_yesterdays_email_does_not_count_against_today(self):
+        self.already_sent(5, hours_ago=30)
+        self.assertEqual(mailer.sent_today(self.db), 0)
+
+    def test_leads_stop_long_before_the_things_people_wait_on(self):
+        share = int(config.MAIL_DAILY_CAP * config.MAIL_OUTREACH_SHARE)
+        self.already_sent(share)
+        self.assertEqual(mailer.allowance(self.db, 'outreach'), 0, 'leads should be done')
+        self.assertGreater(mailer.allowance(self.db, 'alert'), 0,
+                           'password resets must still have room')
+
+    def test_the_cap_is_a_floor_of_zero_not_a_negative(self):
+        self.already_sent(config.MAIL_DAILY_CAP + 50)
+        self.assertEqual(mailer.allowance(self.db, 'alert'), 0)
+        self.assertEqual(mailer.allowance(self.db, 'outreach'), 0)
+
+    def test_a_capped_flush_sends_nothing_rather_than_erroring(self):
+        self.already_sent(config.MAIL_DAILY_CAP)
+        with mock.patch.object(mailer, 'enabled', return_value=True):
+            self.assertEqual(mailer.flush(self.db), 0)
+        self.assertEqual(outreach._flush(self.db, 20), 0)
 
 if __name__ == '__main__':
     unittest.main()

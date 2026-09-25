@@ -386,6 +386,13 @@ def flush(db, limit=20):
 
 
 def _flush(db, limit):
+    # Never spend the day's email on cold leads. A password reset that doesn't
+    # arrive locks somebody out of their account; a lead that doesn't arrive
+    # waits until tomorrow, which is fine.
+    limit = min(limit, mailer.allowance(db, 'outreach'))
+    if limit <= 0:
+        print('[outreach] daily email cap reached — leads will go out tomorrow', flush=True)
+        return 0
     rows = db.execute(
         "SELECT s.id AS send_id, s.summary, s.sender_name, s.reply_to, s.created_at AS queued_at, "
         "p.id AS prospect_id, p.token, p.first_name, p.business_name, p.email, p.website, p.status AS p_status, "

@@ -91,4 +91,20 @@
       <p>Buy the name (e.g. through GoDaddy), add it in Render under the <b>level</b> service → Settings → Custom Domains, then add the DNS records Render shows you at GoDaddy. Once it’s working, put the full address here, like <code>https://level.co.nz</code>.</p></details>
   </div>
 </div>
+
+  <div class="section-title"><h2>Email sent today</h2><span class="label">last 24 hours</span></div>
+  <div class="card">
+    <div class="admin-stats">
+      <div><b>{{ mail.sent_today }}</b><span class="small muted">of {{ mail.cap }} a day</span></div>
+      <div><b>{{ mail.alerts_left }}</b><span class="small muted">alerts and resets left</span></div>
+      <div><b>{{ mail.leads_left }}</b><span class="small muted">free leads left</span></div>
+    </div>
+    <p class="small muted" style="margin-top:10px">
+      A free Gmail account sends about 500 a day over SMTP. Go past it and Google locks the mailbox for
+      24 hours, which takes password resets down with it — so {{ cfg.BRAND }} stops first, and stops sending
+      free leads well before anything a person is waiting on. Anything held simply goes out tomorrow.
+      Raise it with <code>MAIL_DAILY_CAP</code> once you’re sending from your own domain.
+    </p>
+  </div>
+
 {% endblock %}

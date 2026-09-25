@@ -40,6 +40,15 @@ ROTATION_LOOKBACK_DAYS = 30  # fair rotation counts offers received over this wi
 AUTO_PAUSE_AFTER = 5         # consecutive offers left to expire before a trade's leads pause
 QUIET_AFTER_HOURS = 24       # tell the customer if their job still has no quotes after this
 
+# ── How much email we'll send in a day ────────────────────────────────────────
+# A free Gmail account will send about 500 messages a day over SMTP. Go past it
+# and Google locks the mailbox for 24 hours — which takes password resets and
+# job alerts down with it, not just the outreach. So we stop first, and outreach
+# stops well before anything a person is waiting on.
+MAIL_DAILY_CAP = int(os.environ.get('MAIL_DAILY_CAP', '400'))
+MAIL_OUTREACH_SHARE = 0.6    # outreach may use this much of the cap; the rest is kept
+                             # for password resets, job alerts and quote notifications
+
 # ── Subscription tiers (they stack: a higher tier sees everything below it) ──
 TIERS = {
     'small':  {'rank': 1, 'name': 'Up to $5k',  'price': 30, 'covers': 'Jobs up to $5,000'},

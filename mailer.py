@@ -70,10 +70,43 @@ def _unsub_url(db, user_id, token):
     return f'{integrations.site_url()}/unsubscribe/{token}'
 
 
+def sent_today(db, at=None):
+    """How many emails have actually gone out in the last 24 hours.
+
+    Counted from the two places that record a send, so there is no separate
+    tally to drift out of step with reality.
+    """
+    since = ts((at or utcnow()) - timedelta(days=1))
+    alerts = db.execute('SELECT COUNT(*) AS n FROM notifications WHERE emailed_at >= ?',
+                        (since,)).fetchone()['n'] or 0
+    leads = db.execute("SELECT COUNT(*) AS n FROM prospect_sends WHERE status = 'sent' AND sent_at >= ?",
+                       (since,)).fetchone()['n'] or 0
+    return alerts + leads
+
+
+def allowance(db, kind='alert', at=None):
+    """How many more emails of this kind we may send before we stop.
+
+    Outreach gets a share of the day's cap and nothing more. A password reset
+    that doesn't arrive is a person locked out of their account; a free lead
+    that doesn't arrive is a tradie who never knew. They are not the same thing,
+    so they don't get the same headroom.
+    """
+    used = sent_today(db, at)
+    ceiling = config.MAIL_DAILY_CAP
+    if kind == 'outreach':
+        ceiling = int(ceiling * config.MAIL_OUTREACH_SHARE)
+    return max(0, ceiling - used)
+
+
 def flush(db, limit=50):
     """Email any alerts that haven't gone out yet. Only the last day's worth, so
     switching email on doesn't dump a week of old news on everyone."""
     if not enabled():
+        return 0
+    limit = min(limit, allowance(db, 'alert'))
+    if limit <= 0:
+        print('[email] daily cap reached — holding alerts until tomorrow', flush=True)
         return 0
     since = ts(utcnow() - timedelta(days=1))
     rows = db.execute('SELECT n.id, n.body, n.link, u.id AS user_id, u.email, u.name, u.unsub_token '
