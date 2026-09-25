@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% block title %}Will the emails arrive? — admin{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Will the emails arrive?</h1>
+      <p class="muted">A free lead that lands in spam is worse than one you never sent — the tradie
+        never sees it, and the complaint quietly damages everything else we send, password resets
+        included. Check this before the first outreach run.</p>
+    </div>
+    <div class="score-badge">
+      {% if report.worst == 'ok' %}<b style="color:var(--pine)">✓</b><em>Looking good</em>
+      {% elif report.worst == 'warn' %}<b style="color:var(--paint)">!</b><em>{{ report.warns }} to look at</em>
+      {% else %}<b style="color:var(--danger)">✕</b><em>{{ report.fails }} to fix</em>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <dl class="kv" style="margin:0">
+      <dt>They’ll see it from</dt><dd>{{ report.sender.shown or '—' }}</dd>
+      <dt>We log in as</dt><dd>{{ report.sender.login or 'not set up yet' }}</dd>
+    </dl>
+  </div>
+
+  {% for c in report.checks %}
+  <div class="card" style="border-left:3px solid {{ 'var(--pine)' if c.level == 'ok' else 'var(--paint)' if c.level == 'warn' else 'var(--danger)' }}">
+    <div class="head-row" style="min-height:0">
+      <b>{{ c.name }}</b>
+      <span class="pill {{ 'hired' if c.level == 'ok' }}{{ ' full' if c.level == 'warn' }}{{ ' declined' if c.level == 'fail' }}">
+        {{ 'Good' if c.level == 'ok' else 'Worth fixing' if c.level == 'warn' else 'Fix this' }}
+      </span>
+    </div>
+    <p style="margin:4px 0 0">{{ c.headline }}</p>
+    {% if c.detail %}<p class="small muted" style="margin:6px 0 0">{{ c.detail }}</p>{% endif %}
+  </div>
+  {% endfor %}
+
+  <div class="section-title"><h2>Send yourself a real one</h2><span class="label">the actual test</span></div>
+  <div class="card">
+    <p class="muted">The checks above can’t tell you what a particular mailbox will do. This sends the
+      genuine article — the same email a tradie would get, about your most recent job — wherever you
+      point it.</p>
+    <ol class="checklist" style="margin:12px 0">
+      <li><b>Get a score out of ten.</b> Open <a href="https://www.mail-tester.com" target="_blank" rel="noopener">mail-tester.com</a>,
+        copy the address it gives you, send to it below, then go back and press Check. It names exactly
+        what it docked you for.</li>
+      <li><b>Then try a real inbox.</b> Send to a Gmail address you don’t own — a friend’s. Ask whether
+        it landed in Inbox, Promotions or Spam. Gmail treats an address you send to yourself far more
+        kindly than one you don’t, so testing on your own is testing nothing.</li>
+      <li><b>And an Outlook or Xtra address</b> if you can. They filter differently, and plenty of
+        tradies are on one.</li>
+    </ol>
+
+    {% if sent_to %}<p class="notice ok" role="status">Sent to {{ sent_to }}. Go and look.</p>{% endif %}
+    {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+
+    <form method="post" class="form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="row">
+        <div><label for="to">Send it to</label>
+          <input id="to" name="to" type="email" placeholder="something@mail-tester.com" required></div>
+        <div style="align-self:end"><button class="btn" type="submit">Send the real thing</button></div>
+      </div>
+    </form>
+    {% if not has_job %}
+    <p class="small muted">There’s no job to build an email from yet. Post one first.</p>
+    {% endif %}
+  </div>
+
+  {% if subject %}
+  <div class="section-title"><h2>Exactly what gets sent</h2></div>
+  <div class="card">
+    <p><b>Subject:</b> {{ subject }}</p>
+    <pre class="desc" style="white-space:pre-wrap;margin:0">{{ body }}</pre>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h3>If it does land in spam</h3>
+    <p class="muted">In the order that actually moves the needle:</p>
+    <ol class="checklist">
+      <li><b>Send from your own domain, through a proper provider.</b> A personal Gmail is the weakest
+        option there is for outreach — you can’t sign it as your own brand, and Google may suspend the
+        account for bulk sending. Resend, Postmark or SendGrid on <code>leveltrades.co.nz</code> costs
+        nothing at this volume and fixes most of a bad score on its own.</li>
+      <li><b>Add SPF, DKIM and DMARC</b> to that domain. Whoever you send through gives you the exact
+        records to paste; the checks above will go green when they’re live.</li>
+      <li><b>Warm it up.</b> A brand-new domain sending 240 emails on day one looks precisely like a
+        spammer. Twenty a day for the first week, then build.</li>
+      <li><b>Clean the list.</b> Addresses scraped from websites go stale, and bounces hurt your
+        reputation more than almost anything. If more than about 3% bounce, stop and verify the list.</li>
+      <li><b>Keep it plain.</b> What we send is plain text, personally addressed, with one link and a
+        working unsubscribe. That is already the right shape — don’t let anyone talk you into HTML
+        templates and tracking pixels.</li>
+    </ol>
+  </div>
+</div>
+{% endblock %}

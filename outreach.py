@@ -243,7 +243,10 @@ def compose(prospect, job, summary, sender_name):
         details.append(posted)
     details.append(spots)
 
-    subject = f'Free {job["category_name"].lower()} lead in {place}: {job["title"]}'
+    # Leads with the trade and the suburb, which is the part a tradie cares
+    # about. It used to open on "Free", and a subject starting with that word is
+    # one of the oldest spam signals there is — see deliverability.py.
+    subject = f'{job["category_name"]} job in {place}: {job["title"]}'
     body = (
         f'Hi {first or "there"},\n\n'
         f'A homeowner in {place} has posted a job on {config.BRAND} that looks like your kind of work:\n\n'

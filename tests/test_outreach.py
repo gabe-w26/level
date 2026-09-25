@@ -162,7 +162,10 @@ class OutreachTest(unittest.TestCase):
             self.assertEqual(outreach.flush(self.db), 1)
         to, name, subject, body = send.call_args[0][:4]
         self.assertEqual(to, 'info@harbourplumbing.co.nz')
-        self.assertIn('Free plumber lead in Karori', subject)
+        # Not "Free ..." — a subject opening on that word is a spam signal, and
+        # deliverability.check_subject now asserts this one stays clean.
+        self.assertIn('Plumber job in Karori', subject)
+        self.assertFalse(subject.lower().startswith('free'))
         self.assertTrue(body.startswith('Hi John,'))
         self.assertIn(f'/o/{p["token"]}?j={job["id"]}', body)
         self.assertIn('harbourplumbing.co.nz', body)

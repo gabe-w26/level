@@ -22,7 +22,7 @@ import db as dbmod  # noqa: E402
 import engine  # noqa: E402
 import integrations  # noqa: E402
 import quoting  # noqa: E402
-from engine import ts  # noqa: E402
+from engine import ts, utcnow  # noqa: E402
 from schema import hash_password, init_db  # noqa: E402
 
 T0 = datetime(2026, 9, 25, 9, 0, 0)
@@ -163,10 +163,18 @@ class EndToEndTest(unittest.TestCase):
         return c
 
     def post_job(self, customer):
+        """Posted now, not at a fixed date.
+
+        These tests quote through the HTTP route, which has no way to be told
+        what time it is and uses the real clock. A job pinned to T0 therefore
+        passed on the day this was written and started failing four hours later
+        — the offer window had closed. Anything that goes through a route has to
+        be anchored to now.
+        """
         return engine.post_job(self.db, customer, dict(
             category_id=self.cat, area_id=self.area, suburb='Karori', title='Replace rotten deck boards',
             description='Twelve square metres, boards are soft.', value_band='medium',
-            timing='weeks', property_type='house'), at=T0)[0]
+            timing='weeks', property_type='house'), at=utcnow())[0]
 
     def quote_form(self, **over):
         f = {'price_type': 'fixed', 'amount_low': '999', 'gst': 'excl', '_csrf': 't',

@@ -29,6 +29,7 @@ import backup
 import billing
 import compare
 import credentials
+import deliverability
 import docket
 import config
 import engine
@@ -175,6 +176,18 @@ def _csrf_token():
     return session['_csrf']
 
 
+# POSTs that can't carry a form token, and don't need one.
+#
+# The unsubscribe endpoints are here because Gmail and Yahoo send a one-click
+# unsubscribe as a POST from their own servers, with no cookie and no token. The
+# unguessable token in the URL is the credential, and the worst an attacker could
+# do by forging one is stop somebody's emails — which is the thing they asked for
+# by pressing it. Rejecting these would be far worse: we'd be telling Gmail we
+# honour one-click and then returning 400, which is exactly what gets a sender
+# marked down.
+NO_CSRF = {'stripe_webhook', 'outreach_stop', 'unsubscribe'}
+
+
 @app.before_request
 def _before():
     if request.endpoint == 'static':
@@ -183,7 +196,7 @@ def _before():
         _load_clock(db())
     integrations.refresh(db())
     # The phone app's API authenticates with a bearer token, never the session cookie, so CSRF doesn't apply.
-    if request.method == 'POST' and request.endpoint != 'stripe_webhook' and not request.path.startswith('/api/mobile/'):
+    if request.method == 'POST' and request.endpoint not in NO_CSRF and not request.path.startswith('/api/mobile/'):
         sent = request.form.get('_csrf', '')
         if not sent or not secrets.compare_digest(sent, session.get('_csrf', '')):
             abort(400)
@@ -594,8 +607,10 @@ def verify_email(token):
     return redirect(home_for(db().execute('SELECT * FROM users WHERE id = ?', (row['user_id'],)).fetchone()))
 
 
-@app.route('/unsubscribe/<token>')
+@app.route('/unsubscribe/<token>', methods=['GET', 'POST'])
 def unsubscribe(token):
+    """Turn off alert emails. POST as well as GET, because Gmail's one-click
+    unsubscribe arrives as a POST from Google's servers, not a click."""
     u = db().execute('SELECT * FROM users WHERE unsub_token = ?', (token,)).fetchone()
     if u:
         db().execute('UPDATE users SET email_alerts = 0 WHERE id = ?', (u['id'],))
@@ -2107,6 +2122,45 @@ def admin_setup():
                            mail=dict(sent_today=mailer.sent_today(db()), cap=config.MAIL_DAILY_CAP,
                                      alerts_left=mailer.allowance(db(), 'alert'),
                                      leads_left=mailer.allowance(db(), 'outreach')))
+
+
+@app.route('/admin/deliverability', methods=['GET', 'POST'])
+@requires('admin')
+def admin_deliverability():
+    """Will these emails land in the inbox? Checked before sending, not after.
+
+    The checks are free and instant. The button sends a real outreach email —
+    the same one a tradie would get — to an address you choose, because the only
+    way to know what a filter makes of it is to put it in front of one.
+    """
+    sent_to = error = None
+    sample = db().execute(
+        'SELECT j.*, c.name AS category_name, a.name AS area_name FROM jobs j '
+        'JOIN categories c ON c.id = j.category_id JOIN areas a ON a.id = j.area_id '
+        'ORDER BY j.id DESC LIMIT 1').fetchone()
+    subject = body = None
+    if sample:
+        fake = {'first_name': 'there', 'business_name': 'Example Trades', 'token': 'preview',
+                'website': 'example.co.nz', 'email': ''}
+        subject, body, _stop = outreach.compose(fake, sample,
+                                                outreach.default_summary(sample['description']),
+                                                current_user()['name'])
+    if request.method == 'POST':
+        to = (request.form.get('to') or '').strip()
+        if '@' not in to:
+            error = 'Put in an address to send it to.'
+        elif not mailer.enabled():
+            error = 'Email isn’t set up yet — do that first in Setup.'
+        elif not subject:
+            error = 'Post a job first, so there’s a real email to send.'
+        elif mailer.send(to, None, subject, body,
+                         unsubscribe_url=f'{integrations.site_url()}/o/preview/stop'):
+            sent_to = to
+        else:
+            error = 'It didn’t send. Check the email settings in Setup.'
+    return render_template('admin/deliverability.html',
+                           report=deliverability.report(subject), sent_to=sent_to, error=error,
+                           subject=subject, body=body, has_job=bool(sample))
 
 
 @app.route('/admin/backup')

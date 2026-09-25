@@ -14,6 +14,7 @@ import secrets
 import smtplib
 from datetime import timedelta
 from email.message import EmailMessage
+from email.utils import formatdate, make_msgid
 
 import config
 import integrations
@@ -37,8 +38,17 @@ def _build(to_email, to_name, subject, body, unsubscribe_url=None, reply_to=None
     msg['From'] = _mail_from()
     msg['To'] = f'{to_name} <{to_email}>' if to_name else to_email
     msg['Reply-To'] = reply_to or config.SUPPORT_EMAIL
+    # Some servers add these; not all do, and a message without them looks
+    # machine-generated in the worst way. Cheap to set ourselves.
+    msg['Date'] = formatdate(localtime=True)
+    msg['Message-ID'] = make_msgid(domain=(_mail_from().rsplit('@', 1)[-1].strip('>') or None))
     if unsubscribe_url:
         msg['List-Unsubscribe'] = f'<{unsubscribe_url}>'
+        # Gmail and Yahoo have expected one-click unsubscribe from bulk senders
+        # since February 2024. The link in the body doesn't satisfy it — this
+        # header is what lets the mail app show an Unsubscribe button, and not
+        # having it is read as "won't let people leave".
+        msg['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click'
         body += f'\n\n—\nStop these emails: {unsubscribe_url}'
     msg.set_content(body)
     return msg
