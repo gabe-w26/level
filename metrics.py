@@ -173,12 +173,6 @@ def trust_scores(db, at=None):
             'photos': with_photo, 'ids': with_id, 'vetted': vetted, 'referees_rung': referees}
 
 
-def _median(values):
-    if not values:
-        return None
-    ordered = sorted(values)
-    middle = len(ordered) // 2
-    return ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
 
 
 def reporting(db, at=None):
@@ -199,6 +193,64 @@ def reporting(db, at=None):
     total_quotes = db.execute('SELECT COUNT(*) AS n FROM quotes').fetchone()['n']
     return {'jobs': counted, 'kept': kept, 'expected': expected, 'on_time': _rate(kept, expected),
             'quotes_promising': promised, 'promise_rate': _rate(promised, total_quotes)}
+
+
+def coverage(db, at=None, region=None):
+    """Which trade and area can actually fill a job today, and which can't.
+
+    Level isn't one marketplace, it's one per trade per area, and they fill at
+    completely different rates. A single "tradies on Level" number hides the
+    thing that matters: whether a plumbing job in Karori has anybody to go to
+    this afternoon.
+
+    Counted the way `engine._candidate_rows` picks — active plan, not paused —
+    because a trade who signed up and never chose a plan can't be offered work,
+    and counting them would make the board look fuller than it is.
+    """
+    rows = db.execute("""
+        SELECT tc.category_id AS category_id, ta.area_id AS area_id, COUNT(DISTINCT t.user_id) AS n
+          FROM trades t
+          JOIN trade_categories tc ON tc.trade_id = t.user_id
+          JOIN trade_areas ta ON ta.trade_id = t.user_id
+          JOIN users u ON u.id = t.user_id
+         WHERE t.sub_status = 'active' AND t.paused = 0 AND u.closed_at IS NULL
+         GROUP BY tc.category_id, ta.area_id""").fetchall()
+    have = {(r['category_id'], r['area_id']): r['n'] for r in rows}
+
+    # Where jobs have actually been posted, so an empty square nobody posts in
+    # doesn't read as a problem.
+    posted = {(r['category_id'], r['area_id']): r['n'] for r in db.execute(
+        'SELECT category_id, area_id, COUNT(*) AS n FROM jobs GROUP BY category_id, area_id').fetchall()}
+
+    cats = db.execute('SELECT id, name FROM categories ORDER BY name').fetchall()
+    areas = db.execute('SELECT id, name, region FROM areas ORDER BY id').fetchall()
+    if region:
+        areas = [a for a in areas if a['region'] == region]
+
+    grid, full = [], 0
+    for area in areas:
+        row = []
+        for cat in cats:
+            n = have.get((cat['id'], area['id']), 0)
+            jobs_here = posted.get((cat['id'], area['id']), 0)
+            if n >= config.TRADES_PER_JOB:
+                state = 'full'
+                full += 1
+            elif n >= config.MAX_QUOTES:
+                state = 'thin'          # enough to fill the quote slots, not every offer
+            elif n:
+                state = 'bare'
+            else:
+                state = 'none'
+            row.append({'category': cat['name'], 'n': n, 'state': state, 'jobs': jobs_here})
+        grid.append({'area': area['name'], 'region': area['region'], 'cells': row})
+
+    gaps = sorted(({'area': r['area'], 'category': c['category'], 'n': c['n'], 'jobs': c['jobs']}
+                   for r in grid for c in r['cells'] if c['jobs'] and c['state'] in ('none', 'bare')),
+                  key=lambda g: -g['jobs'])
+    return {'rows': grid, 'categories': [c['name'] for c in cats], 'full': full,
+            'of': len(areas) * len(cats), 'need': config.TRADES_PER_JOB, 'gaps': gaps[:20],
+            'regions': sorted({r['region'] for r in db.execute('SELECT DISTINCT region FROM areas')})}
 
 
 def everything(db, days=30, at=None):

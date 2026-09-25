@@ -2290,6 +2290,20 @@ def _resend_signature_ok(secret, raw):
     return any(secrets.compare_digest(part.split(',', 1)[-1], want) for part in sent.split(' ') if ',' in part)
 
 
+@app.get('/admin/coverage')
+@requires('admin')
+def admin_coverage():
+    """Which trade and area can fill a job today, and which fall back to cold email.
+
+    The number to recruit against. "How many tradies have we got" is the wrong
+    question — a job in Karori doesn't care about a plumber in Dunedin.
+    """
+    region = request.args.get('region') or 'Wellington'
+    return render_template('admin/coverage.html',
+                           data=metrics.coverage(db(), region=None if region == 'all' else region),
+                           region=region)
+
+
 @app.route('/admin/deliverability', methods=['GET', 'POST'])
 @requires('admin')
 def admin_deliverability():

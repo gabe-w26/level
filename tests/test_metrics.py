@@ -18,6 +18,7 @@ os.environ['RUN_SWEEPER'] = '0'
 
 import app as A  # noqa: E402
 import billing  # noqa: E402
+import config  # noqa: E402
 import db as dbmod  # noqa: E402
 import engine  # noqa: E402
 import integrations  # noqa: E402
@@ -167,6 +168,51 @@ class MetricsTest(unittest.TestCase):
         m = metrics.routing(self.db, at=T0)
         self.assertEqual((m['checked'], m['disagreed']), (1, 1))
         self.assertEqual(m['disagree_rate'], 1.0)
+
+    # ── coverage ──
+    def test_coverage_counts_only_trades_who_could_actually_be_offered_a_job(self):
+        """A trade with no plan, or who paused, wouldn't be there on the day."""
+        live = self.user('trade')
+        paused = self.user('trade')
+        engine.set_pause(self.db, paused, True, at=T0)
+        noplan = self.db.execute('INSERT INTO users (role, email, password_hash, name, created_at) '
+                                 "VALUES ('trade','np@test.nz','x','NP',?)", (ts(T0),)).lastrowid
+        self.db.execute('INSERT INTO trades (user_id, business_name, created_at) VALUES (?,?,?)',
+                        (noplan, 'No Plan', ts(T0)))
+        self.db.execute('INSERT INTO trade_categories VALUES (?,?)', (noplan, self.cat))
+        self.db.execute('INSERT INTO trade_areas VALUES (?,?)', (noplan, self.area))
+        self.db.commit()
+
+        data = metrics.coverage(self.db, region='Wellington')
+        cell = next(c for row in data['rows'] if row['area'] == 'Wellington City'
+                    for c in row['cells'] if c['category'] == 'Builder')
+        self.assertEqual(cell['n'], 1, 'only the one who could take a job today')
+        self.assertIsNotNone(live)
+
+    def test_a_square_is_full_only_at_the_full_slot_count(self):
+        for _ in range(config.TRADES_PER_JOB):
+            self.user('trade')
+        data = metrics.coverage(self.db, region='Wellington')
+        cell = next(c for row in data['rows'] if row['area'] == 'Wellington City'
+                    for c in row['cells'] if c['category'] == 'Builder')
+        self.assertEqual(cell['state'], 'full')
+        self.assertGreaterEqual(data['full'], 1)
+
+    def test_the_gaps_are_the_ones_where_jobs_have_actually_come_in(self):
+        """An empty square nobody posts in isn't a problem worth a line."""
+        customer = self.user()
+        self.job(customer)                       # a Builder job in Wellington, no trades
+        data = metrics.coverage(self.db, region='Wellington')
+        self.assertTrue(data['gaps'], 'a job with nobody to send it to should show up')
+        top = data['gaps'][0]
+        self.assertEqual((top['area'], top['category'], top['n']), ('Wellington City', 'Builder', 0))
+        # And nothing for the 24 trades nobody has posted in.
+        self.assertTrue(all(g['jobs'] for g in data['gaps']))
+
+    def test_filtering_by_region_only_shows_that_region(self):
+        data = metrics.coverage(self.db, region='Otago')
+        self.assertTrue(all(r['region'] == 'Otago' for r in data['rows']))
+        self.assertIn('Wellington', data['regions'], 'the switcher still lists them all')
 
     # ── the page ──
     def test_page_loads_for_admin_only(self):

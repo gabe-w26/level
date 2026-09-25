@@ -604,3 +604,19 @@ body.is-offline .offline-banner { display: block; }
 .work-ask.asked { border-left-color: var(--paint); }
 .work-ask.accepted { border-left-color: var(--pine); }
 .work-ask.declined { border-left-color: var(--rule); opacity: .75; }
+
+
+/* ── Coverage grid ───────────────────────────────────────────────────────── */
+.coverage { border-collapse: collapse; font-size: 13px; }
+.coverage th[scope=row] { text-align: left; white-space: nowrap; padding-right: 10px; font-weight: 600; }
+.coverage .vert { height: 110px; vertical-align: bottom; padding: 0 2px; }
+.coverage .vert span { display: block; writing-mode: vertical-rl; transform: rotate(180deg);
+                       font-weight: 600; font-size: 12px; color: var(--ink-2); }
+.cov { width: 26px; height: 26px; text-align: center; border: 1px solid var(--paper);
+       font: 600 11px/1 var(--f-mono); }
+.cov-full { background: var(--pine); color: #fff; }
+.cov-thin { background: var(--pine-wash); color: var(--pine); }
+.cov-bare { background: var(--paint-wash); color: var(--paint-ink); }
+.cov-none { background: var(--slab); }
+.key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px;
+       border: 1px solid var(--rule); }

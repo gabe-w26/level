@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}Coverage — admin{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Coverage</h1>
+      <p class="muted">Level isn’t one marketplace — it’s one per trade per area. This is where a job can be
+        filled from the trades already here, and where it falls back to emailing businesses who aren’t.</p>
+    </div>
+    <div class="actions">
+      {% for r in data.regions %}
+      <a class="btn btn-sm {{ 'btn-ghost' if region != r }}" href="{{ url_for('admin_coverage', region=r) }}">{{ r }}</a>
+      {% endfor %}
+      <a class="btn btn-sm {{ 'btn-ghost' if region != 'all' }}" href="{{ url_for('admin_coverage', region='all') }}">All</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="admin-stats">
+      <div><b>{{ data.full }}</b><span class="small muted">of {{ data.of }} squares can fill a job alone</span></div>
+      <div><b>{{ data.need }}</b><span class="small muted">trades needed per square</span></div>
+      <div><b>{{ data.gaps|length }}</b><span class="small muted">gaps where jobs have actually come in</span></div>
+    </div>
+    <p class="small muted" style="margin-top:10px">
+      A square counts as full at {{ data.need }} trades — enough to offer every slot. From {{ cfg.MAX_QUOTES }} up
+      it can still fill all {{ cfg.MAX_QUOTES }} quote slots, just with nobody in reserve. Below that a job leans
+      on the free-lead emails.
+    </p>
+  </div>
+
+  {% if data.gaps %}
+  <div class="section-title"><h2>Where to recruit first</h2><span class="label">jobs came in, nobody to send them to</span></div>
+  <div class="card">
+    <ol class="checklist">
+      {% for g in data.gaps %}
+      <li><b>{{ g.category }} in {{ g.area }}</b> — {{ g.jobs }} job{{ 's' if g.jobs != 1 }} posted,
+        {{ g.n }} trade{{ 's' if g.n != 1 }} here.</li>
+      {% endfor %}
+    </ol>
+    <p class="small muted" style="margin:10px 0 0">Ordered by how many jobs have actually been posted, so the
+      top of this list is where real demand is going unanswered.</p>
+  </div>
+  {% endif %}
+
+  <div class="section-title"><h2>Every trade and area</h2></div>
+  <div class="card table-wrap" style="padding:6px 10px">
+    <table class="coverage">
+      <thead>
+        <tr><th>Area</th>{% for c in data.categories %}<th class="vert"><span>{{ c }}</span></th>{% endfor %}</tr>
+      </thead>
+      <tbody>
+        {% for row in data.rows %}
+        <tr>
+          <th scope="row">{{ row.area }}</th>
+          {% for c in row.cells %}
+          <td class="cov cov-{{ c.state }}"
+              title="{{ c.category }} in {{ row.area }}: {{ c.n }} trade{{ 's' if c.n != 1 }}{% if c.jobs %}, {{ c.jobs }} job{{ 's' if c.jobs != 1 }} posted{% endif %}">
+            {{ c.n or '' }}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="small muted">
+    <span class="key cov-full"></span> {{ data.need }}+ — fills itself &nbsp;
+    <span class="key cov-thin"></span> {{ cfg.MAX_QUOTES }}–{{ data.need - 1 }} — fills the quotes &nbsp;
+    <span class="key cov-bare"></span> 1–{{ cfg.MAX_QUOTES - 1 }} — leans on email &nbsp;
+    <span class="key cov-none"></span> nobody
+  </p>
+</div>
+{% endblock %}

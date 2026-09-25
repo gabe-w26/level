@@ -65,6 +65,12 @@
     <div><b>{{ data.reporting.kept }}/{{ data.reporting.expected }}</b><span class="small muted">across {{ data.reporting.jobs }} job{{ 's' if data.reporting.jobs != 1 }}</span></div>
   </div>
 
+  <div class="card">
+    <p class="muted" style="margin:0 0 10px"><b>Where can a job actually be filled?</b> A single count of trades
+      hides the thing that matters — a job in Karori doesn’t care about a plumber in Dunedin.</p>
+    <a class="btn btn-sm" href="{{ url_for('admin_coverage') }}">See coverage by trade and area</a>
+  </div>
+
   <div class="section-title"><h2>How well checked the trades are</h2><span class="label">trust</span></div>
   <div class="admin-stats">
     <div><b>{{ num(data.trust.median, 0) }}</b><span class="small muted">middle score, of {{ data.trust.scored }} businesses</span></div>
