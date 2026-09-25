@@ -1,58 +1,92 @@
 {% extends 'base.html' %}
-{% block title %}Send jobs to Docket — {{ cfg.BRAND }}{% endblock %}
+{% block title %}Docket — {{ cfg.BRAND }}{% endblock %}
 {% block main %}
 <div class="wrap page narrow">
   <div class="page-head">
     <div>
-      <h1>Send jobs to Docket</h1>
-      <p class="muted">Win a job here and it turns up in your Docket — the customer as a client, the address,
-        how to get in, and what you quoted. No retyping.</p>
+      <h1>Docket</h1>
+      <p class="muted">Win a job here and it turns up in your Docket — the customer as a client, the
+        address, how to get in, and what you quoted. No retyping, and nothing to set up.</p>
     </div>
-    {% if t.docket_url %}<span class="pill hired">Connected</span>{% endif %}
+    {% if t.docket_off %}<span class="pill">Turned off</span>
+    {% elif found or t.docket_url %}<span class="pill hired">On</span>{% endif %}
   </div>
 
-  {% if t.docket_url %}
+  {% if t.docket_off %}
+  <div class="card">
+    <p style="margin:0 0 10px">You’ve turned this off. Jobs you win stay on {{ cfg.BRAND }} only.</p>
+    <form method="post" class="inline">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="btn btn-sm" name="action" value="on">Turn it back on</button>
+    </form>
+  </div>
+
+  {% elif found %}
+  <div class="card">
+    <p style="margin:0 0 6px"><b>You’re all set.</b> We found <b>{{ found }}</b> in Docket under the same
+      email address you use here, so your won jobs already go across.</p>
+    <p class="small muted" style="margin:0 0 10px">{{ sent }} job{{ 's' if sent != 1 }} sent so far.
+      Nothing for you to do — this page is only here so you know it’s happening.</p>
+    <form method="post" class="inline">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="btn btn-sm btn-ghost" name="action" value="off">Stop sending jobs to Docket</button>
+    </form>
+  </div>
+
+  {% elif t.docket_url %}
   <div class="card">
     <dl class="kv">
       <dt>Business</dt><dd>{{ t.docket_name or 'connected' }}</dd>
       <dt>Docket address</dt><dd>{{ t.docket_url }}</dd>
       <dt>Jobs sent</dt><dd>{{ sent }}</dd>
     </dl>
+    <p class="small muted">You’re connected with your own key, which is fine — that keeps working.</p>
     <form method="post" class="inline">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <button class="btn btn-sm btn-ghost" name="action" value="disconnect">Disconnect</button>
     </form>
   </div>
+
+  {% else %}
+  <div class="card">
+    <h3 style="margin-top:0">You don’t have a Docket yet</h3>
+    <p class="muted">Docket is the part {{ cfg.BRAND }} doesn’t do: job scheduling, timesheets, site safety
+      and pre-starts, invoices, and the paperwork that comes with residential work.</p>
+    <p>Sign up using <b>the same email address you use here</b> and that’s it — your won jobs start turning
+      up in it. There’s no key to paste and nothing to come back and configure.</p>
+    <p class="small muted">Straight up: Docket is made by the same people who built {{ cfg.BRAND }}. It’s a
+      separate product you pay for separately, and nothing here works any differently whether you use it
+      or not.</p>
+    {% if not shared_on %}
+    <p class="notice small" style="margin-top:12px">Level isn’t connected to Docket yet — whoever runs
+      {{ cfg.BRAND }} needs to set that up once in Admin → Setup.</p>
+    {% endif %}
+  </div>
   {% endif %}
 
-  <div class="card">
-    <h3>{{ 'Change the connection' if t.docket_url else 'Connect Docket' }}</h3>
-    <ol class="checklist" style="margin:10px 0 16px">
-      <li>In Docket, open <b>Integrations → Level</b> and press <b>Make a key</b>.</li>
-      <li>Copy the key — Docket only shows it once.</li>
-      <li>Paste it below along with your Docket web address, and press Connect.</li>
-    </ol>
+  <details class="card">
+    <summary><b>Using a different Docket?</b></summary>
+    <p class="small muted" style="margin:10px 0">If yours is under another email address, or you host it
+      yourself, make a key in Docket under <b>Integrations → Level</b> and paste it here instead.</p>
     {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
     <form method="post" class="form">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <div>
-        <label for="url">Your Docket address <span class="hint">The web address you log in at.</span></label>
+        <label for="url">Your Docket address</label>
         <input id="url" name="url" type="text" inputmode="url" placeholder="yourbusiness.docket.co.nz"
-               value="{{ form.get('url', t.docket_url or '') }}" required>
+               value="{{ form.get('url', t.docket_url or '') }}">
       </div>
       <div>
         <label for="key">The key from Docket</label>
-        <input id="key" name="key" type="text" autocomplete="off" spellcheck="false"
-               placeholder="{{ '••••••' if t.docket_key else 'lvl_…' }}"
+        <input id="key" name="key" type="text" autocomplete="off" spellcheck="false" placeholder="lvl_…"
                value="{{ form.get('key', '') }}">
-        {% if t.docket_key %}<span class="hint">Leave it blank to keep the key you’ve already got.</span>{% endif %}
       </div>
       <div class="form-foot">
         <span class="small muted">We check it works before saving it.</span>
-        <button class="btn" type="submit">{{ 'Check and save' if t.docket_url else 'Connect' }}</button>
+        <button class="btn btn-sm" type="submit">Check and save</button>
       </div>
     </form>
-  </div>
+  </details>
 
   <div class="card">
     <h3>What this can and can’t do</h3>
@@ -64,7 +98,6 @@
         the one that’s there rather than making a second.</li>
       <li><b>If Docket is down, nothing here breaks.</b> We keep trying in the background, and you can send a
         job by hand from the job itself.</li>
-      <li><b>You can disconnect whenever you like.</b> Jobs already in Docket stay where they are.</li>
     </ul>
   </div>
 </div>

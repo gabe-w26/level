@@ -8,6 +8,10 @@ they quoted, and a link back here.
 
 Rules this sticks to:
 
+  • **The tradie sets nothing up.** Level and Docket know each other already, so
+    a tradie who uses both just finds their jobs there. We ask Docket "do you
+    know this email address?" and if it does, that's the connection. Pasting
+    keys was a step nobody should have had to take.
   • One direction only. Level pushes; it never reads anything out of Docket. A
     key that can only create jobs is a key that can't leak anything, and the
     tradie's own business data stays their own business.
@@ -159,9 +163,17 @@ def worth_mentioning(db, trade_id):
     need job management, and saying so before they've had a win is an advert
     rather than a suggestion. They can turn it off for good.
     """
-    row = db.execute('SELECT docket_url, docket_hidden FROM trades WHERE user_id = ?', (trade_id,)).fetchone()
+    row = db.execute('SELECT docket_url, docket_hidden, docket_off FROM trades WHERE user_id = ?',
+                     (trade_id,)).fetchone()
     if not row or row['docket_url'] or row['docket_hidden']:
         return None
+    # Answered from what we already know, never by asking Docket: this runs on
+    # every dashboard load, and a page that waits on another system is a page
+    # that hangs when that system is slow.
+    already = db.execute('SELECT COUNT(*) AS n FROM jobs WHERE hired_trade_id = ? AND docket_at IS NOT NULL',
+                         (trade_id,)).fetchone()['n'] or 0
+    if already:
+        return None                       # they clearly have one; nothing to sell them
     won = db.execute("SELECT COUNT(*) AS n FROM jobs WHERE hired_trade_id = ? AND status = 'hired'",
                      (trade_id,)).fetchone()['n'] or 0
     if won < 1:
@@ -171,11 +183,55 @@ def worth_mentioning(db, trade_id):
 
 # ── Sending, and not minding when it fails ──────────────────────────────────
 
+def platform():
+    """The address and key that connect Level to Docket for everybody.
+
+    Set once, by whoever runs Level. Nothing appears for a tradie until both
+    are there, so an unconfigured Level behaves exactly as it always did.
+    """
+    import integrations
+    url = clean_url(integrations.get('docket_url'))
+    key = (integrations.get('docket_key') or '').strip()
+    return {'url': url, 'key': key} if url and len(key) >= 24 else None
+
+
 def settings_for(db, trade_id):
-    row = db.execute('SELECT docket_url, docket_key FROM trades WHERE user_id = ?', (trade_id,)).fetchone()
-    if not row or not row['docket_url'] or not row['docket_key']:
+    """How we reach this tradie's Docket, and what to call them there.
+
+    A tradie with their own key — a self-hosted Docket, or one under a different
+    email — keeps using it. Everyone else goes through the platform connection
+    and never has to think about it.
+    """
+    row = db.execute('SELECT docket_url, docket_key, docket_off FROM trades WHERE user_id = ?',
+                     (trade_id,)).fetchone()
+    if not row or row['docket_off']:
         return None
-    return {'url': row['docket_url'], 'key': row['docket_key']}
+    if row['docket_url'] and row['docket_key']:
+        return {'url': row['docket_url'], 'key': row['docket_key'], 'email': None}
+    shared = platform()
+    if not shared:
+        return None
+    who = db.execute('SELECT email FROM users WHERE id = ?', (trade_id,)).fetchone()
+    return dict(shared, email=who['email'] if who else None)
+
+
+def look_for(db, trade_id):
+    """Does this tradie have a Docket? Returns the business name, or None.
+
+    Never raises: a Docket that is down simply means we don't know yet, and the
+    page says nothing rather than something wrong.
+    """
+    shared = platform()
+    who = db.execute('SELECT email FROM users WHERE id = ?', (trade_id,)).fetchone()
+    if not shared or not who or not who['email']:
+        return None
+    try:
+        from urllib.parse import quote
+        result = _post(shared['url'], shared['key'],
+                       f'/api/partner/ping?email={quote(who["email"])}', method='GET')
+    except Exception:
+        return None
+    return result.get('company') if result.get('matched') else None
 
 
 def push(db, job, trade_id, at=None):
@@ -186,7 +242,17 @@ def push(db, job, trade_id, at=None):
     if not settings:
         return True, None                       # not connected; nothing to do and nothing wrong
     try:
-        result = _post(settings['url'], settings['key'], '/api/partner/job', payload_for(db, job, trade_id))
+        body = payload_for(db, job, trade_id)
+        if settings.get('email'):
+            body['for_email'] = settings['email']        # the platform key has to say whose job it is
+        result = _post(settings['url'], settings['key'], '/api/partner/job', body)
+        if result.get('matched') is False:
+            # They don't have a Docket. That is the normal case, not a failure,
+            # and we mustn't keep asking about it.
+            db.execute("UPDATE jobs SET docket_at = NULL, docket_error = NULL, docket_tries = ? "
+                       'WHERE id = ?', (MAX_TRIES, job['id']))
+            db.commit()
+            return True, None
         number = result.get('job_number') or result.get('job_id')
         db.execute('UPDATE jobs SET docket_at = ?, docket_ref = ?, docket_error = NULL, docket_tries = 0 '
                    'WHERE id = ?', (ts(at), str(number or ''), job['id']))

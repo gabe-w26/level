@@ -230,6 +230,83 @@ class WhenItGoesWrongTest(Base):
                 docket.test(url, key)
 
 
+class NoSetupTest(Base):
+    """The whole point: a tradie pastes nothing and their jobs turn up anyway."""
+
+    def platform_on(self):
+        import integrations
+        integrations.save(self.db, {'docket_url': 'https://docket.example.nz',
+                                    'docket_key': 'shared_platform_key_abcdefghijklmnop'})
+        integrations.refresh(self.db, force=True)
+
+    def tearDown(self):
+        import integrations
+        integrations.save(self.db, {'docket_url': '', 'docket_key': ''})
+        integrations._cache.update(at=0, values={})
+        super().tearDown()
+
+    def test_a_tradie_who_pasted_nothing_still_gets_their_jobs_across(self):
+        self.platform_on()
+        fake = FakeDocket()
+        with mock.patch.object(docket, '_post', fake):
+            job_id = self.win_a_job()
+        sent = fake.jobs['level-job-%d' % job_id]
+        self.assertEqual(sent['for_email'], 'karori@test.nz',
+                         'the shared key has to say whose job it is')
+        self.assertEqual(self.job(job_id)['docket_ref'], 'J-2026-001')
+
+    def test_a_tradie_with_no_docket_is_not_an_error_and_is_asked_about_once(self):
+        """Most tradies will never have a Docket. That must be quiet, and final."""
+        self.platform_on()
+
+        class NoMatch(FakeDocket):
+            def __call__(self, *a, **kw):
+                super().__call__(*a, **kw)
+                return {'ok': True, 'matched': False}
+
+        with mock.patch.object(docket, '_post', NoMatch()):
+            job_id = self.win_a_job()
+        job = self.job(job_id)
+        self.assertIsNone(job['docket_error'], 'not having a Docket is not a failure')
+        self.assertIsNone(job['docket_at'])
+        self.assertEqual(job['docket_tries'], docket.MAX_TRIES, 'and we stop asking')
+        with mock.patch.object(docket, '_post', NoMatch()) as again:
+            docket.retry_failed(self.db, T0)
+            self.assertEqual(again.call_count if hasattr(again, 'call_count') else 0, 0)
+
+    def test_their_own_key_still_wins_over_the_shared_one(self):
+        self.platform_on()
+        self.connect()
+        fake = FakeDocket()
+        with mock.patch.object(docket, '_post', fake):
+            job_id = self.win_a_job()
+        self.assertNotIn('for_email', fake.jobs['level-job-%d' % job_id],
+                         'a per-trade key is tied to one business already')
+
+    def test_a_tradie_can_turn_it_off_and_nothing_is_sent(self):
+        self.platform_on()
+        self.db.execute('UPDATE trades SET docket_off = 1 WHERE user_id = ?', (self.trade,))
+        self.db.commit()
+        fake = FakeDocket()
+        with mock.patch.object(docket, '_post', fake):
+            self.win_a_job()
+        self.assertEqual(fake.calls, [])
+
+    def test_nothing_happens_at_all_until_level_itself_is_connected(self):
+        fake = FakeDocket()
+        with mock.patch.object(docket, '_post', fake):
+            self.win_a_job()
+        self.assertEqual(fake.calls, [], 'an unconfigured Level behaves exactly as before')
+
+    def test_the_dashboard_hint_never_calls_docket(self):
+        """It runs on every page load; a page that waits on another system hangs."""
+        self.platform_on()
+        boom = mock.Mock(side_effect=AssertionError('must not touch the network'))
+        with mock.patch.object(docket, '_post', boom):
+            docket.worth_mentioning(self.db, self.trade)
+        boom.assert_not_called()
+
+
 class AddressTest(unittest.TestCase):
 
     def test_a_pasted_address_is_made_usable(self):

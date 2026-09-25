@@ -1638,11 +1638,13 @@ def trade_docket():
     error = tested = None
     if request.method == 'POST':
         action = request.form.get('action')
-        if action == 'disconnect':
-            db().execute('UPDATE trades SET docket_url = NULL, docket_key = NULL, docket_name = NULL '
-                         'WHERE user_id = ?', (t['user_id'],))
+        if action in ('disconnect', 'off', 'on'):
+            db().execute('UPDATE trades SET docket_url = NULL, docket_key = NULL, docket_name = NULL, '
+                         'docket_off = ? WHERE user_id = ?',
+                         (1 if action in ('disconnect', 'off') else 0, t['user_id']))
             db().commit()
-            flash('Disconnected. Jobs you win stay on Level only.')
+            flash('Jobs you win stay on Level only.' if action != 'on'
+                  else 'Back on — jobs you win will turn up in Docket.')
             return redirect(url_for('trade_docket'))
         url = docket.clean_url(request.form.get('url'))
         key = (request.form.get('key') or '').strip()
@@ -1659,7 +1661,10 @@ def trade_docket():
             error = str(e)
     sent = db().execute("SELECT COUNT(*) AS n FROM jobs WHERE hired_trade_id = ? AND docket_at IS NOT NULL",
                         (t['user_id'],)).fetchone()['n']
-    return render_template('trade/docket.html', t=current_trade(), error=error, sent=sent,
+    t = current_trade()
+    return render_template('trade/docket.html', t=t, error=error, sent=sent,
+                           found=None if t['docket_url'] else docket.look_for(db(), t['user_id']),
+                           shared_on=bool(docket.platform()),
                            form=request.form if request.method == 'POST' else {})
 
 
@@ -2048,6 +2053,11 @@ SETUP_GROUPS = [
      [('anthropic_key', 'Anthropic API key', 'sk-ant-…')]),
     ('Your web address', 'Used in every link we email or text. Set it once your own domain is connected.',
      [('site_url', 'Site address', 'https://level.co.nz')]),
+    ('Docket', 'Connect Level to Docket once, here, and every tradie who uses both gets their won jobs '
+               'there automatically — they don’t set anything up. Put the same key in Docket’s '
+               'LEVEL_PLATFORM_KEY.',
+     [('docket_url', 'Docket address', 'https://app.docket.co.nz'),
+      ('docket_key', 'Shared key', 'a long random string, at least 24 characters')]),
 ]
 
 
