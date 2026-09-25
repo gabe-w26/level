@@ -1,0 +1,18 @@
+{# Shown while a tradie is signing up off the back of a lead email. They came for
+   one job; the least we can do is keep it in front of them while they fill in
+   forms. It disappears the moment the job fills or closes — see outreach.the_job. #}
+{% if joining_for %}
+<div class="card joining">
+  <span class="label">You’re signing up to quote on</span>
+  <h3>{{ joining_for.title }}</h3>
+  <p class="desc">{{ joining_for.summary }}</p>
+  <ul class="badges">
+    <li class="badge">{{ joining_for.trade }} · {{ joining_for.where }}</li>
+    {% if joining_for.size %}<li class="badge">{{ joining_for.size }}</li>{% endif %}
+    {% if joining_for.posted %}<li class="badge">{{ joining_for.posted }}</li>{% endif %}
+    <li class="badge wait">{{ joining_for.spots }}</li>
+  </ul>
+  <p class="small muted" style="margin:10px 0 0">You’ll see the full job and the photos as soon as you’re
+    set up. We don’t pass on anyone’s address or phone number until the homeowner chooses you.</p>
+</div>
+{% endif %}

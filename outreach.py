@@ -452,6 +452,26 @@ def signed_up(db, prospect, user_id):
     db.commit()
 
 
+def the_job(db, job_id):
+    """The job an outreach email was about, in the few words worth showing on the
+    way in. None once it has closed or filled — promising a slot that's gone is
+    the fastest way to lose someone on their first day.
+    """
+    if not job_id:
+        return None
+    job = db.execute(
+        'SELECT j.*, c.name AS category_name, a.name AS area_name FROM jobs j '
+        'JOIN categories c ON c.id = j.category_id JOIN areas a ON a.id = j.area_id '
+        'WHERE j.id = ?', (job_id,)).fetchone()
+    if not job or job['status'] != 'open' or (job['quote_count'] or 0) >= config.MAX_QUOTES:
+        return None
+    spots, posted = standing(job)
+    return {'id': job['id'], 'title': job['title'], 'trade': job['category_name'],
+            'where': job['suburb'] or job['area_name'], 'spots': spots, 'posted': posted,
+            'size': config.VALUE_BANDS.get(job['value_band'], {}).get('label', ''),
+            'summary': default_summary(job['description'], 240)}
+
+
 def setup_hint(db, prospect):
     """The trade and areas we listed them under, to pre-tick on the setup page."""
     areas = [r['area_id'] for r in db.execute('SELECT area_id FROM prospect_areas WHERE prospect_id = ?',

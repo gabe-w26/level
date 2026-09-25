@@ -5,6 +5,7 @@
 {% macro checked(when) %}{% if when %}<span class="hint" style="color:var(--pine)">✓ Checked {{ when|day }}</span>{% endif %}{% endmacro %}
 {% block main %}
 <div class="wrap page narrow">
+  {% include '_joining.html' %}
   <div class="page-head">
     <div>
       <h1>Your profile</h1>

@@ -581,3 +581,9 @@ body.is-offline .offline-banner { display: block; }
 @media (max-width: 560px) {
   .items-table th:nth-child(3), .items-table td:nth-child(3) { display: none; }
 }
+
+
+/* The job someone is signing up to quote on, shown while they fill in forms. */
+.joining { border-left: 3px solid var(--chalk); margin-bottom: 18px; }
+.joining h3 { margin: 6px 0 4px; }
+.joining .desc { margin: 0 0 10px; color: var(--ink-2); }

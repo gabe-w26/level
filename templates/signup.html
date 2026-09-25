@@ -3,6 +3,7 @@
 {% block title %}Join as a trade — {{ cfg.BRAND }}{% endblock %}
 {% block main %}
 <div class="wrap page">
+  {% include '_joining.html' %}
   <div class="auth">
     <h1 style="font-size:38px">Join as a trade</h1>
     {% if inviter %}<p class="notice ok small"><b>{{ inviter.business_name }}</b> invited you to {{ cfg.BRAND }}.</p>{% endif %}

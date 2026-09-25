@@ -305,6 +305,12 @@ def price(q):
     return money(q['amount_low'])
 
 
+def _joining_for():
+    """The job someone came here to quote on, while they're still signing up."""
+    job_id = session.get('from_job')
+    return outreach.the_job(db(), job_id) if job_id else None
+
+
 @app.context_processor
 def _globals():
     u = current_user()
@@ -323,7 +329,7 @@ def _globals():
                                          'AND expires_at > ?', (u['id'], ts(utcnow()))).fetchone()['n']
     return dict(cfg=config, me=u, my_trade=current_trade(), unread=unread, unread_msgs=unread_msgs,
                 leads_waiting=leads_waiting, csrf_token=_csrf_token, demo_tools=DEMO_TOOLS, licences=LICENCES,
-                bands=config.VALUE_BANDS, tiers=config.TIERS)
+                bands=config.VALUE_BANDS, tiers=config.TIERS, joining_for=_joining_for())
 
 
 def all_categories():
@@ -467,7 +473,12 @@ def signup():
                                   url_for('trade_home'))
                 db().commit()
                 prospect = outreach.by_token(db(), session.get('prospect'))
+                # login_user clears the session — it has to, or a fixed session id
+                # survives the login. So anything worth keeping is read first.
+                came_for = session.get('from_job')
                 login_user(uid)
+                if came_for:
+                    session['from_job'] = came_for
                 if prospect:
                     # They came from an outreach email: credit it, and pre-tick their trade and areas.
                     outreach.signed_up(db(), prospect, uid)
@@ -1407,7 +1418,12 @@ def choose_plan():
         return redirect(url_for('trade_plan'))
     if url:
         return redirect(url, code=303)
-    flash(f'You’re on {config.TIERS[request.form["tier"]]["name"]}. Matching jobs will start arriving.')
+    tier_name = config.TIERS[request.form['tier']]['name']
+    came_for = session.pop('from_job', None)
+    if came_for and engine.get_offer(db(), came_for, t['user_id']):
+        flash(f'You’re on {tier_name} — and the job you came for is yours to quote on.')
+        return redirect(url_for('trade_job', job_id=came_for))
+    flash(f'You’re on {tier_name}. Matching jobs will start arriving.')
     return redirect(url_for('trade_home'))
 
 
@@ -2832,8 +2848,13 @@ def outreach_link(token):
     job_id = request.args.get('j', '')
     outreach.clicked(db(), p, int(job_id) if job_id.isdigit() else None)
     if current_user():
-        return redirect(home_for(current_user()))
+        return redirect(url_for('trade_job', job_id=int(job_id)) if job_id.isdigit()
+                        else home_for(current_user()))
     session['prospect'] = token
+    # The job is why they clicked. Carry it through sign-up so they can see what
+    # they're filling in a form for, and land on it at the end.
+    if job_id.isdigit():
+        session['from_job'] = int(job_id)
     return redirect(url_for('signup'))
 
 

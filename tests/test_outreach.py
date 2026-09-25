@@ -307,5 +307,101 @@ class StandingTest(unittest.TestCase):
     def test_a_broken_date_loses_the_line_rather_than_the_email(self):
         self.assertIsNone(outreach.standing(self.job(created_at='not a date'))[1])
 
+
+class FunnelTest(unittest.TestCase):
+    """From the link in the email to holding the job. This is the whole point of
+    the outreach engine, and every step of it used to forget why they came."""
+
+    def setUp(self):
+        self.tmp = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
+        self.tmp.close()
+        dbmod._DATABASE = self.tmp.name
+        init_db()
+        A.app.testing = True
+        self.db = dbmod.get_db()
+        integrations._cache.update(at=10 ** 12, values={})
+        self.cat = self.db.execute("SELECT id FROM categories WHERE slug = 'builder'").fetchone()['id']
+        self.area = self.db.execute("SELECT id FROM areas WHERE slug = 'wellington'").fetchone()['id']
+
+    def tearDown(self):
+        integrations._cache.update(at=0, values={})
+        self.db.close()
+        os.unlink(self.tmp.name)
+
+    def a_job(self):
+        cust = self.db.execute('INSERT INTO users (role, email, password_hash, name, created_at) '
+                               "VALUES ('customer','sam@test.nz',?,'Sam',?)",
+                               (hash_password('password123'), ts(utcnow()))).lastrowid
+        self.db.commit()
+        return engine.post_job(self.db, cust, dict(
+            category_id=self.cat, area_id=self.area, suburb='Thorndon', title='Reclad a small lean-to',
+            description='Three by four metres of weatherboard off the back of the kitchen.',
+            value_band='medium', timing='weeks', property_type='house'))[0]
+
+    def a_prospect(self):
+        pid = self.db.execute(
+            'INSERT INTO prospects (business_name, first_name, email, category_id, token, status, '
+            "leads_sent, do_not_contact, created_at) VALUES (?,?,?,?,?,'new',0,0,?)",
+            ('Karori Building', 'John', 'john@karori.co.nz', self.cat, 'tok-1', ts(utcnow()))).lastrowid
+        self.db.execute('INSERT INTO prospect_areas (prospect_id, area_id) VALUES (?,?)', (pid, self.area))
+        self.db.commit()
+        return pid
+
+    def test_the_job_follows_them_all_the_way_in(self):
+        job_id = self.a_job()
+        self.a_prospect()
+        c = A.app.test_client()
+
+        c.get(f'/o/tok-1?j={job_id}', follow_redirects=False)
+        for page in ('/signup',):
+            body = c.get(page).data.decode()
+            self.assertIn('You’re signing up to quote on', body, page)
+            self.assertIn('Reclad a small lean-to', body, page)
+            self.assertIn('Thorndon', body, page)
+
+        with c.session_transaction() as sess:
+            sess['_csrf'] = 't'
+        c.post('/signup', data={'role': 'trade', 'name': 'John Smith', 'business_name': 'Karori Building',
+                                'email': 'john@karori.co.nz', 'phone': '021 123 4567',
+                                'password': 'password123', '_csrf': 't'})
+        uid = self.db.execute("SELECT id FROM users WHERE email = 'john@karori.co.nz'").fetchone()
+        self.assertIsNotNone(uid, 'sign-up should have worked')
+        # Logging in clears the session, so the form token has to be re-established
+        # exactly as a real browser would pick up the new one.
+        with c.session_transaction() as sess:
+            sess['_csrf'] = 't'
+
+        # Their trade and area are pre-ticked, and the job is still in front of them.
+        setup = c.get('/trade/setup').data.decode()
+        self.assertIn('Reclad a small lean-to', setup)
+
+        c.post('/trade/setup', data={'business_name': 'Karori Building', 'categories': str(self.cat),
+                                     'areas': str(self.area), 'licence_type': 'none', '_csrf': 't'})
+        self.assertEqual(self.db.execute('SELECT COUNT(*) AS n FROM trade_categories WHERE trade_id = ?',
+                                         (uid['id'],)).fetchone()['n'], 1, 'the profile should have saved')
+        self.assertIn('Reclad a small lean-to', c.get('/trade/plan').data.decode())
+
+        # Picking a plan is the moment they can take work: they should land on
+        # that job, holding it.
+        r = c.post('/trade/plan/choose', data={'tier': 'large', '_csrf': 't'})
+        self.assertEqual(r.headers['Location'].rstrip('/').split('/')[-1], str(job_id),
+                         'they should land on the job they came for')
+        offer = engine.get_offer(self.db, job_id, uid['id'])
+        self.assertIsNotNone(offer, 'and be holding it')
+        self.assertEqual(offer['status'], 'active')
+
+    def test_a_job_that_filled_up_is_not_dangled_in_front_of_them(self):
+        """Promising a slot that has gone is the fastest way to lose someone."""
+        job_id = self.a_job()
+        self.db.execute('UPDATE jobs SET quote_count = ? WHERE id = ?', (engine.config.MAX_QUOTES, job_id))
+        self.db.commit()
+        self.assertIsNone(outreach.the_job(self.db, job_id))
+
+    def test_a_closed_job_is_not_dangled_either(self):
+        job_id = self.a_job()
+        self.db.execute("UPDATE jobs SET status = 'expired' WHERE id = ?", (job_id,))
+        self.db.commit()
+        self.assertIsNone(outreach.the_job(self.db, job_id))
+
 if __name__ == '__main__':
     unittest.main()
