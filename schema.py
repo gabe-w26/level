@@ -387,6 +387,32 @@ CREATE INDEX IF NOT EXISTS idx_offers_expiry   ON offers (status, expires_at);
 CREATE INDEX IF NOT EXISTS idx_quotes_job      ON quotes (job_id);
 CREATE INDEX IF NOT EXISTS idx_quotes_trade    ON quotes (trade_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_status     ON jobs (status, closes_at);
+CREATE TABLE IF NOT EXISTS message_files (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id      INTEGER NOT NULL,
+    filename        TEXT NOT NULL,
+    original_name   TEXT,
+    kind            TEXT NOT NULL DEFAULT 'file',
+    bytes           INTEGER,
+    created_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS work_requests (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id          INTEGER NOT NULL,
+    trade_id        INTEGER NOT NULL,
+    asked_by        INTEGER NOT NULL,
+    title           TEXT NOT NULL,
+    detail          TEXT,
+    amount          INTEGER,
+    gst_included    INTEGER NOT NULL DEFAULT 1,
+    status          TEXT NOT NULL DEFAULT 'asked',
+    answered_at     TEXT,
+    answered_note   TEXT,
+    message_id      INTEGER,
+    created_at      TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS trade_documents (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     trade_id        INTEGER NOT NULL,

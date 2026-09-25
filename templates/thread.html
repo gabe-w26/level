@@ -3,7 +3,7 @@
 {% block title %}Messages — {{ job.title }}{% endblock %}
 {% block main %}
 <div class="wrap page narrow">
-  {% if me.id == job.customer_id %}
+  {% if me == job.customer_id %}
   <p class="small"><a href="{{ url_for('customer_job', job_id=job.id) }}#q{{ quote.id }}">← Back to your quotes</a></p>
   {% else %}
   <p class="small"><a href="{{ url_for('trade_job', job_id=job.id) }}">← Back to the job</a></p>
@@ -11,21 +11,115 @@
   <h1 style="font-size:32px">{{ job.title }}</h1>
   <p class="muted">Messages between {{ customer.name.split(' ')[0] }} and {{ trade.business_name }}</p>
 
+  {# ── Extra work ─────────────────────────────────────────────────────────
+     Work agreed mid-job and never written down is the commonest thing people
+     fall out over. It sits above the chat because it needs answering, not
+     scrolling past. #}
+  <div class="section-title" id="work"><h2>Extra work</h2>
+    {% if extra %}<span class="label">{{ extra.count }} agreed · ${{ '{:,.0f}'.format(extra.total_incl_gst) }} incl. GST</span>{% endif %}
+  </div>
+
+  {% for a in asks %}
+  <div class="card work-ask {{ a.status }}">
+    <div class="head-row" style="min-height:0">
+      <b>{{ a.title }}</b>
+      <span class="pill {{ 'hired' if a.status == 'accepted' }}{{ ' declined' if a.status == 'declined' }}{{ ' full' if a.status == 'asked' }}">{{ a.word }}</span>
+    </div>
+    <p class="desc" style="margin:6px 0">{{ a.detail }}</p>
+    <p style="margin:0 0 4px"><b>{{ a.price }}</b>
+      <span class="small muted">· asked by {{ 'you' if a.asked_by == me else ('the ' ~ ('customer' if a.asked_by == job.customer_id else 'tradie')) }}, {{ a.created_at|when }}</span></p>
+    {% if a.answered_note %}<p class="small">“{{ a.answered_note }}”</p>{% endif %}
+
+    {% if a.status == 'asked' and a.asked_by != me %}
+    <p class="small muted" style="margin:10px 0 6px">Saying yes records that you agreed to this work at this
+      price. {{ cfg.BRAND }} keeps the record — it doesn’t hold the money or take sides if it goes wrong.</p>
+    <form method="post" action="{{ url_for('answer_work_request', job_id=job.id, trade_id=trade_id, request_id=a.id, decision='accepted') }}" class="inline">
+      {{ m.csrf() }}<button class="btn btn-sm btn-pine">Yes, go ahead</button>
+    </form>
+    <form method="post" action="{{ url_for('answer_work_request', job_id=job.id, trade_id=trade_id, request_id=a.id, decision='declined') }}" class="inline">
+      {{ m.csrf() }}<button class="btn btn-sm btn-ghost">No thanks</button>
+    </form>
+    {% elif a.status == 'asked' %}
+    <form method="post" action="{{ url_for('answer_work_request', job_id=job.id, trade_id=trade_id, request_id=a.id, decision='withdrawn') }}" class="inline">
+      {{ m.csrf() }}<button class="btn btn-sm btn-ghost">Take it back</button>
+    </form>
+    {% else %}
+    <p class="small muted" style="margin:6px 0 0">{{ a.word }} {{ a.answered_at|when }}.</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <details class="card" {{ 'open' if not asks }}>
+    <summary><b>Ask for extra work to be done</b></summary>
+    <p class="small muted" style="margin:10px 0">
+      {% if me == job.customer_id %}Something beyond the quote you accepted — while they’re here.
+      {% else %}Found something the quote doesn’t cover? Ask before you do it, with a price.{% endif %}
+      Whatever’s agreed here is on record for both of you.
+    </p>
+    <form method="post" action="{{ url_for('ask_for_work', job_id=job.id, trade_id=trade_id) }}" class="form">
+      {{ m.csrf() }}
+      <div>
+        <label for="w-title">What’s the work?</label>
+        <input id="w-title" name="title" maxlength="140" required
+               placeholder="{{ 'Replace the three rotten joists' if me != job.customer_id else 'Paint the new boards while you’re here' }}">
+      </div>
+      <div>
+        <label for="w-detail">What needs doing, and why <span class="hint">The other person has to decide on this, so give them enough to decide with.</span></label>
+        <textarea id="w-detail" name="detail" required style="min-height:80px"></textarea>
+      </div>
+      <div class="row">
+        <div><label for="w-amount">Price ($)</label>
+          <input id="w-amount" name="amount" type="text" inputmode="decimal" required placeholder="800"></div>
+        <div><span class="lbl">GST</span>
+          <div class="actions" style="min-height:46px">
+            <label class="check"><input type="radio" name="gst" value="incl" checked> Includes GST</label>
+            <label class="check"><input type="radio" name="gst" value="excl"> Plus GST</label>
+          </div>
+        </div>
+      </div>
+      <div class="form-foot"><span class="small muted">They can say yes or no. Either way it’s written down.</span>
+        <button class="btn" type="submit">Ask</button></div>
+    </form>
+  </details>
+
+  {# ── The conversation ──────────────────────────────────────────────────── #}
+  <div class="section-title"><h2>Messages</h2></div>
   <div class="thread">
     {% for msg in msgs %}
-    <div class="msg{{ ' mine' if msg.sender_id == me.id }}">{{ msg.body }}<time>{{ msg.created_at|when }}</time></div>
+    <div class="msg{{ ' mine' if msg.sender_id == me }}">
+      {{ msg.body }}
+      {% set mine = files.get(msg.id) %}
+      {% if mine %}
+      <div class="msg-files">
+        {% for f in mine %}
+          {% if f.kind == 'photo' %}
+          <a href="{{ url_for('message_file', file_id=f.id) }}" target="_blank" rel="noopener">
+            <img src="{{ url_for('message_file', file_id=f.id) }}" alt="{{ f.original_name }}"></a>
+          {% else %}
+          <a class="msg-file" href="{{ url_for('message_file', file_id=f.id) }}">
+            📎 {{ f.original_name }} <span class="small muted">{{ f.size }}</span></a>
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+      <time>{{ msg.created_at|when }}</time>
+    </div>
     {% else %}
     <div class="empty"><p style="margin:0">No messages yet. Ask about the quote, the job or timing.</p></div>
     {% endfor %}
     <span id="end"></span>
   </div>
 
-  <form method="post" class="card form" style="gap:12px">
+  <form method="post" class="card form" enctype="multipart/form-data" style="gap:12px">
     {{ m.csrf() }}
     <label for="body" style="margin:0">Message</label>
-    <textarea id="body" name="body" required style="min-height:90px"></textarea>
-    <div><button class="btn" type="submit">Send message</button></div>
+    <textarea id="body" name="body" style="min-height:90px"></textarea>
+    <label for="files" class="small">Photos or files
+      <span class="hint">Up to {{ max_files }}. Photos, PDFs, Word, Excel or text. Only the two of you can open them.</span>
+      <input id="files" name="files" type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"></label>
+    <div><button class="btn" type="submit">Send</button></div>
   </form>
-  <p class="small muted" style="margin-top:14px">Get the price and scope in writing before work starts, and pay against progress rather than a large deposit upfront.</p>
+  <p class="small muted" style="margin-top:14px">Get the price and scope in writing before work starts, and pay
+    against progress rather than a large deposit upfront.</p>
 </div>
 {% endblock %}

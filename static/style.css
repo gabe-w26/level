@@ -587,3 +587,16 @@ body.is-offline .offline-banner { display: block; }
 .joining { border-left: 3px solid var(--chalk); margin-bottom: 18px; }
 .joining h3 { margin: 6px 0 4px; }
 .joining .desc { margin: 0 0 10px; color: var(--ink-2); }
+
+
+/* ── Attachments and extra work in a thread ──────────────────────────────── */
+.msg-files { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.msg-files img { width: 120px; height: 120px; object-fit: cover; border-radius: 8px;
+                 background: var(--slab); border: 1px solid var(--rule); }
+.msg-file { display: inline-block; padding: 8px 10px; border-radius: 8px; background: var(--paper);
+            border: 1px solid var(--rule); text-decoration: none; color: var(--ink); font-size: 14px; }
+.msg.mine .msg-file { background: rgba(255, 255, 255, .9); }
+.work-ask { border-left: 3px solid var(--rule); }
+.work-ask.asked { border-left-color: var(--paint); }
+.work-ask.accepted { border-left-color: var(--pine); }
+.work-ask.declined { border-left-color: var(--rule); opacity: .75; }

@@ -44,6 +44,7 @@ import referrals
 import reporting
 import matching
 import sms
+import thread as threads
 import trust
 import worksite
 from db import _USE_PG, get_db, release_db
@@ -1099,10 +1100,21 @@ def thread(job_id, trade_id):
     other = trade_id if u['id'] == job['customer_id'] else job['customer_id']
     if request.method == 'POST':
         body = request.form.get('body', '').strip()
-        if body:
+        saved, error = _save_attachments(request.files.getlist('files'))
+        if error:
+            flash(error, 'error')
+        elif body or saved:
+            now = ts(utcnow())
             db().execute('INSERT INTO messages (job_id, trade_id, sender_id, body, created_at) VALUES (?,?,?,?,?)',
-                         (job_id, trade_id, u['id'], body[:4000], ts(utcnow())))
-            engine.notify(db(), other, f'New message about “{job["title"]}”.',
+                         (job_id, trade_id, u['id'], (body or '(sent a file)')[:4000], now))
+            msg = db().execute('SELECT id FROM messages WHERE job_id = ? AND trade_id = ? AND sender_id = ? '
+                               'ORDER BY id DESC LIMIT 1', (job_id, trade_id, u['id'])).fetchone()
+            if saved:
+                threads.attach(db(), msg['id'], saved)
+            what = 'a photo' if any(f['kind'] == 'photo' for f in saved) else 'a file'
+            engine.notify(db(), other,
+                          (f'New message about “{job["title"]}”.' if not saved
+                           else f'Someone sent you {what} about “{job["title"]}”.'),
                           url_for('thread', job_id=job_id, trade_id=trade_id))
             db().commit()
         return redirect(url_for('thread', job_id=job_id, trade_id=trade_id) + '#end')
@@ -1114,7 +1126,101 @@ def thread(job_id, trade_id):
     trade = db().execute('SELECT business_name FROM trades WHERE user_id = ?', (trade_id,)).fetchone()
     customer = db().execute('SELECT name FROM users WHERE id = ?', (job['customer_id'],)).fetchone()
     return render_template('thread.html', job=job, quote=quote, msgs=msgs, trade=trade, customer=customer,
-                           trade_id=trade_id)
+                           trade_id=trade_id, files=threads.files_for(db(), [m['id'] for m in msgs]),
+                           asks=threads.requests_for(db(), job_id, trade_id),
+                           extra=threads.extra_agreed(db(), job_id, trade_id),
+                           me=u['id'], max_files=threads.MAX_FILES)
+
+
+def _save_attachments(files):
+    """Photos and documents sent in a message. Returns (saved, error)."""
+    picked = [f for f in files if f and f.filename]
+    if not picked:
+        return [], None
+    if len(picked) > threads.MAX_FILES:
+        return [], f'Up to {threads.MAX_FILES} files at a time.'
+    saved = []
+    for item in picked:
+        kind = threads.kind_of(item.filename)
+        if not kind:
+            return [], 'Photos, PDFs, Word, Excel or text files only.'
+        item.stream.seek(0, os.SEEK_END)
+        size = item.stream.tell()
+        item.stream.seek(0)
+        if size > threads.MAX_BYTES:
+            return [], f'“{item.filename}” is too big — {threads.MAX_BYTES // 1024 // 1024} MB is the limit.'
+        name = f'{uuid.uuid4().hex}.{item.filename.rsplit(".", 1)[-1].lower()}'
+        item.save(os.path.join(UPLOAD_DIR, name))
+        saved.append({'filename': name, 'original_name': item.filename, 'kind': kind, 'bytes': size})
+    return saved, None
+
+
+@app.get('/messages/files/<int:file_id>')
+@requires()
+def message_file(file_id):
+    """A file somebody sent in a message. Only the two people on that job.
+
+    Deliberately not the public uploads folder: a photo of somebody's back door,
+    or a set of plans, is between the two of them.
+    """
+    row = threads.file_owner(db(), file_id)
+    if not row:
+        abort(404)
+    job = engine.get_job(db(), row['job_id'])
+    quote = db().execute('SELECT * FROM quotes WHERE job_id = ? AND trade_id = ?',
+                         (row['job_id'], row['trade_id'])).fetchone()
+    if not threads.can_see(job, quote, current_user()['id']):
+        abort(404)
+    return send_from_directory(UPLOAD_DIR, row['filename'],
+                               download_name=row['original_name'] or row['filename'],
+                               as_attachment=row['kind'] != 'photo')
+
+
+@app.post('/thread/<int:job_id>/<int:trade_id>/ask')
+@requires()
+def ask_for_work(job_id, trade_id):
+    """Raise a piece of extra work, with a price, for the other side to answer."""
+    u = current_user()
+    job = engine.get_job(db(), job_id)
+    quote = db().execute('SELECT * FROM quotes WHERE job_id = ? AND trade_id = ?',
+                         (job_id, trade_id)).fetchone()
+    if not threads.can_see(job, quote, u['id']):
+        abort(404)
+    other = trade_id if u['id'] == job['customer_id'] else job['customer_id']
+    try:
+        threads.ask(db(), job, trade_id, u['id'], request.form)
+        engine.notify(db(), other,
+                      f'There’s extra work to agree on “{job["title"]}” — have a look and say yes or no.',
+                      url_for('thread', job_id=job_id, trade_id=trade_id))
+        db().commit()
+        flash('Asked. They’ll get a notification, and it stays here in writing either way.')
+    except threads.ThreadError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('thread', job_id=job_id, trade_id=trade_id) + '#work')
+
+
+@app.post('/thread/<int:job_id>/<int:trade_id>/ask/<int:request_id>/<decision>')
+@requires()
+def answer_work_request(job_id, trade_id, request_id, decision):
+    u = current_user()
+    job = engine.get_job(db(), job_id)
+    quote = db().execute('SELECT * FROM quotes WHERE job_id = ? AND trade_id = ?',
+                         (job_id, trade_id)).fetchone()
+    if not threads.can_see(job, quote, u['id']):
+        abort(404)
+    try:
+        row = threads.answer(db(), request_id, u['id'], decision, request.form.get('note'))
+        other = row['asked_by']
+        word = {'accepted': 'agreed to', 'declined': 'said no to', 'withdrawn': 'withdrawn'}[decision]
+        engine.notify(db(), other,
+                      f'“{row["title"]}” on “{job["title"]}” was {word}.',
+                      url_for('thread', job_id=job_id, trade_id=trade_id))
+        db().commit()
+        flash({'accepted': 'Agreed, and written down.', 'declined': 'Declined — they’ve been told.',
+               'withdrawn': 'Taken back.'}[decision])
+    except threads.ThreadError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('thread', job_id=job_id, trade_id=trade_id) + '#work')
 
 
 # ── Trade area ────────────────────────────────────────────────────────────────
