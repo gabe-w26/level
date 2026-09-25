@@ -38,6 +38,7 @@ OFFER_WINDOW_HOURS = 4       # hours a trade has to quote before their slot is h
 JOB_OPEN_DAYS = 14           # after this a job stops being redistributed
 ROTATION_LOOKBACK_DAYS = 30  # fair rotation counts offers received over this window
 AUTO_PAUSE_AFTER = 5         # consecutive offers left to expire before a trade's leads pause
+QUIET_AFTER_HOURS = 24       # tell the customer if their job still has no quotes after this
 
 # ── Subscription tiers (they stack: a higher tier sees everything below it) ──
 TIERS = {

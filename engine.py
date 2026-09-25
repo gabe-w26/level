@@ -609,14 +609,27 @@ def sweep(db, at=None):
     now_s = ts(at)
     report = dict(jobs_expired=0, offers_expired=0, slots_filled=0, auto_paused=0, renewed=0, months_settled=0)
 
-    for job in db.execute("SELECT id, customer_id, title FROM jobs WHERE status = 'open' AND closes_at <= ?",
+    for job in db.execute("SELECT id, customer_id, title, quote_count, topup_sent FROM jobs "
+                          "WHERE status = 'open' AND closes_at <= ?",
                           (now_s,)).fetchall():
         db.execute("UPDATE jobs SET status = 'expired', closed_at = ?, close_reason = 'time' WHERE id = ?",
                    (now_s, job['id']))
         db.execute("UPDATE offers SET status = 'closed', resolved_at = ? WHERE job_id = ? AND status = 'active'",
                    (now_s, job['id']))
-        notify(db, job['customer_id'], f'“{job["title"]}” closed after {config.JOB_OPEN_DAYS} days. '
-                                       'Post it again if you still need someone.', f'/me/jobs/{job["id"]}', at)
+        # Say why, when we know why. "Closed after 14 days" to somebody who never
+        # got a single quote reads as a shrug.
+        if not (job['quote_count'] or 0):
+            asked = job['topup_sent'] or 0
+            extra = (f' We asked {asked} local {"business" if asked == 1 else "businesses"} who aren’t on '
+                     f'{config.BRAND} yet, and didn’t find anyone free.' if asked
+                     else ' Nobody in that trade and area was able to take it on.')
+            message = (f'“{job["title"]}” has closed after {config.JOB_OPEN_DAYS} days without a quote.{extra} '
+                       'Posting it again with a photo and a bit more detail is the thing that most often '
+                       'gets it moving — or widen the area if you can.')
+        else:
+            message = (f'“{job["title"]}” closed after {config.JOB_OPEN_DAYS} days. '
+                       'Post it again if you still need someone.')
+        notify(db, job['customer_id'], message, f'/me/jobs/{job["id"]}', at)
         report['jobs_expired'] += 1
 
     stale = db.execute("SELECT id, trade_id FROM offers WHERE status = 'active' AND expires_at <= ?",
@@ -642,6 +655,7 @@ def sweep(db, at=None):
 
     _renewal_reminders(db, at)
     _nudge_quiet_customers(db, at)
+    report['quiet_told'] = _tell_customer_it_is_quiet(db, at)
     _ask_who_they_hired(db, at)
     db.commit()
     report['months_settled'] = evaluate_guarantees(db, at)
@@ -746,6 +760,42 @@ def _nudge_quiet_customers(db, at):
                    f'{r["waiting"]} {who} waiting to hear back about “{r["title"]}”. Share your details, accept a '
                    'quote, or close the job — it lets them know where they stand.', f'/me/jobs/{r["id"]}', at)
             db.execute('UPDATE jobs SET nudged_at = ? WHERE id = ?', (ts(at), r['id']))
+
+
+def _tell_customer_it_is_quiet(db, at):
+    """Say something when a job isn't getting quotes, rather than leaving the
+    customer to watch nothing happen for fourteen days.
+
+    A thin trade in a thin area is a real thing and it is not the customer's
+    fault. Telling them plainly — including that we've gone looking for more
+    people — is the difference between "this site is dead" and "they're working
+    on it". Said once, with the number of businesses we actually emailed, so it
+    can't drift into a form letter.
+    """
+    import outreach
+    cutoff = ts(at - timedelta(hours=config.QUIET_AFTER_HOURS))
+    rows = db.execute(
+        "SELECT id, customer_id, title, topup_sent, topup_rounds FROM jobs WHERE status = 'open' "
+        'AND quote_count = 0 AND quiet_told_at IS NULL AND created_at <= ?', (cutoff,)).fetchall()
+    told = 0
+    for r in rows:
+        live = live_slots(db, r['id'])
+        asked = r['topup_sent'] or 0
+        if live >= config.TRADES_PER_JOB and not asked:
+            continue                     # a full board that simply hasn't quoted yet is normal
+        if asked:
+            line = (f'Not many trades on {config.BRAND} cover this one yet, so we’ve emailed {asked} more local '
+                    f'{"business" if asked == 1 else "businesses"} about it. ')
+        else:
+            line = f'{live} trade{"s" if live != 1 else ""} {"have" if live != 1 else "has"} it open. '
+        notify(db, r['customer_id'],
+               f'No quotes on “{r["title"]}” yet. {line}'
+               'It stays open either way — and if it’s still quiet in a few days, adding a photo or a bit '
+               'more detail is the thing that usually gets it moving.',
+               f'/me/jobs/{r["id"]}', at)
+        db.execute('UPDATE jobs SET quiet_told_at = ? WHERE id = ?', (ts(at), r['id']))
+        told += 1
+    return told
 
 
 def _ask_who_they_hired(db, at):

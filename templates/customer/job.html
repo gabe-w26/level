@@ -26,6 +26,8 @@
     {% elif stats.total == 0 %}No trades cover this job yet. We’ll offer it the moment a matching trade joins.
     {% else %}Every matching trade has seen this job. New trades are offered it as they join.{% endif %}
     Taking quotes until {{ job.closes_at|day }}.
+    {% if job.topup_sent %}We’ve also emailed {{ job.topup_sent }} local
+    {{ 'business' if job.topup_sent == 1 else 'businesses' }} who aren’t on {{ cfg.BRAND }} yet about this job.{% endif %}
   </p>
   <p class="small" style="margin-top:6px"><a href="{{ url_for('edit_job', job_id=job.id) }}">Edit this job</a></p>
   {% elif job.status == 'full' %}

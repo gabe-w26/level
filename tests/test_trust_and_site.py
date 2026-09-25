@@ -23,6 +23,7 @@ os.environ['RUN_SWEEPER'] = '0'
 
 import app as A  # noqa: E402
 import billing  # noqa: E402
+import config  # noqa: E402
 import db as dbmod  # noqa: E402
 import engine  # noqa: E402
 import integrations  # noqa: E402
@@ -358,6 +359,99 @@ class TopUpTest(Base):
             self.user('trade')
         job_id = self.job(self.user())
         self.assertIsNone(engine.get_job(self.db, job_id)['topup_at'])
+
+
+class QuietJobTest(Base):
+    """A job nobody quotes on. The customer should hear about it from us, not
+    work it out from fourteen days of silence."""
+
+    def notes(self, uid):
+        return [r['body'] for r in self.db.execute(
+            'SELECT body FROM notifications WHERE user_id = ? ORDER BY id', (uid,))]
+
+    def test_nothing_is_said_in_the_first_day(self):
+        customer = self.user()
+        self.user('trade')
+        self.job(customer)
+        engine.sweep(self.db, at=T0 + timedelta(hours=config.QUIET_AFTER_HOURS - 1))
+        self.assertFalse([n for n in self.notes(customer) if 'No quotes on' in n])
+
+    def test_a_thin_trade_is_explained_with_the_real_number(self):
+        customer = self.user()
+        for i in range(4):
+            pid = self.db.execute(
+                'INSERT INTO prospects (business_name, email, category_id, token, status, leads_sent, '
+                "do_not_contact, created_at) VALUES (?,?,?,?,'new',0,0,?)",
+                ('Sparky', f'p{i}@x.co.nz', self.cat, f'tk{i}', ts(T0))).lastrowid
+            self.db.execute('INSERT INTO prospect_areas (prospect_id, area_id) VALUES (?,?)', (pid, self.area))
+        self.db.commit()
+        self.job(customer)                                   # no trades at all → top-up fires
+        engine.sweep(self.db, at=T0 + timedelta(hours=config.QUIET_AFTER_HOURS + 1))
+        said = [n for n in self.notes(customer) if 'No quotes on' in n]
+        self.assertEqual(len(said), 1)
+        self.assertIn('we’ve emailed 4 more local businesses', said[0])
+
+    def test_it_is_said_once_not_every_sweep(self):
+        customer = self.user()
+        self.job(customer)
+        for h in range(config.QUIET_AFTER_HOURS + 1, config.QUIET_AFTER_HOURS + 40, 8):
+            engine.sweep(self.db, at=T0 + timedelta(hours=h))
+        self.assertEqual(len([n for n in self.notes(customer) if 'No quotes on' in n]), 1)
+
+    def test_a_full_board_that_simply_hasnt_quoted_yet_is_left_alone(self):
+        """Fifteen trades holding it is the system working, not a problem."""
+        customer = self.user()
+        for _ in range(config.TRADES_PER_JOB):
+            self.user('trade')
+        self.job(customer)
+        # Still inside the offer window, so the board is full.
+        engine.sweep(self.db, at=T0 + timedelta(hours=1))
+        self.db.execute('UPDATE jobs SET created_at = ?',
+                        (ts(T0 - timedelta(hours=config.QUIET_AFTER_HOURS + 2)),))
+        self.db.commit()
+        engine.sweep(self.db, at=T0 + timedelta(hours=1))
+        self.assertFalse([n for n in self.notes(customer) if 'No quotes on' in n])
+
+    def test_a_job_with_a_quote_is_never_told_it_is_quiet(self):
+        customer, trade = self.user(), self.user('trade')
+        job_id = self.job(customer)
+        engine.submit_quote(self.db, job_id, trade, dict(
+            price_type='fixed', amount_low=2000, gst_included=1,
+            message='Happy to take this on, two days on site.'), at=T0 + timedelta(minutes=10))
+        engine.sweep(self.db, at=T0 + timedelta(hours=config.QUIET_AFTER_HOURS + 1))
+        self.assertFalse([n for n in self.notes(customer) if 'No quotes on' in n])
+
+
+class ExpiryTest(Base):
+    """A job that ran the full fourteen days without a quote."""
+
+    def closing_note(self, uid):
+        """The one about the job closing. Not simply the last — the "who did you
+        hire?" follow-up lands in the same sweep, right after it."""
+        for r in self.db.execute('SELECT body FROM notifications WHERE user_id = ? ORDER BY id DESC', (uid,)):
+            if 'closed after' in r['body'] or 'has closed' in r['body']:
+                return r['body']
+        return ''
+
+    def test_it_says_why_rather_than_shrugging(self):
+        customer = self.user()
+        job_id = self.job(customer)
+        self.db.execute('UPDATE jobs SET topup_sent = 7 WHERE id = ?', (job_id,))
+        self.db.commit()
+        engine.sweep(self.db, at=T0 + timedelta(days=config.JOB_OPEN_DAYS + 1))
+        note = self.closing_note(customer)
+        self.assertIn('without a quote', note)
+        self.assertIn('asked 7 local businesses', note)
+        self.assertIn('photo', note)
+
+    def test_a_job_that_got_quotes_keeps_the_plain_message(self):
+        customer, trade = self.user(), self.user('trade')
+        job_id = self.job(customer)
+        engine.submit_quote(self.db, job_id, trade, dict(
+            price_type='fixed', amount_low=2000, gst_included=1,
+            message='Happy to take this on, two days on site.'), at=T0 + timedelta(minutes=10))
+        engine.sweep(self.db, at=T0 + timedelta(days=config.JOB_OPEN_DAYS + 1))
+        self.assertIn('Post it again', self.closing_note(customer))
 
 
 class RoutingTest(Base):

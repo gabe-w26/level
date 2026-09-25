@@ -522,6 +522,9 @@ MIGRATIONS = [
     # The parts of the trade check that aren't a sentence: the other trades this
     # job may need, and whether the work legally needs a registered person.
     'ALTER TABLE jobs ADD COLUMN routed_extra TEXT',
+
+    # When we last told the customer their job is proving hard to fill.
+    'ALTER TABLE jobs ADD COLUMN quiet_told_at TEXT',
 ]
 
 
