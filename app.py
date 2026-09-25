@@ -36,6 +36,7 @@ import mailer
 import metrics
 import outreach
 import push
+import quoting
 import referrals
 import reporting
 import matching
@@ -842,6 +843,7 @@ def customer_job(job_id):
                            notes=compare.notes_for(quotes, guide),
                            trust={q['trade_id']: trust.summary(db(), trade_row(q['trade_id']))
                                   for q in quotes},
+                           items=quoting.items_for_many(db(), [q['id'] for q in quotes]),
                            **_worksite(job, current_user()['id'], 'customer'), **_progress(job))
 
 
@@ -1242,6 +1244,9 @@ def _render_trade_job(job_id, form=None, error=None):
                            can_quote=can_quote, reported=bool(reported), form=form or {}, error=error,
                            threshold=config.CONTRACT_THRESHOLD, templates=_templates(t['user_id']),
                            default_plan=reporting.parse(t['report_plan']) if 'report_plan' in t.keys() else [],
+                           items=quoting.items_for(db(), quote['id']) if quote else [],
+                           units=quoting.UNITS,
+                           template_items={r['id']: quoting.template_items(r) for r in _templates(t['user_id'])},
                            **(_progress(job) if job['hired_trade_id'] == t['user_id'] else {}),
                            **_worksite(job, t['user_id'], 'trade'))
 
@@ -1272,11 +1277,23 @@ def trade_quote(job_id):
              duration=f.get('duration', '').strip() or None, act_docs_promised=bool(f.get('act_docs_promised')),
              report_plan=f.getlist('report_plan'))
     try:
+        items = quoting.parse_items(f)
+        # A breakdown sets the price. Two numbers that disagree is worse than one.
+        if items:
+            priced = quoting.price_from_items(items, q['gst_included'])
+            if not priced:
+                raise quoting.QuoteError('Put a price against at least one line, or take the breakdown off.')
+            q.update(priced)
         n = engine.submit_quote(db(), job_id, current_trade()['user_id'], q)
-    except RuleError as e:
+    except (RuleError, quoting.QuoteError) as e:
         return _render_trade_job(job_id, form=f, error=str(e))
+    if items:
+        quote = db().execute('SELECT id FROM quotes WHERE job_id = ? AND trade_id = ?',
+                             (job_id, current_trade()['user_id'])).fetchone()
+        quoting.save(db(), quote['id'], items)
+        db().commit()
     if f.get('save_template') and f.get('template_name', '').strip():
-        _save_template(current_trade()['user_id'], f.get('template_name'), q)
+        _save_template(current_trade()['user_id'], f.get('template_name'), q, items)
     flash(f'Quote sent. It’s quote {n} of {config.MAX_QUOTES} for this job.')
     return redirect(url_for('trade_job', job_id=job_id))
 
@@ -1293,9 +1310,19 @@ def edit_quote(job_id):
                   duration=f.get('duration', '').strip() or None, act_docs_promised=bool(f.get('act_docs_promised')),
                   report_plan=f.getlist('report_plan'))
     try:
+        items = quoting.parse_items(f)
+        if items:
+            priced = quoting.price_from_items(items, fields['gst_included'])
+            if not priced:
+                raise quoting.QuoteError('Put a price against at least one line, or take the breakdown off.')
+            fields.update(priced)
         engine.revise_quote(db(), engine.get_job(db(), job_id), current_trade()['user_id'], fields)
-    except RuleError as e:
+    except (RuleError, quoting.QuoteError) as e:
         return _render_trade_job(job_id, form=f, error=str(e))
+    quote = db().execute('SELECT id FROM quotes WHERE job_id = ? AND trade_id = ?',
+                         (job_id, current_trade()['user_id'])).fetchone()
+    quoting.save(db(), quote['id'], items)
+    db().commit()
     flash('Quote updated. The customer has been told.')
     return redirect(url_for('trade_job', job_id=job_id))
 
@@ -1468,11 +1495,12 @@ def _templates(trade_id):
     return db().execute('SELECT * FROM quote_templates WHERE trade_id = ? ORDER BY name', (trade_id,)).fetchall()
 
 
-def _save_template(trade_id, name, q):
+def _save_template(trade_id, name, q, items=()):
     db().execute('INSERT INTO quote_templates (trade_id, name, price_type, message, inclusions, exclusions, '
-                 'warranty, duration, created_at) VALUES (?,?,?,?,?,?,?,?,?)',
+                 'warranty, duration, items, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
                  (trade_id, name.strip()[:60], q.get('price_type'), q.get('message'), q.get('inclusions'),
-                  q.get('exclusions'), q.get('warranty'), q.get('duration'), ts(utcnow())))
+                  q.get('exclusions'), q.get('warranty'), q.get('duration'), quoting.dump_items(items),
+                  ts(utcnow())))
     db().commit()
 
 

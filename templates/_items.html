@@ -1,0 +1,98 @@
+{# The optional breakdown on a quote. Include inside the quote form.
+   `rows` is the existing lines (empty for a new quote). When there is at least
+   one priced line, the breakdown sets the price and the plain price boxes hide
+   themselves — two numbers that disagree is worse than one. #}
+<details class="items-block" {{ 'open' if rows }}>
+  <summary><b>Break the price down</b> <span class="hint">Optional. Customers ask where the money goes — this answers it, and the total becomes your price.</span></summary>
+
+  <table class="items-table">
+    <thead>
+      <tr><th>What</th><th class="num">How many</th><th>Unit</th><th class="num">Rate $</th><th class="num">Line</th><th></th></tr>
+    </thead>
+    <tbody id="item-rows">
+      {% for r in (rows or [{}, {}, {}]) %}
+      <tr>
+        <td><input name="item_description" value="{{ r.description or '' }}" maxlength="200"
+                   placeholder="Labour, two builders" aria-label="What"></td>
+        <td class="num"><input name="item_qty" value="{{ r.qty|round(3)|int if r.qty and r.qty == r.qty|round(0) else (r.qty or '') }}"
+                   type="text" inputmode="decimal" aria-label="How many"></td>
+        <td>
+          <input name="item_unit" value="{{ r.unit or '' }}" list="item-units" maxlength="20" aria-label="Unit">
+        </td>
+        <td class="num"><input name="item_price" value="{{ r.unit_price or '' }}" type="text" inputmode="decimal"
+                   aria-label="Rate"></td>
+        <td class="num line-total">{% if r.total %}{{ '%.2f'|format(r.total) }}{% endif %}</td>
+        <td><button type="button" class="linkish small drop-row" aria-label="Remove this line">×</button></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr><td colspan="4" class="num">Before GST</td><td class="num" id="items-subtotal">—</td><td></td></tr>
+      <tr><td colspan="4" class="num">GST</td><td class="num" id="items-gst">—</td><td></td></tr>
+      <tr class="grand"><td colspan="4" class="num"><b>Total including GST</b></td>
+          <td class="num" id="items-total"><b>—</b></td><td></td></tr>
+    </tfoot>
+  </table>
+  <datalist id="item-units">{% for u in units %}<option value="{{ u }}">{% endfor %}</datalist>
+  <button type="button" class="btn btn-sm btn-ghost" id="add-row">Add a line</button>
+  <p class="small muted" style="margin:8px 0 0">GST is worked out once, at the bottom, from the
+    “Includes GST / Plus GST” choice above — not on each line.</p>
+</details>
+
+<script>
+(function () {
+  const block = document.currentScript.closest('form');
+  if (!block) return;
+  const body = block.querySelector('#item-rows');
+  if (!body) return;
+  const money = (n) => n.toLocaleString('en-NZ', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  const num = (el) => {
+    const v = parseFloat((el.value || '').replace(/[^0-9.\-]/g, ''));
+    return isNaN(v) ? null : v;
+  };
+
+  function recalc() {
+    let sum = 0, priced = 0;
+    body.querySelectorAll('tr').forEach((tr) => {
+      const price = num(tr.querySelector('[name=item_price]'));
+      const qty = num(tr.querySelector('[name=item_qty]'));
+      const cell = tr.querySelector('.line-total');
+      if (price === null) { cell.textContent = ''; return; }
+      const total = price * (qty === null ? 1 : qty);
+      cell.textContent = money(total);
+      sum += total; priced++;
+    });
+    // GST once, at the bottom, matching the radio above.
+    const inclusive = (block.querySelector('[name=gst]:checked') || {}).value !== 'excl';
+    const sub = priced ? (inclusive ? sum / 1.15 : sum) : null;
+    const gst = sub === null ? null : sub * 0.15;
+    const grand = sub === null ? null : sub + gst;
+    block.querySelector('#items-subtotal').textContent = sub === null ? '—' : money(sub);
+    block.querySelector('#items-gst').textContent = gst === null ? '—' : money(gst);
+    block.querySelector('#items-total').innerHTML = grand === null ? '<b>—</b>' : '<b>' + money(grand) + '</b>';
+    // With a breakdown, the typed price is no longer the source of truth.
+    block.querySelectorAll('[data-show-for~="fixed"], [data-show-for~="range"]').forEach((el) => {
+      if (el.querySelector('[name=amount_low], [name=amount_high]')) el.classList.toggle('overridden', priced > 0);
+    });
+  }
+
+  block.addEventListener('input', (e) => { if (e.target.name && e.target.name.startsWith('item_')) recalc(); });
+  block.addEventListener('change', (e) => { if (e.target.name === 'gst') recalc(); });
+  block.addEventListener('click', (e) => {
+    if (e.target.classList.contains('drop-row')) {
+      const rows = body.querySelectorAll('tr');
+      if (rows.length > 1) e.target.closest('tr').remove();
+      else rows[0].querySelectorAll('input').forEach((i) => { i.value = ''; });
+      recalc();
+    }
+  });
+  const add = block.querySelector('#add-row');
+  if (add) add.addEventListener('click', () => {
+    const row = body.querySelector('tr').cloneNode(true);
+    row.querySelectorAll('input').forEach((i) => { i.value = ''; });
+    row.querySelector('.line-total').textContent = '';
+    body.appendChild(row);
+  });
+  recalc();
+})();
+</script>

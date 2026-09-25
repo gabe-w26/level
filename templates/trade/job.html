@@ -101,6 +101,9 @@
             </div>
           </div>
         </div>
+        <div data-show-for="fixed range">
+          {% with rows = None %}{% include '_items.html' %}{% endwith %}
+        </div>
         <div>
           <label for="message">Message to the customer <span class="hint">How you’d do the job, and anything you’d want to check first.</span></label>
           <textarea id="message" name="message" required>{{ form.get('message', '') }}</textarea>
@@ -136,6 +139,18 @@
       <div class="card">
         <div class="actions" style="justify-content:space-between"><h2 style="margin:0">Your quote</h2>{{ m.status_pill(quote.status) }}</div>
         <p class="quote-price" style="text-align:left;margin:14px 0">{{ quote|price }}{% if quote.price_type != 'site_visit' %}<small>{{ 'incl. GST' if quote.gst_included else 'plus GST' }}</small>{% endif %}</p>
+        {% if items %}
+        <table class="items-table sent">
+          <tbody>
+          {% for i in items %}
+            <tr><td>{{ i.description }}</td>
+                <td class="num">{% if i.qty %}{{ i.qty|round(2)|int if i.qty == i.qty|round(0) else i.qty }}{% endif %} {{ i.unit or '' }}</td>
+                <td class="num">{% if i.unit_price %}${{ '%.2f'|format(i.unit_price) }}{% endif %}</td>
+                <td class="num">{% if i.total %}${{ '%.2f'|format(i.total) }}{% endif %}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
         <p class="desc">{{ quote.message }}</p>
         <dl class="kv">
           {% if quote.inclusions %}<dt>Includes</dt><dd>{{ quote.inclusions }}</dd>{% endif %}
@@ -172,6 +187,9 @@
                   <label class="check"><input type="radio" name="gst" value="excl" {{ 'checked' if not quote.gst_included }}> Plus GST</label>
                 </div>
               </div>
+            </div>
+            <div data-show-for="fixed range">
+              {% with rows = items %}{% include '_items.html' %}{% endwith %}
             </div>
             <div><label for="edit_message">Message to the customer</label><textarea id="edit_message" name="message" required>{{ quote.message }}</textarea></div>
             <div class="row">

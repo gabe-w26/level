@@ -115,6 +115,24 @@
             {% if q.duration %}<dt>Takes about</dt><dd>{{ q.duration }}</dd>{% endif %}
             <dt>Progress updates</dt><dd>{{ rp.promise(q.report_plan, q.report_record) }}</dd>
           </dl>
+          {% set rows = items.get(q.id) %}
+          {% if rows %}
+          <details class="quote-items" open>
+            <summary><b>Where the money goes</b> <span class="small muted">{{ rows|length }} line{{ 's' if rows|length != 1 }}</span></summary>
+            <table class="items-table sent">
+              <tbody>
+              {% for i in rows %}
+                <tr><td>{{ i.description }}</td>
+                    <td class="num">{% if i.qty %}{{ i.qty|round(2)|int if i.qty == i.qty|round(0) else i.qty }}{% endif %} {{ i.unit or '' }}</td>
+                    <td class="num">{% if i.unit_price %}${{ '%.2f'|format(i.unit_price) }}{% endif %}</td>
+                    <td class="num">{% if i.total %}${{ '%.2f'|format(i.total) }}{% endif %}</td></tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            <p class="small muted" style="margin:6px 0 0">A breakdown isn’t a promise about the final bill — it’s
+              what they expect the job to take. Ask about anything that looks light.</p>
+          </details>
+          {% endif %}
           <div class="quote-price-row">
             <span class="label">Price</span>
             <b>{{ q|price }}</b>
