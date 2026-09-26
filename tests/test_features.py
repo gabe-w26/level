@@ -21,6 +21,7 @@ os.environ['RUN_SWEEPER'] = '0'
 import accounts  # noqa: E402
 import app as A  # noqa: E402
 import billing  # noqa: E402
+import config  # noqa: E402
 import db as dbmod  # noqa: E402
 import engine  # noqa: E402
 import integrations  # noqa: E402
@@ -267,6 +268,43 @@ class FeatureTest(unittest.TestCase):
         r = c.post('/post/help', data={'description': 'deck is rotten', '_csrf': 't'})
         self.assertEqual(r.status_code, 404)
 
+
+
+class LandingPageTellsTheTruthTest(FeatureTest):
+    """The front page claimed 6 quotes while the product sends 3.
+
+    Every number in the headline and the four rules was typed in by hand, so
+    changing MAX_QUOTES in config silently made the marketing wrong. A landing
+    page that contradicts the product on its own first line is worse than a
+    plain one.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.page = A.app.test_client().get('/').data.decode()
+
+    def test_the_headline_matches_what_the_product_does(self):
+        self.assertIn(f'{config.TRADES_PER_JOB} trades see it. {config.MAX_QUOTES} can quote',
+                      self.page)
+
+    def test_no_stale_quote_cap_survives_anywhere_on_it(self):
+        import re
+        for phrase in ('6 can quote', 'First six in', 'six real quotes', 'compare six'):
+            self.assertNotIn(phrase, self.page, phrase)
+        # The rule figures come from config, so a change to either shows up here.
+        figs = re.findall(r'class="rule-fig">([^<]+)<', self.page)
+        self.assertIn(str(config.MAX_QUOTES), figs)
+        self.assertIn(str(config.TRADES_PER_JOB), figs)
+        self.assertIn(f'{config.OFFER_WINDOW_HOURS}h', figs)
+
+    def test_the_window_is_not_contradicted(self):
+        self.assertNotIn('24h', self.page, 'the rule figure said 24h next to copy saying 4 hours')
+
+    def test_the_competitor_figures_are_dated(self):
+        """Naming a competitor's prices means saying when they were true."""
+        self.assertIn('Builderscrack', self.page)
+        self.assertIn(config.PRICES_AS_AT, self.page)
+        self.assertIn('Internet Archive', self.page)
 
 if __name__ == '__main__':
     unittest.main()

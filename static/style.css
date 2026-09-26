@@ -620,3 +620,58 @@ body.is-offline .offline-banner { display: block; }
 .cov-none { background: var(--slab); }
 .key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px;
        border: 1px solid var(--rule); }
+
+/* ── The mission band ──────────────────────────────────────────────────────
+   The one dark moment on the landing page. Everything else is concrete and
+   paper; this is where the page changes gear to say why the business exists,
+   so it gets the ink ground and the only oversized type on the page.
+
+   The ledger is the argument, not decoration: the whole point is which side of
+   a ledger the money sits on, so it is set as one — two columns, mono, ruled
+   down the middle in chalk. */
+.mission-line {
+  font-family: var(--f-display); font-weight: 850; font-stretch: 118%;
+  font-size: clamp(28px, 3.6vw, 46px); line-height: 1.08; letter-spacing: -.015em;
+  color: #fff; margin: 0 0 10px; max-width: 24ch;
+}
+.mission-line em { font-style: normal; color: #7FA0F0; }
+.mission-sub { font-size: 18px; line-height: 1.6; color: #AEB8C3; max-width: 46ch; margin: 0; }
+
+.ledger { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-top: 40px;
+          border-top: 2px solid #3A4654; }
+.ledger-col { padding: 22px 0 4px; }
+.ledger-col + .ledger-col { border-left: 1px solid #3A4654; padding-left: 28px; }
+.ledger-col:first-child { padding-right: 28px; }
+.ledger-head { font-family: var(--f-mono); font-size: 11px; font-weight: 600; letter-spacing: .08em;
+               text-transform: uppercase; margin: 0 0 14px; }
+.ledger-them .ledger-head { color: #8B96A3; }
+.ledger-us .ledger-head { color: #7FA0F0; }
+.ledger-col ul { list-style: none; margin: 0; padding: 0; }
+.ledger-col li { display: flex; gap: 10px; padding: 9px 0; font-size: 15.5px; line-height: 1.5;
+                 border-top: 1px solid rgba(255, 255, 255, .07); color: #CBD3DB; }
+.ledger-col li:first-child { border-top: 0; }
+.ledger-col li b { color: #fff; font-weight: 600; }
+.ledger-mark { font-family: var(--f-mono); font-size: 13px; flex: none; width: 1.2em; }
+.ledger-them .ledger-mark { color: #8B96A3; }
+.ledger-us .ledger-mark { color: #7FA0F0; }
+.ledger-note { margin: 26px 0 0; font-size: 15px; color: #AEB8C3; max-width: 62ch; }
+.ledger-note b { color: #fff; }
+
+/* ── What's actually in it ─────────────────────────────────────────────── */
+.kit { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1px;
+       background: var(--rule); border: 1px solid var(--rule); border-radius: var(--r); overflow: hidden; }
+.kit-item { background: var(--paper); padding: 20px 20px 22px; }
+.kit-item h3 { font-size: 17px; margin: 0 0 6px; }
+.kit-item p { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--ink-2); }
+.kit-tag { font-family: var(--f-mono); font-size: 10.5px; font-weight: 600; letter-spacing: .07em;
+           text-transform: uppercase; color: var(--ink-3); display: block; margin-bottom: 9px; }
+
+/* ── Named comparison ──────────────────────────────────────────────────── */
+.versus-note { font-size: 14px; color: var(--ink-2); margin: 14px 0 0; max-width: 70ch; }
+.versus-note code { font-family: var(--f-mono); font-size: 12.5px; }
+
+@media (max-width: 720px) {
+  .ledger { grid-template-columns: 1fr; }
+  .ledger-col + .ledger-col { border-left: 0; border-top: 1px solid #3A4654; padding-left: 0; }
+  .ledger-col:first-child { padding-right: 0; }
+}

@@ -17,7 +17,7 @@
       </div>
       <a class="trade-link" href="{{ url_for('pricing') }}">See what it’ll cost trades →</a>
       {% else %}
-      <h1>15 trades see it. 6 can quote. Nobody pays per lead.</h1>
+      <h1>{{ cfg.TRADES_PER_JOB }} trades see it. {{ cfg.MAX_QUOTES }} can quote. Nobody pays per lead.</h1>
       <p class="lede">Post a job free and get up to {{ cfg.MAX_QUOTES }} quotes from local trades — without your phone ringing off the hook. Trades pay one flat monthly price, and get the month back if they don’t win a job.</p>
       <form class="quickstart" action="{{ url_for('post_job') }}" method="get">
         <select name="category" aria-label="What kind of trade do you need?">
@@ -59,19 +59,20 @@
     </div>
     <div class="rules">
       <div class="rule-item">
-        <span class="rule-fig">15</span>
+        <span class="rule-fig">{{ cfg.TRADES_PER_JOB }}</span>
         <h3>trades per job</h3>
-        <p>Your job goes to 15 trades who do this work in your area — not the whole region, and never a bidding war.</p>
+        <p>Your job goes to {{ cfg.TRADES_PER_JOB }} trades who do this work in your area — not the whole region, and never a bidding war.</p>
       </div>
       <div class="rule-item">
-        <span class="rule-fig">24h</span>
+        <span class="rule-fig">{{ cfg.OFFER_WINDOW_HOURS }}h</span>
         <h3>to quote, or it moves on</h3>
         <p>Trades who haven’t quoted within {{ cfg.OFFER_WINDOW_HOURS }} hours lose their slot and a new trade gets it. Jobs don’t sit waiting on people who aren’t interested.</p>
       </div>
       <div class="rule-item">
-        <span class="rule-fig">6</span>
+        <span class="rule-fig">{{ cfg.MAX_QUOTES }}</span>
         <h3>quotes, then it closes</h3>
-        <p>First six in, first served. You compare six real quotes, and the job closes to everyone else.</p>
+        <p>First {{ cfg.MAX_QUOTES }} in, first served. You compare {{ cfg.MAX_QUOTES }} real quotes — each one
+          answering the same questions — and the job closes to everyone else.</p>
       </div>
       <div class="rule-item">
         <span class="rule-fig">=</span>
@@ -79,6 +80,54 @@
         <p>Jobs go out by fair rotation. A trade with 300 reviews gets the same turn as one who joined last week. Reviews help you choose — they don’t decide who sees your job.</p>
       </div>
     </div>
+  </div>
+</section>
+
+<section class="band band-ink" id="why">
+  <div class="wrap">
+    {# The one dark band on the page. Everything above and below it is concrete
+       and paper — this is where it stops describing the mechanics and says why
+       the business exists. The argument is about incentives, so it is set as a
+       ledger: which side of the books the money sits on. #}
+    <p class="label" style="color:#7FA0F0">Why we built it</p>
+    <h2 class="mission-line">A lead site makes money when you <em>chase</em> work. We only make
+      money when you <em>win</em> it.</h2>
+    <p class="mission-sub">That one difference decides every rule on this page. It’s worth seeing
+      where it leads, because the incentive is doing the work — not the promise.</p>
+
+    <div class="ledger">
+      <div class="ledger-col ledger-them">
+        <p class="ledger-head">Paid per lead — what makes them money</p>
+        <ul>
+          <li><span class="ledger-mark">→</span><span>Selling <b>one job to as many trades as
+            possible</b>. Every extra tradie chasing it is another fee.</span></li>
+          <li><span class="ledger-mark">→</span><span>A job that’s <b>hard to win</b>. You pay to
+            quote either way, so losing costs them nothing.</span></li>
+          <li><span class="ledger-mark">→</span><span><b>Urgency.</b> The faster you feel you must
+            buy the lead, the less you weigh up whether it’s worth it.</span></li>
+          <li><span class="ledger-mark">→</span><span><b>Staying put.</b> A long term means the
+            money keeps coming whether the work does or not.</span></li>
+        </ul>
+      </div>
+      <div class="ledger-col ledger-us">
+        <p class="ledger-head">Paid a flat fee — what makes us money</p>
+        <ul>
+          <li><span class="ledger-mark">✓</span><span>You <b>winning enough to stay</b>. It’s the
+            only thing that pays us, so it’s what the rules are tuned for.</span></li>
+          <li><span class="ledger-mark">✓</span><span><b>Capping a job at {{ cfg.MAX_QUOTES }}
+            quotes.</b> Fewer people chasing it is worse for a lead site and better for you.</span></li>
+          <li><span class="ledger-mark">✓</span><span><b>Sending you jobs you can actually do</b> —
+            your trade, your area, in turn. A job you can’t win wastes the hour you spent on it.</span></li>
+          <li><span class="ledger-mark">✓</span><span><b>Letting you leave.</b> Month to month, one
+            click. If we stop earning you work we should stop being paid.</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="ledger-note"><b>We’re not claiming to be nicer people.</b> We’ve just set it up so the
+      thing that’s good for you is the thing that pays us — and where that isn’t true, we’d rather
+      say so than pretend. Posting a job is free for homeowners and always will be; that side of it
+      doesn’t pay us anything, and it isn’t meant to.</p>
   </div>
 </section>
 
@@ -98,11 +147,72 @@
       <div>
         <h3 class="label">If you’re a trade</h3>
         <ol class="steps">
-          <li><div><h3>Pick a plan by job size</h3><p>$30, $50 or $90 a month. Each plan includes every job below it. No tokens and no lead fees.</p></div></li>
-          <li><div><h3>Get offered jobs in turn</h3><p>Fair rotation shares out jobs in your trade and area. You’re one of 15, not one of 50.</p></div></li>
+          <li><div><h3>Pick a plan by job size</h3><p>${{ tiers.small.price }}, ${{ tiers.medium.price }} or ${{ tiers.large.price }} a month. Each plan includes every job below it. No tokens and no lead fees.</p></div></li>
+          <li><div><h3>Get offered jobs in turn</h3><p>Fair rotation shares out jobs in your trade and area. You’re one of {{ cfg.TRADES_PER_JOB }}, not one of 50.</p></div></li>
           <li><div><h3>Quote within {{ cfg.OFFER_WINDOW_HOURS }} hours</h3><p>Send a structured quote from your phone. Not for you? Pass, and it goes to another trade straight away.</p></div></li>
           <li><div><h3>Win work, or get the month back</h3><p>Quote on five jobs in a month and don’t win one, and we refund that month.</p></div></li>
         </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="whats-in-it">
+  <div class="wrap">
+    <div class="band-head">
+      <h2>What you get, beyond the quotes</h2>
+      <p>Finding the work is the start. Most of what goes wrong on a residential job happens after
+        that, so the job carries on here — on the website and on the phone, for both of you.</p>
+    </div>
+    <div class="kit">
+      <div class="kit-item">
+        <span class="kit-tag">Quoting</span>
+        <h3>Break the price down</h3>
+        <p>Optional line items — labour, materials, rubbish — that add up to the total. Customers ask
+          where the money goes; this answers it before they have to.</p>
+      </div>
+      <div class="kit-item">
+        <span class="kit-tag">Talking</span>
+        <h3>Messages, photos and files</h3>
+        <p>Send a photo of what you found under the boards, or a plan set. Only the two of you can
+          open it — attachments never sit in a public folder.</p>
+      </div>
+      <div class="kit-item">
+        <span class="kit-tag">Variations</span>
+        <h3>Extra work, agreed in writing</h3>
+        <p>Found three rotten joists? Send it across with a price. They press yes or no and the
+          answer is kept. Verbal extras are the commonest thing people fall out over.</p>
+      </div>
+      <div class="kit-item">
+        <span class="kit-tag">On site</span>
+        <h3>Access notes and pre-starts</h3>
+        <p>Where to park, which gate, is the dog in. Plus a pre-start check on the day, so the
+          hazards get looked at rather than assumed.</p>
+      </div>
+      <div class="kit-item">
+        <span class="kit-tag">While it runs</span>
+        <h3>Progress updates</h3>
+        <p>A photo and a line at the end of the day. The customer stops ringing to ask how it’s
+          going, which is worth more than it sounds.</p>
+      </div>
+      <div class="kit-item">
+        <span class="kit-tag">Checked</span>
+        <h3>Licence, NZBN and insurance</h3>
+        <p>Badges appear only once we’ve checked them, and each says what was checked and when. An
+          unchecked badge says that too, rather than nothing.</p>
+      </div>
+      <div class="kit-item">
+        <span class="kit-tag">On your phone</span>
+        <h3>The app</h3>
+        <p>Jobs, quoting, messages and photos from the van. Quote a job in the four hours you’ve got
+          without going back to a desk.</p>
+      </div>
+      <div class="kit-item">
+        <span class="kit-tag">If you want it</span>
+        <h3>Runs into Docket</h3>
+        <p>Win a job here and it lands in Docket — scheduling, timesheets, site safety, invoices —
+          with the customer, address and quote already filled in.
+          <a href="{{ url_for('with_docket') }}">How the two fit together</a>.</p>
       </div>
     </div>
   </div>
@@ -183,23 +293,50 @@
 <section class="band band-paper">
   <div class="wrap">
     <div class="band-head">
-      <h2>What’s different for trades</h2>
-      <p>Lead sites earn more when you pay to chase work. We earn when you stay subscribed, so the rules are built around you winning jobs.</p>
+      <h2>Us against Builderscrack, straight</h2>
+      <p>The site most NZ tradies weigh us against. Everything in their column is from their own
+        published material — and where we’re no different, the row says so.</p>
     </div>
     <div class="table-wrap">
       <table class="vs">
-        <thead><tr><th></th><th>{{ cfg.BRAND }}</th><th>Typical lead sites</th></tr></thead>
+        <thead><tr><th></th><th>{{ cfg.BRAND }}</th><th>Builderscrack</th></tr></thead>
         <tbody>
-          <tr><th>What you pay</th><td>$30, $50 or $90 a month, flat</td><td>Subscription plus tokens or per-lead fees</td></tr>
-          <tr><th>Credits</th><td>None to buy, none to expire</td><td>Credits that expire after 1–3 months</td></tr>
-          <tr><th>Who sees each job</th><td>15 trades, by fair rotation</td><td>Varies — often the fastest to respond</td></tr>
-          <tr><th>Customer pulls the job</th><td>You’ve paid nothing extra</td><td>Tokens often not refunded</td></tr>
-          <tr><th>A month with no work</th><td>Refunded, if you quoted on 5 jobs</td><td>Paid regardless</td></tr>
-          <tr><th>Contract</th><td>Month to month, cancel online</td><td>Often 6–12 month terms</td></tr>
+          <tr><th>The monthly price</th>
+              <td>${{ tiers.small.price }}, ${{ tiers.medium.price }} or ${{ tiers.large.price }}, flat</td>
+              <td>From $79 to $149, by how many tokens you get</td></tr>
+          <tr><th>What a won job costs on top</th>
+              <td><b>Nothing.</b></td>
+              <td>Tokens, taken when the homeowner accepts you</td></tr>
+          <tr><th>Can you work out that cost in advance?</th>
+              <td>Yes — there isn’t one</td>
+              <td><b>No.</b> The tokens a job costs are set per job by their algorithm, and no
+                dollar-per-token rate is published anywhere</td></tr>
+          <tr><th>How long you’re tied in</th>
+              <td>Month to month, cancel online in one click</td>
+              <td>6 months minimum, then it renews onto a 12-month term</td></tr>
+          <tr><th>Quoting on a job you don’t win</th>
+              <td>Free, always</td>
+              <td>Free to chase — you pay only when they accept you</td></tr>
+          <tr><th>A month where you win nothing</th>
+              <td>Refunded, if you quoted on {{ cfg.GUARANTEE_MIN_QUOTES }} jobs</td>
+              <td>Paid as normal</td></tr>
+          <tr><th>Who gets shown a job</th>
+              <td>{{ cfg.TRADES_PER_JOB }} trades, by fair rotation</td>
+              <td>Invites, then whoever chases it</td></tr>
+          <tr><th>Tradies connected per job</th>
+              <td>{{ cfg.MAX_QUOTES }}</td>
+              <td>3 — <b>the same as us.</b> Not a difference</td></tr>
+          <tr><th>Commission on the job</th>
+              <td>None</td>
+              <td>None, while you’re subscribed</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="demo-note">“Typical lead sites” describes common models on NZ, Australian and UK lead platforms in 2025–26. Individual sites differ.</p>
+    <p class="versus-note">Their figures are the last ones they published, <b>as at
+      {{ cfg.PRICES_AS_AT }}</b>, taken from the Internet Archive — their pricing page now redirects
+      anyone who isn’t signed up to a page with no prices on it, so neither we nor you can see a
+      current number. Go and ask them what a lead in your trade and your town actually costs before
+      you believe anybody’s comparison, including this one.</p>
   </div>
 </section>
 
