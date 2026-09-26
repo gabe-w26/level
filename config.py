@@ -81,23 +81,40 @@ DOCKET_PLANS = {
 }
 
 # What the same two jobs cost on the tools tradies actually compare us with.
-# Every figure is a published price in NZD excluding GST, and the note is the part
-# that makes a starting price misleading. Checked 2026-09-26 — if you're reading
-# this a long way past that, check them again before quoting them.
+# Prices in NZD excluding GST.
 #
-#   from        the monthly subscription, or 0 where there isn't one
-#   per_lead    what it costs to quote on one job on top of that, as
-#               (low, high) because a demand-priced lead has no single price.
-#               None means quoting costs nothing extra, like ours.
-#   sub_needed  False where the subscription is optional and a tradie could pay
-#               per lead alone — which makes `from` not their entry price.
+#   from        the cheapest monthly subscription
+#   to          the dearest publicly priced one, where there's a range
+#   term        the commitment, where it isn't month to month. This is the one
+#               most likely to catch somebody out, so it's a field, not a note.
+#   metered     what costs extra on top of the subscription, and whether the
+#               rate for it is published. None means nothing is metered.
+#   sub_needed  False where a tradie could skip the subscription, which would
+#               make `from` not their entry price.
+#   as_at       when the price was last verified, and where from. Not decoration:
+#               a comparison page quoting a stale price is worse than one that
+#               admits the price is stale.
 #
-# The per-lead figure is the one that decides the comparison for anybody busy, so
-# leave it None rather than guessing: a gap is honest and a made-up number isn't.
+# Builderscrack is the important one to get right, and two things about it are
+# easy to state backwards:
+#   · quoting is FREE. Tokens are deducted only when a homeowner accepts your
+#     connection request — so it is not "pay per lead", it is pay per win.
+#   · tokens are INCLUDED in the plan, not charged on top, until the monthly
+#     allocation runs out; after that overage is auto-charged at the token pack
+#     rate, which they don't publish either.
+# What is genuinely wrong with it is that the cost per job cannot be worked out
+# in advance at all: token value per job is set by their algorithm from category,
+# location, demand, estimated job value and time of posting, and no NZD-per-token
+# figure is published anywhere. Say that, rather than inventing a per-lead price.
+PRICES_AS_AT = 'April 2026'
 RIVALS = {
     'finding work': [
-        {'name': 'Builderscrack', 'from': 79, 'per_lead': None, 'sub_needed': True,
-         'note': 'plus credits for each job you want to quote on, priced by demand'},
+        {'name': 'Builderscrack', 'from': 79, 'to': 149, 'sub_needed': True,
+         'term': '6 months minimum, then auto-renews onto a 12-month term',
+         'metered': 'tokens, taken when a homeowner accepts you — priced by their algorithm '
+                    'per job, and the rate is not published',
+         'note': 'a paid plan is compulsory, and you can’t buy tokens without one',
+         'as_at': 'April 2026, via the Internet Archive — they no longer publish prices at all'},
         {'name': 'NoCowboys', 'from': 83, 'note': 'billed yearly, $999 up front'},
     ],
     'running the work': [
@@ -106,11 +123,6 @@ RIVALS = {
         {'name': 'ServiceM8', 'from': 29, 'note': 'capped on jobs per month, not people'},
     ],
 }
-
-# How many jobs a month to work the comparison out for. A lead site's real cost
-# depends entirely on this and ours doesn't, so one column would hide the whole
-# point. Kept small and believable — a one-van outfit, and a busy one.
-JOBS_A_MONTH = [1, 4, 8]
 
 # The value band a customer picks when posting. A job is visible to every tier
 # whose rank is at least the band's rank.

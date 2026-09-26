@@ -67,87 +67,90 @@ def price_for(tier):
     }
 
 
-def lead_cost(rival, jobs):
-    """What quoting on `jobs` jobs adds to this rival's bill, as (low, high).
-
-    (0, 0) when quoting is included in the subscription — or when we haven't
-    confirmed the per-lead price, which is deliberately indistinguishable here.
-    An unconfirmed cost is left out of the arithmetic and named on the page
-    instead; inventing a number to make our own case is the one thing a price
-    comparison must not do.
-    """
-    per = rival.get('per_lead')
-    if not per or jobs <= 0:
-        return (0, 0)
-    low, high = (per, per) if isinstance(per, (int, float)) else (per[0], per[-1])
-    return (round(low * jobs), round(high * jobs))
-
-
-def elsewhere(jobs=0):
+def elsewhere():
     """The cheapest way to buy the same two things from anybody else.
 
     Deliberately the *cheapest* rival for each half rather than the dearest, and
-    the notes come along with it: a starting price that turns into per-user
-    billing or per-lead credits is the thing worth knowing, and quoting only the
-    headline number would be the same trick played in our favour.
+    the catches come along with it: a monthly price that turns into per-seat
+    billing, a six-month commitment, or a metered cost nobody publishes is the
+    thing worth knowing, and quoting only the headline would be the same trick
+    played in our favour.
 
-    `jobs` is how many jobs a month the tradie wants to quote on, which is what
-    actually decides a lead site's bill. At 0 this is the subscriptions alone —
-    the number everybody advertises, and nobody pays.
+    `total` is therefore a floor, not an answer, and `incomplete` says so
+    whenever some part of their bill exists that we can't put a number on.
     """
-    out, low, high = {}, 0, 0
+    out, total = {}, 0
     for job, options in config.RIVALS.items():
         cheapest = min(options, key=lambda o: o['from'])
-        leads = lead_cost(cheapest, jobs)
-        out[job] = dict(cheapest,
-                        others=[o for o in options if o is not cheapest],
-                        leads_low=leads[0], leads_high=leads[1],
-                        total_low=cheapest['from'] + leads[0],
-                        total_high=cheapest['from'] + leads[1],
-                        per_lead_known=bool(cheapest.get('per_lead')),
+        out[job] = dict(cheapest, others=[o for o in options if o is not cheapest],
                         # A subscription they could skip isn't an entry price.
                         optional_sub=cheapest.get('sub_needed') is False)
-        low += out[job]['total_low']
-        high += out[job]['total_high']
+        total += cheapest['from']
     return {
-        'parts': out, 'jobs': jobs,
-        'total': low, 'total_high': high,
-        'a_range': high > low,
-        # True when some part of their bill exists but we haven't pinned it down,
-        # so every total here is a floor rather than an answer.
-        'incomplete': any(p.get('per_lead') is None and 'per_lead' in p
-                          for p in out.values()) and jobs > 0,
+        'parts': out,
+        'total': total,
+        'incomplete': any(p.get('metered') for p in out.values()),
+        'as_at': config.PRICES_AS_AT,
     }
 
 
-def compared_with(tier, jobs=0):
+def compared_with(tier):
     """Both of ours against the cheapest of theirs, for one Level tier.
 
     Only ever returns a difference the numbers actually support. If we're not
     cheaper — which a price change on either side could do at any time — it says
     so rather than dressing it up, because a comparison table that can only ever
     reach one conclusion is an advert.
-
-    Compared at the *low* end of their range, so a demand-priced lead is costed
-    at its cheapest. Their bill is the one with a range in it; ours doesn't move
-    with how many jobs you quote on, which is the whole argument.
     """
     ours = price_for(tier)
     if not ours:
         return None
-    theirs = elsewhere(jobs)
+    theirs = elsewhere()
     return {
         'ours': ours,
         'theirs': theirs,
-        'jobs': jobs,
         'difference': theirs['total'] - ours['both'],
         'cheaper': ours['both'] < theirs['total'],
+        # True when their bill has a part we can't price, so the difference above
+        # is the *most* favourable reading for them and still shouldn't be sold
+        # as the whole story.
+        'floor_only': theirs['incomplete'],
     }
 
 
-def by_volume(tier):
-    """The same comparison at each of config.JOBS_A_MONTH, for a table."""
-    return [compared_with(tier, jobs) for jobs in config.JOBS_A_MONTH]
+def differences(tier):
+    """How the two bills are shaped, which is where the real gap is.
+
+    Money aside, these are the things a tradie finds out after signing up rather
+    than before. Each row is (what, ours, theirs) and every `theirs` is something
+    a rival publishes about itself — no row here is an inference.
+    """
+    ours = price_for(tier)
+    if not ours:
+        return []
+    finding = min(config.RIVALS['finding work'], key=lambda o: o['from'])
+    running = min(config.RIVALS['running the work'], key=lambda o: o['from'])
+    return [
+        ('What it costs a month',
+         f"${ours['both']}, flat",
+         f"${finding['from']} + ${running['from']} at the lowest published plans"),
+        ('How long you’re tied in',
+         'Month to month. Stop whenever.',
+         finding.get('term') or 'Month to month'),
+        ('What a won job costs on top',
+         'Nothing.',
+         finding.get('metered') or 'Nothing'),
+        # Not "what an extra person costs": the cheapest job system here doesn't
+        # charge per person at all, it caps jobs instead. Framing it as per-seat
+        # would be putting Fergus's pricing in ServiceM8's mouth.
+        ('What it costs as you grow',
+         'Nothing — one price, any number of people, any number of jobs.',
+         running['note'].capitalize()),
+        ('Whether you can see the price before you sign up',
+         'On our pricing page, at the top of this one.',
+         'Their pricing page redirects anyone not signed up to a page with no prices on it.'
+         if finding.get('as_at') else 'Published openly'),
+    ]
 
 
 # ── What a tradie sees, and what Docket is told ───────────────────────────────

@@ -74,8 +74,8 @@
   <div class="wrap">
     <div class="band-head">
       <h2>What the same two things cost separately</h2>
-      <p>The cheapest each side can be bought for anywhere else, as published. Both numbers are
-        <i>starting</i> prices, and the notes are the part that matters.</p>
+      <p>The cheapest each side can be bought for anywhere else. Both are <i>starting</i> prices on the
+        lowest plan, and the notes underneath are the part that matters more than the number.</p>
     </div>
 
     <div class="split" style="align-items:start;gap:28px">
@@ -114,60 +114,58 @@
 
       <p style="margin:12px 0 0">On the subscriptions alone we’re cheaper on the two smaller plans and
         <b>level pegging on the biggest</b> — and we’d rather say that than pick a dearer competitor to
-        compare against. But a subscription isn’t what you end up paying a lead site, and here’s why:</p>
+        compare against. Three things that column doesn’t capture:</p>
       <ul class="checklist" style="margin-top:10px">
-        <li><b>Their lead price is the start, not the total.</b> On Builderscrack the $79 buys you the right
-          to buy credits, and a job with plenty of tradies chasing it costs more of them. A single
-          worthwhile connection can run past $250. Here, {{ cfg.MAX_QUOTES }} quotes go on a job and you
-          never pay for one.</li>
+        <li><b>Theirs isn’t the whole bill and ours is.</b> A won job on a token system costs tokens; a won
+          job here costs nothing. How much is the next section, because it’s not a number anyone publishes.</li>
         <li><b>Their job-system price is per user.</b> Fergus and Tradify are priced per person, so the bill
-          goes up every time you put an apprentice on. Docket is flat.</li>
+          goes up every time you put an apprentice on. Docket is one price for the business.</li>
         <li><b>The ${{ elsewhere.parts['running the work']['from'] }} one is capped on jobs, not people.</b>
-          That’s why it’s the cheapest, and it’s why it stops being the cheapest once you’re busy.</li>
+          That’s why it’s the cheapest in that column, and it’s why it stops being the cheapest once
+          you’re busy.</li>
         <li><b>Nothing passes between theirs.</b> You win a job on one and type it into the other. That’s the
           bit we actually built.</li>
       </ul>
-      <p class="small muted" style="margin:10px 0 0">Their prices are what they publish, excluding GST,
-        checked on 26 September 2026. Check them yourself before you decide anything — we’d rather you did.</p>
+      <p class="small muted" style="margin:10px 0 0">Their prices are what they published, excluding GST.
+        Fergus, Tradify and ServiceM8 publish theirs openly. <b>{{ elsewhere.parts['finding work'].name }}’s are as at
+        {{ elsewhere.as_at }}, taken from the Internet Archive</b> — their pricing page now redirects
+        anyone not signed up to a page with no prices on it, so we can’t show you a current figure and
+        neither can they. Check all of it yourself before you decide anything; we’d rather you did.</p>
     </div>
 
-    {% set rows = by_volume['medium'] %}
+    {% set finding = elsewhere.parts['finding work'] %}
     <div class="card" style="margin-top:22px">
-      <h3 style="margin-top:0">Now add the jobs you actually want to quote on</h3>
-      <p class="muted" style="margin:0 0 12px">This is the part a monthly price hides. On a credit or
-        token system, every job you chase costs money whether you win it or not — so the busier you get,
-        the more you pay to stay busy. On {{ cfg.BRAND }} the number below never moves.</p>
+      <h3 style="margin-top:0">What the monthly price doesn’t tell you</h3>
+      <p class="muted" style="margin:0 0 12px">Two bills can be the same size and still be nothing alike.
+        These are the differences you’d otherwise find out after signing up, and every line on their side
+        is something they publish about themselves.</p>
       <table class="table">
-        <caption class="small muted">{{ cfg.BRAND }} {{ tiers['medium'].name }} + Docket
-          {{ rows[0].ours.plan_name }}, monthly, {{ cfg.PRICE_GST_NOTE }}.</caption>
         <thead>
-          <tr><th scope="col">Jobs you quote on</th><th scope="col">Us</th>
-              <th scope="col">Cheapest of theirs</th></tr>
+          <tr><th scope="col"></th><th scope="col">{{ cfg.BRAND }} + Docket</th>
+              <th scope="col">{{ finding.name }} + {{ elsewhere.parts['running the work'].name }}</th></tr>
         </thead>
         <tbody>
-          {% for c in rows %}
-          <tr>
-            <th scope="row">{{ c.jobs }} a month</th>
-            <td><b>${{ c.ours.both }}</b></td>
-            <td>${{ c.theirs.total }}{% if c.theirs.a_range %}–{{ c.theirs.total_high }}{% endif %}{%
-              if c.theirs.incomplete %} <span class="small muted">plus credits</span>{% endif %}</td>
-          </tr>
+          {% for what, ours, theirs in differences['medium'] %}
+          <tr><th scope="row">{{ what }}</th><td>{{ ours }}</td><td>{{ theirs }}</td></tr>
           {% endfor %}
         </tbody>
       </table>
 
-      {% if rows[-1].theirs.incomplete %}
-      <p class="notice" style="margin:12px 0 0"><b>We’ve left their credit cost out of that column,
-        because we can’t quote a figure we haven’t confirmed.</b> Builderscrack prices credits by how
-        many tradies are chasing a job, so there’s no single number to put here — but it is real money,
-        it is charged per job rather than per win, and it goes on top of every figure in the right-hand
-        column. Ask them what a lead in your trade and your town actually costs before you compare
-        anything. On {{ cfg.BRAND }} the answer is nothing: {{ cfg.MAX_QUOTES }} quotes go on a job and
-        none of them cost you.</p>
-      {% else %}
-      <p class="small muted" style="margin:12px 0 0">Their column is costed at the <i>cheap</i> end of
-        their credit pricing. A job with plenty of tradies chasing it costs more than that.</p>
+      {% if finding.metered %}
+      <p class="notice" style="margin:14px 0 0"><b>The honest version of the money question:
+        on {{ finding.name }} you can’t work out what a job will cost you before you chase it.</b>
+        To be fair to them, chasing is free — tokens only come off when the homeowner accepts you, and
+        your plan includes an allowance of them. But how many tokens one accepted job costs is set by
+        their algorithm from the trade, the location, the demand and the estimated size of the job, and
+        <b>no dollar-per-token figure is published anywhere</b>. So you can’t tell in advance how many
+        jobs your allowance buys, and if it runs out the overage is charged automatically at a token-pack
+        rate they don’t publish either. On {{ cfg.BRAND }}, {{ cfg.MAX_QUOTES }} quotes go on a job, and
+        winning one costs you nothing.</p>
       {% endif %}
+
+      <p class="small muted" style="margin:10px 0 0">One thing worth being straight about: {{ finding.name }}
+        also caps a job at three connected tradies, same as our {{ cfg.MAX_QUOTES }}-quote cap. That part
+        isn’t a difference between us.</p>
     </div>
 
     <p style="margin-top:22px">

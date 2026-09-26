@@ -148,70 +148,96 @@ class TheComparisonTest(Base):
         self.assertEqual(c['difference'], c['theirs']['total'] - c['ours']['both'])
 
 
-class CostPerJobTest(Base):
-    """A lead site's bill depends on how many jobs you chase. Ours doesn't."""
+class HowTheBillsDifferTest(Base):
+    """Two bills the same size can be nothing alike. That's the real argument,
+    and it only works if every line of it is something the rival says itself."""
 
-    def test_ours_does_not_move_with_how_many_jobs_you_quote_on(self):
-        prices = {bundle.compared_with('medium', jobs)['ours']['both']
-                  for jobs in (0, 1, 4, 8, 50)}
-        self.assertEqual(len(prices), 1, 'the flat price is the product')
+    def test_their_total_is_flagged_as_a_floor_not_an_answer(self):
+        """Builderscrack meters won jobs and publishes no rate, so any total we
+        print for them is the least they could cost, never what they will."""
+        self.assertTrue(bundle.elsewhere()['incomplete'])
+        self.assertTrue(bundle.compared_with('medium')['floor_only'])
 
-    def test_an_unconfirmed_lead_price_is_left_out_and_owned_up_to(self):
-        """We don't know Builderscrack's token price yet. Until we do, their
-        total is a floor and `incomplete` says so — inventing a figure to make
-        our own case is the one thing this page must not do."""
-        rival = config.RIVALS['finding work'][0]
-        was = rival.get('per_lead')
+    def test_nothing_metered_means_nothing_to_flag(self):
+        original = config.RIVALS
         try:
-            rival['per_lead'] = None
-            base = bundle.elsewhere(0)['total']
-            busy = bundle.elsewhere(8)
-            self.assertEqual(busy['total'], base, 'nothing may be guessed at')
-            self.assertTrue(busy['incomplete'], 'and the page has to know it is short')
+            config.RIVALS = {'finding work': [{'name': 'Flat', 'from': 60, 'note': 'all in'}],
+                             'running the work': [{'name': 'Also flat', 'from': 40, 'note': 'all in'}]}
+            self.assertFalse(bundle.elsewhere()['incomplete'])
+            self.assertFalse(bundle.compared_with('medium')['floor_only'])
         finally:
-            rival['per_lead'] = was
+            config.RIVALS = original
 
-    def test_a_confirmed_lead_price_is_multiplied_by_the_jobs(self):
-        rival = config.RIVALS['finding work'][0]
-        was = rival.get('per_lead')
-        try:
-            rival['per_lead'] = 25
-            base = bundle.elsewhere(0)['total']
-            self.assertEqual(bundle.elsewhere(4)['total'], base + 100)
-            self.assertFalse(bundle.elsewhere(4)['incomplete'])
-        finally:
-            rival['per_lead'] = was
+    def test_every_difference_has_all_three_columns_filled(self):
+        rows = bundle.differences('medium')
+        self.assertTrue(rows)
+        for what, ours, theirs in rows:
+            self.assertTrue(what.strip())
+            self.assertTrue(ours.strip(), what)
+            self.assertTrue(theirs.strip(), what)
 
-    def test_a_demand_priced_lead_becomes_a_range_not_a_single_number(self):
-        rival = config.RIVALS['finding work'][0]
-        was = rival.get('per_lead')
-        try:
-            rival['per_lead'] = (25, 70)
-            e = bundle.elsewhere(4)
-            self.assertTrue(e['a_range'])
-            self.assertEqual(e['total_high'] - e['total'], (70 - 25) * 4)
-        finally:
-            rival['per_lead'] = was
+    def test_the_commitment_is_one_of_them(self):
+        """We're month to month and they aren't. It's the thing most likely to
+        catch somebody out, so it gets a row rather than a footnote."""
+        rows = dict((w, (a, b)) for w, a, b in bundle.differences('medium'))
+        term = next(v for k, v in rows.items() if 'tied in' in k)
+        self.assertIn('Month to month', term[0])
+        self.assertIn('6 months', term[1])
 
-    def test_we_are_compared_against_the_cheap_end_of_their_range(self):
-        """Costing their surge pricing at its worst would flatter us."""
-        rival = config.RIVALS['finding work'][0]
-        was = rival.get('per_lead')
-        try:
-            rival['per_lead'] = (25, 70)
-            c = bundle.compared_with('medium', 4)
-            self.assertEqual(c['difference'], c['theirs']['total'] - c['ours']['both'])
-            self.assertLess(c['theirs']['total'], c['theirs']['total_high'])
-        finally:
-            rival['per_lead'] = was
+    def test_what_a_won_job_costs_is_one_of_them(self):
+        rows = dict((w, (a, b)) for w, a, b in bundle.differences('medium'))
+        won = next(v for k, v in rows.items() if 'won job' in k)
+        self.assertEqual(won[0], 'Nothing.')
+        self.assertIn('not published', won[1])
 
-    def test_no_lead_price_at_all_means_quoting_adds_nothing(self):
-        self.assertEqual(bundle.lead_cost({'from': 50}, 10), (0, 0))
-        self.assertEqual(bundle.lead_cost({'from': 50, 'per_lead': 25}, 0), (0, 0))
+    def test_it_does_not_put_per_seat_pricing_in_a_rival_that_has_none(self):
+        """ServiceM8 is the cheapest job system and does NOT charge per user — it
+        caps jobs. Describing that row as per-person would be quoting Fergus's
+        pricing against ServiceM8's name."""
+        rows = dict((w, (a, b)) for w, a, b in bundle.differences('medium'))
+        grow = next(v for k, v in rows.items() if 'grow' in k)
+        cheapest = min(config.RIVALS['running the work'], key=lambda o: o['from'])
+        self.assertEqual(grow[1].lower().rstrip('.'), cheapest['note'].lower().rstrip('.'))
 
-    def test_there_is_a_row_for_every_volume_we_show(self):
-        rows = bundle.by_volume('medium')
-        self.assertEqual([r['jobs'] for r in rows], config.JOBS_A_MONTH)
+    def test_an_unknown_tier_gets_no_differences_rather_than_half_a_table(self):
+        self.assertEqual(bundle.differences('enormous'), [])
+
+
+class NotClaimingMoreThanWeKnowTest(Base):
+    """This page is about competitors' money. Every number on it has to be
+    traceable, and the ones that aren't must be absent, not softened."""
+
+    def test_the_page_dates_the_prices_it_cannot_currently_verify(self):
+        page = A.app.test_client().get('/and-docket').data.decode()
+        self.assertIn(config.PRICES_AS_AT, page)
+        self.assertIn('Internet Archive', page)
+
+    def test_it_says_their_price_is_no_longer_public(self):
+        page = A.app.test_client().get('/and-docket').data.decode()
+        self.assertIn('redirects', page)
+
+    def test_it_does_not_claim_quoting_costs_them_money(self):
+        """It doesn't. Tokens come off when the homeowner accepts, not when you
+        quote — getting this backwards would be the page's worst error, because
+        it's the one a tradie who has used Builderscrack would spot instantly."""
+        page = A.app.test_client().get('/and-docket').data.decode().lower()
+        for wrong in ('credits for each job you want to quote',
+                      'every job you chase costs',
+                      'pay for each job you quote'):
+            self.assertNotIn(wrong, page, 'quoting is free on Builderscrack')
+
+    def test_no_invented_cost_per_connection_appears(self):
+        """A "$250 a lead" figure was on this page and could not be sourced to
+        anything first-party. Nothing like it comes back without a citation."""
+        page = A.app.test_client().get('/and-docket').data.decode()
+        self.assertNotIn('$250', page)
+        self.assertNotIn('per lead', page.lower())
+
+    def test_it_concedes_the_quote_cap_is_not_a_difference(self):
+        """They cap a job at three connected tradies too. Selling our cap as a
+        point of difference would be the sort of thing that loses trust."""
+        page = A.app.test_client().get('/and-docket').data.decode()
+        self.assertIn('isn’t a difference between us', page)
 
 
 class WhoGetsItTest(Base):
