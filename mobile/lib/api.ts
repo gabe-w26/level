@@ -24,6 +24,16 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Headers for fetching a message attachment directly, e.g. in an <Image source>.
+ * Those files sit behind an authenticated route rather than the public uploads
+ * folder, so the bearer token has to travel with the image request too.
+ */
+export async function fileHeaders(): Promise<Record<string, string>> {
+  const token = await getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 /** Called when the server says the token is no good, so the app can sign out. */
 let onUnauthorized: (() => void) | null = null;
 export function setUnauthorizedHandler(fn: (() => void) | null) {
@@ -296,7 +306,30 @@ export interface Thread {
   last_body: string | null; last_at: string; unread: number;
 }
 
-export interface Message { id: number; body: string; created_at: string; mine: boolean; }
+export interface MessageFile {
+  id: number; kind: 'photo' | 'file'; name: string; size: string; url: string;
+}
+export interface Message {
+  id: number; body: string; created_at: string; mine: boolean; files: MessageFile[];
+}
+
+/** A piece of extra work one side has asked the other to agree to. */
+export interface Ask {
+  id: number; title: string; detail: string; price: string;
+  status: 'asked' | 'accepted' | 'declined' | 'withdrawn';
+  status_label: string; mine: boolean; created_at: string; answered_at: string | null;
+}
+export interface ExtraAgreed { count: number; total_incl_gst: number; }
+export interface AskInput { title: string; detail: string; amount: string; gst: 'incl' | 'excl'; }
+
+export interface ThreadDetail {
+  job: { id: number; title: string; status: string };
+  with: string;
+  max_files: number;
+  messages: Message[];
+  asks: Ask[];
+  extra: ExtraAgreed | null;
+}
 
 export interface Notice { id: number; body: string; link: string | null; created_at: string; read: boolean; }
 
@@ -379,9 +412,20 @@ export const api = {
   readNotification: (id: number) => post<Ok>(`/notifications/${id}/read`),
 
   threads: () => get<{ threads: Thread[] }>('/threads'),
-  thread: (jobId: number, tradeId: number) =>
-    get<{ job: { id: number; title: string; status: string }; with: string; messages: Message[] }>(`/threads/${jobId}/${tradeId}`),
-  sendMessage: (jobId: number, tradeId: number, body: string) => post<Ok>(`/threads/${jobId}/${tradeId}`, { body }),
+  thread: (jobId: number, tradeId: number) => get<ThreadDetail>(`/threads/${jobId}/${tradeId}`),
+  sendMessage: (jobId: number, tradeId: number, body: string, files: PhotoInput[] = []) => {
+    // Words alone stay JSON; a file makes it multipart. Same endpoint either way.
+    if (!files.length) return post<Ok>(`/threads/${jobId}/${tradeId}`, { body });
+    const form = new FormData();
+    form.append('body', body);
+    files.forEach((f) => form.append('files', f as unknown as Blob));
+    return post<Ok>(`/threads/${jobId}/${tradeId}`, form);
+  },
+  askForExtra: (jobId: number, tradeId: number, fields: AskInput) =>
+    post<Ok>(`/threads/${jobId}/${tradeId}/ask`, fields),
+  answerExtra: (jobId: number, tradeId: number, askId: number,
+                decision: 'accepted' | 'declined' | 'withdrawn') =>
+    post<Ok>(`/threads/${jobId}/${tradeId}/ask/${askId}/${decision}`),
 
   // Customer
   myJobs: () => get<{ jobs: Job[] }>('/customer/jobs'),

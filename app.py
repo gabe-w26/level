@@ -1158,7 +1158,7 @@ def thread(job_id, trade_id):
         elif body or saved:
             now = ts(utcnow())
             db().execute('INSERT INTO messages (job_id, trade_id, sender_id, body, created_at) VALUES (?,?,?,?,?)',
-                         (job_id, trade_id, u['id'], (body or '(sent a file)')[:4000], now))
+                         (job_id, trade_id, u['id'], (body or threads.placeholder(saved))[:4000], now))
             msg = db().execute('SELECT id FROM messages WHERE job_id = ? AND trade_id = ? AND sender_id = ? '
                                'ORDER BY id DESC LIMIT 1', (job_id, trade_id, u['id'])).fetchone()
             if saved:
@@ -1240,10 +1240,7 @@ def ask_for_work(job_id, trade_id):
         abort(404)
     other = trade_id if u['id'] == job['customer_id'] else job['customer_id']
     try:
-        threads.ask(db(), job, trade_id, u['id'], request.form)
-        engine.notify(db(), other,
-                      f'There’s extra work to agree on “{job["title"]}” — have a look and say yes or no.',
-                      url_for('thread', job_id=job_id, trade_id=trade_id))
+        threads.ask(db(), job, trade_id, u['id'], request.form)      # tells the other side
         db().commit()
         flash('Asked. They’ll get a notification, and it stays here in writing either way.')
     except threads.ThreadError as e:
@@ -1261,12 +1258,7 @@ def answer_work_request(job_id, trade_id, request_id, decision):
     if not threads.can_see(job, quote, u['id']):
         abort(404)
     try:
-        row = threads.answer(db(), request_id, u['id'], decision, request.form.get('note'))
-        other = row['asked_by']
-        word = {'accepted': 'agreed to', 'declined': 'said no to', 'withdrawn': 'withdrawn'}[decision]
-        engine.notify(db(), other,
-                      f'“{row["title"]}” on “{job["title"]}” was {word}.',
-                      url_for('thread', job_id=job_id, trade_id=trade_id))
+        threads.answer(db(), request_id, u['id'], decision, request.form.get('note'))
         db().commit()
         flash({'accepted': 'Agreed, and written down.', 'declined': 'Declined — they’ve been told.',
                'withdrawn': 'Taken back.'}[decision])

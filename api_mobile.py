@@ -38,6 +38,9 @@ import mailer
 import referrals
 import reporting
 import sms
+# Not `as threads`, the way app.py imports it: the /threads route function
+# below is called threads() and would shadow it.
+import thread as convo
 from engine import RuleError, parse_ts, ts, utcnow
 
 bp = Blueprint('api_mobile', __name__, url_prefix='/api/mobile')
@@ -102,6 +105,16 @@ def site_url():
 
 def photo_url(filename):
     return f'{request.url_root.rstrip("/")}/uploads/{filename}'
+
+
+def file_url(file_id):
+    """A message attachment, which is *not* in the public uploads folder.
+
+    It goes through an authenticated route instead, because a photo of somebody's
+    back door is between the two people on that job. The app has to send its
+    bearer token to fetch this, the same as any other call.
+    """
+    return f'{request.url_root.rstrip("/")}/api/mobile/messages/files/{file_id}'
 
 
 # ── Tokens ────────────────────────────────────────────────────────────────────
@@ -623,12 +636,23 @@ def thread(job_id, trade_id):
                         (job_id, trade_id)).fetchall()
     trade = db().execute('SELECT business_name FROM trades WHERE user_id = ?', (trade_id,)).fetchone()
     customer = db().execute('SELECT name FROM users WHERE id = ?', (job['customer_id'],)).fetchone()
+    files = convo.files_for(db(), [m['id'] for m in msgs])
+    asks = convo.requests_for(db(), job_id, trade_id)
     return {'job': {'id': job['id'], 'title': job['title'], 'status': job['status']},
             'trade_name': trade['business_name'] if trade else '', 'customer_name': customer['name'] if customer else '',
             'with': (trade['business_name'] if trade else '') if u['id'] == job['customer_id'] else
                     (customer['name'] if customer else ''),
+            'max_files': convo.MAX_FILES,
             'messages': [{'id': m['id'], 'body': m['body'], 'created_at': m['created_at'],
-                          'mine': m['sender_id'] == u['id']} for m in msgs]}
+                          'mine': m['sender_id'] == u['id'],
+                          'files': [{'id': f['id'], 'kind': f['kind'], 'name': f['original_name'],
+                                     'size': f['size'], 'url': file_url(f['id'])}
+                                    for f in files.get(m['id'], [])]} for m in msgs],
+            'asks': [{'id': a['id'], 'title': a['title'], 'detail': a['detail'], 'price': a['price'],
+                      'status': a['status'], 'status_label': a['word'],
+                      'mine': a['asked_by'] == u['id'], 'created_at': a['created_at'],
+                      'answered_at': a['answered_at']} for a in asks],
+            'extra': convo.extra_agreed(db(), job_id, trade_id)}
 
 
 @bp.post('/threads/<int:job_id>/<int:trade_id>')
@@ -638,15 +662,75 @@ def send_message(job_id, trade_id):
     if not job:
         return fail('Not found. It may have closed or been removed.', 404)
     body = text(payload(), 'body').strip()
-    if not body:
-        return fail('Write a message first.')
+    saved, error = web._save_attachments(request.files.getlist('files')) if request.files else ([], None)
+    if error:
+        return fail(error)
+    if not body and not saved:
+        return fail('Write a message or add a file first.')
     u = me()
     other = trade_id if u['id'] == job['customer_id'] else job['customer_id']
     cur = db().execute('INSERT INTO messages (job_id, trade_id, sender_id, body, created_at) VALUES (?,?,?,?,?)',
-                       (job_id, trade_id, u['id'], body[:4000], ts(utcnow())))
-    engine.notify(db(), other, f'New message about “{job["title"]}”.', f'/thread/{job_id}/{trade_id}')
+                       (job_id, trade_id, u['id'], (body or convo.placeholder(saved))[:4000], ts(utcnow())))
+    if saved:
+        convo.attach(db(), cur.lastrowid, saved)
+    what = 'a photo' if any(f['kind'] == 'photo' for f in saved) else 'a file'
+    engine.notify(db(), other,
+                  f'New message about “{job["title"]}”.' if not saved
+                  else f'Someone sent you {what} about “{job["title"]}”.',
+                  f'/thread/{job_id}/{trade_id}')
     db().commit()
     return {'ok': True, 'id': cur.lastrowid}, 201
+
+
+@bp.get('/messages/files/<int:file_id>')
+@auth()
+def message_file(file_id):
+    """An attachment, for the app. Same check as the website's route.
+
+    Not served from the public uploads folder on purpose — every fetch proves who
+    is asking, and only the two people on that job are ever told yes.
+    """
+    row = convo.file_owner(db(), file_id)
+    if not row:
+        return fail('Not found.', 404)
+    job = engine.get_job(db(), row['job_id'])
+    quote = db().execute('SELECT * FROM quotes WHERE job_id = ? AND trade_id = ?',
+                         (row['job_id'], row['trade_id'])).fetchone()
+    if not convo.can_see(job, quote, me()['id']):
+        return fail('Not found.', 404)
+    from flask import send_from_directory
+    return send_from_directory(web.UPLOAD_DIR, row['filename'],
+                               download_name=row['original_name'])
+
+
+@bp.post('/threads/<int:job_id>/<int:trade_id>/ask')
+@auth()
+def ask_for_extra(job_id, trade_id):
+    """Ask to do extra work, with a price. Either side may."""
+    job, quote = _thread_parts(job_id, trade_id)
+    if not job:
+        return fail('Not found. It may have closed or been removed.', 404)
+    try:
+        convo.ask(db(), job, trade_id, me()['id'], payload())
+        db().commit()
+    except convo.ThreadError as e:
+        return fail(str(e))
+    return {'ok': True}, 201
+
+
+@bp.post('/threads/<int:job_id>/<int:trade_id>/ask/<int:request_id>/<decision>')
+@auth()
+def answer_extra(job_id, trade_id, request_id, decision):
+    """Say yes, no, or take your own request back."""
+    job, quote = _thread_parts(job_id, trade_id)
+    if not job:
+        return fail('Not found. It may have closed or been removed.', 404)
+    try:
+        convo.answer(db(), request_id, me()['id'], decision, text(payload(), 'note') or None)
+        db().commit()
+    except convo.ThreadError as e:
+        return fail(str(e))
+    return {'ok': True}
 
 
 # ── Customer ──────────────────────────────────────────────────────────────────

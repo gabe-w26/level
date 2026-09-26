@@ -133,7 +133,7 @@ class AttachmentTest(Base):
         self.remember_files()
         self.assertEqual(self.db.execute('SELECT COUNT(*) AS n FROM message_files').fetchone()['n'], 1)
         body = self.db.execute('SELECT body FROM messages ORDER BY id DESC LIMIT 1').fetchone()['body']
-        self.assertIn('file', body.lower())
+        self.assertEqual(body, '(sent a photo)', 'the website says the same thing the app does')
 
     def test_an_executable_is_refused(self):
         self.send(self.trade, files=(io.BytesIO(b'MZ'), 'nasty.exe'))

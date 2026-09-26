@@ -53,6 +53,22 @@ def can_see(job, quote, user_id):
 
 # ── Attachments ─────────────────────────────────────────────────────────────
 
+def placeholder(saved):
+    """What a message with files but no words says in the list of threads.
+
+    It has to say *something* — the thread list previews the last message, and a
+    blank line there looks broken. Saying "file" about an obvious photo is the
+    kind of small wrongness people notice, so this counts what was actually sent.
+    """
+    photos = sum(1 for f in saved if f['kind'] == 'photo')
+    others = len(saved) - photos
+    if photos and not others:
+        return '(sent a photo)' if photos == 1 else f'(sent {photos} photos)'
+    if others and not photos:
+        return '(sent a file)' if others == 1 else f'(sent {others} files)'
+    return f'(sent {len(saved)} attachments)'
+
+
 def attach(db, message_id, files, at=None):
     """Record files already saved to disk against a message."""
     from engine import ts, utcnow
@@ -114,7 +130,22 @@ def ask(db, job, trade_id, asked_by, form, message_id=None, at=None):
                "gst_included, status, message_id, created_at) VALUES (?,?,?,?,?,?,?,'asked',?,?)",
                (job['id'], trade_id, asked_by, title[:140], detail[:2000], amount,
                 0 if form.get('gst') == 'excl' else 1, message_id, ts(at or utcnow())))
+    # Telling the other side belongs here rather than in the route. It was in the
+    # website's route alone, and the phone's route was written without it — so a
+    # request raised on site reached nobody. A request nobody is told about is
+    # just a note to yourself, which is the thing this feature exists to replace.
+    _tell(db, _other_side(job, trade_id, asked_by), job, trade_id,
+          f'There’s extra work to agree on “{job["title"]}” — have a look and say yes or no.')
     db.commit()
+
+
+def _other_side(job, trade_id, user_id):
+    return trade_id if user_id == job['customer_id'] else job['customer_id']
+
+
+def _tell(db, user_id, job, trade_id, body):
+    from engine import notify
+    notify(db, user_id, body, f'/thread/{job["id"]}/{trade_id}')
 
 
 def _money(value):
@@ -145,6 +176,13 @@ def answer(db, request_id, user_id, decision, note=None, at=None):
         raise ThreadError('Accept it or decline it.')
     db.execute('UPDATE work_requests SET status = ?, answered_at = ?, answered_note = ? WHERE id = ?',
                (decision, ts(at or utcnow()), (note or '').strip()[:500] or None, request_id))
+    job = db.execute('SELECT id, title, customer_id FROM jobs WHERE id = ?', (row['job_id'],)).fetchone()
+    if job:
+        word = {'accepted': 'agreed to', 'declined': 'said no to', 'withdrawn': 'withdrawn'}[decision]
+        # Whoever asked hears the answer — including when they took it back
+        # themselves, so the record of who did what stays on both sides.
+        _tell(db, row['asked_by'], job, row['trade_id'],
+              f'“{row["title"]}” on “{job["title"]}” was {word}.')
     db.commit()
     return row
 
