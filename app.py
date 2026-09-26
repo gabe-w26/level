@@ -144,6 +144,12 @@ def health():
                     # wasted an afternoon; one line here ends that for good.
                     'waitlist': wl.is_on(),
                     'waitlist_from_env': integrations.from_env('waitlist'),
+                    # How many settings have ever been saved. Zero on a site
+                    # where someone has used Admin → Setup means writes aren't
+                    # landing at all, which is a different problem from any one
+                    # feature being off.
+                    'settings_saved': db().execute(
+                        'SELECT COUNT(*) AS n FROM settings').fetchone()['n'],
                     'waitlist_stored': bool(db().execute(
                         "SELECT 1 FROM settings WHERE key = 'integration.waitlist'").fetchone()),
                     'version': os.environ.get('RENDER_GIT_COMMIT', 'local')[:7]}, 200
@@ -2435,10 +2441,29 @@ def admin_waitlist_switch():
     two states needs a control with two states.
     """
     on = request.form.get('on') == '1'
-    integrations.save(db(), {'waitlist': '1' if on else ''})
-    flash('The front door is shut — new visitors go to the waitlist. Everyone with an account '
-          'carries on as normal.' if on else
-          'The front door is open. Anyone can post a job or sign up.')
+    try:
+        integrations.save(db(), {'waitlist': '1' if on else ''})
+    except Exception as e:                       # noqa: BLE001 — we want to see it, not 500
+        app.logger.exception('waitlist switch failed')
+        flash(f'Saving that failed: {e.__class__.__name__}: {e}', 'error')
+        return redirect(url_for('admin_waitlist'))
+
+    # Read it straight back, in this same request, and say what actually
+    # happened rather than what we hoped would. Two clicks on the old version of
+    # this button changed nothing in production and reported success, which cost
+    # an afternoon of guessing from the outside. A write that says it worked
+    # should have checked.
+    stored = bool(db().execute(
+        "SELECT 1 FROM settings WHERE key = 'integration.waitlist'").fetchone())
+    if stored != on:
+        flash(f'That didn’t stick. Asked to turn it {"on" if on else "off"}, but the setting '
+              f'{"is still missing" if on else "is still there"} when read straight back on the '
+              f'same connection. Nothing is wrong with your click — tell Gabriel, and quote this: '
+              f'db={"postgres" if _USE_PG else "sqlite"} stored={stored} wanted={on}.', 'error')
+    else:
+        flash('The front door is shut — new visitors go to the waitlist. Everyone with an account '
+              'carries on as normal.' if on else
+              'The front door is open. Anyone can post a job or sign up.')
     return redirect(url_for('admin_waitlist'))
 
 

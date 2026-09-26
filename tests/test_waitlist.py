@@ -148,6 +148,34 @@ class TheSwitchInAdminTest(Base):
         self.assertFalse(wl.is_on())
         self.assertEqual(self.client().get('/post').status_code, 200)
 
+    def test_a_write_that_did_not_stick_says_so_instead_of_claiming_success(self):
+        """The failure that actually happened: the button reported success and
+        changed nothing. If the read-back disagrees with the intent, the page
+        has to say that rather than congratulate itself."""
+        import integrations as ig
+        real = ig.save
+        ig.save = lambda db, values: None          # a save that quietly does nothing
+        try:
+            page = self.flip(True).data.decode()
+        finally:
+            ig.save = real
+        self.assertIn('didn’t stick', page)
+        self.assertNotIn('front door is shut', page)
+
+    def test_a_save_that_raises_is_shown_not_swallowed(self):
+        import integrations as ig
+        real = ig.save
+
+        def boom(db, values):
+            raise RuntimeError('connection went away')
+        ig.save = boom
+        try:
+            page = self.flip(True).data.decode()
+        finally:
+            ig.save = real
+        self.assertIn('Saving that failed', page)
+        self.assertIn('connection went away', page)
+
     def test_it_is_not_a_get(self):
         """A link that shuts the shop is one stray crawler away from a bad day."""
         self.assertEqual(self.client(self.admin).get('/admin/waitlist/switch').status_code, 405)
