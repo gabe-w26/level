@@ -67,40 +67,87 @@ def price_for(tier):
     }
 
 
-def elsewhere():
+def lead_cost(rival, jobs):
+    """What quoting on `jobs` jobs adds to this rival's bill, as (low, high).
+
+    (0, 0) when quoting is included in the subscription — or when we haven't
+    confirmed the per-lead price, which is deliberately indistinguishable here.
+    An unconfirmed cost is left out of the arithmetic and named on the page
+    instead; inventing a number to make our own case is the one thing a price
+    comparison must not do.
+    """
+    per = rival.get('per_lead')
+    if not per or jobs <= 0:
+        return (0, 0)
+    low, high = (per, per) if isinstance(per, (int, float)) else (per[0], per[-1])
+    return (round(low * jobs), round(high * jobs))
+
+
+def elsewhere(jobs=0):
     """The cheapest way to buy the same two things from anybody else.
 
-    Deliberately the *cheapest* rival combination rather than the dearest, and
+    Deliberately the *cheapest* rival for each half rather than the dearest, and
     the notes come along with it: a starting price that turns into per-user
     billing or per-lead credits is the thing worth knowing, and quoting only the
     headline number would be the same trick played in our favour.
+
+    `jobs` is how many jobs a month the tradie wants to quote on, which is what
+    actually decides a lead site's bill. At 0 this is the subscriptions alone —
+    the number everybody advertises, and nobody pays.
     """
-    out = {}
+    out, low, high = {}, 0, 0
     for job, options in config.RIVALS.items():
         cheapest = min(options, key=lambda o: o['from'])
-        out[job] = dict(cheapest, others=[o for o in options if o is not cheapest])
-    total = sum(part['from'] for part in out.values())
-    return {'parts': out, 'total': total}
+        leads = lead_cost(cheapest, jobs)
+        out[job] = dict(cheapest,
+                        others=[o for o in options if o is not cheapest],
+                        leads_low=leads[0], leads_high=leads[1],
+                        total_low=cheapest['from'] + leads[0],
+                        total_high=cheapest['from'] + leads[1],
+                        per_lead_known=bool(cheapest.get('per_lead')),
+                        # A subscription they could skip isn't an entry price.
+                        optional_sub=cheapest.get('sub_needed') is False)
+        low += out[job]['total_low']
+        high += out[job]['total_high']
+    return {
+        'parts': out, 'jobs': jobs,
+        'total': low, 'total_high': high,
+        'a_range': high > low,
+        # True when some part of their bill exists but we haven't pinned it down,
+        # so every total here is a floor rather than an answer.
+        'incomplete': any(p.get('per_lead') is None and 'per_lead' in p
+                          for p in out.values()) and jobs > 0,
+    }
 
 
-def compared_with(tier):
+def compared_with(tier, jobs=0):
     """Both of ours against the cheapest of theirs, for one Level tier.
 
     Only ever returns a difference the numbers actually support. If we're not
     cheaper — which a price change on either side could do at any time — it says
     so rather than dressing it up, because a comparison table that can only ever
     reach one conclusion is an advert.
+
+    Compared at the *low* end of their range, so a demand-priced lead is costed
+    at its cheapest. Their bill is the one with a range in it; ours doesn't move
+    with how many jobs you quote on, which is the whole argument.
     """
     ours = price_for(tier)
     if not ours:
         return None
-    theirs = elsewhere()
+    theirs = elsewhere(jobs)
     return {
         'ours': ours,
         'theirs': theirs,
+        'jobs': jobs,
         'difference': theirs['total'] - ours['both'],
         'cheaper': ours['both'] < theirs['total'],
     }
+
+
+def by_volume(tier):
+    """The same comparison at each of config.JOBS_A_MONTH, for a table."""
+    return [compared_with(tier, jobs) for jobs in config.JOBS_A_MONTH]
 
 
 # ── What a tradie sees, and what Docket is told ───────────────────────────────

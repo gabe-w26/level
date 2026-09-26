@@ -421,6 +421,7 @@ def with_docket():
     """
     return render_template('and_docket.html',
                            compared={tier: bundle.compared_with(tier) for tier in config.TIER_ORDER},
+                           by_volume={tier: bundle.by_volume(tier) for tier in config.TIER_ORDER},
                            elsewhere=bundle.elsewhere())
 
 

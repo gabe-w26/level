@@ -81,12 +81,22 @@ DOCKET_PLANS = {
 }
 
 # What the same two jobs cost on the tools tradies actually compare us with.
-# Every figure is a published starting price in NZD excluding GST, and the note
-# is the part that makes a starting price misleading. Checked 2026-09-26 — if
-# you're reading this a long way past that, check them again before quoting them.
+# Every figure is a published price in NZD excluding GST, and the note is the part
+# that makes a starting price misleading. Checked 2026-09-26 — if you're reading
+# this a long way past that, check them again before quoting them.
+#
+#   from        the monthly subscription, or 0 where there isn't one
+#   per_lead    what it costs to quote on one job on top of that, as
+#               (low, high) because a demand-priced lead has no single price.
+#               None means quoting costs nothing extra, like ours.
+#   sub_needed  False where the subscription is optional and a tradie could pay
+#               per lead alone — which makes `from` not their entry price.
+#
+# The per-lead figure is the one that decides the comparison for anybody busy, so
+# leave it None rather than guessing: a gap is honest and a made-up number isn't.
 RIVALS = {
     'finding work': [
-        {'name': 'Builderscrack', 'from': 79,
+        {'name': 'Builderscrack', 'from': 79, 'per_lead': None, 'sub_needed': True,
          'note': 'plus credits for each job you want to quote on, priced by demand'},
         {'name': 'NoCowboys', 'from': 83, 'note': 'billed yearly, $999 up front'},
     ],
@@ -96,6 +106,11 @@ RIVALS = {
         {'name': 'ServiceM8', 'from': 29, 'note': 'capped on jobs per month, not people'},
     ],
 }
+
+# How many jobs a month to work the comparison out for. A lead site's real cost
+# depends entirely on this and ours doesn't, so one column would hide the whole
+# point. Kept small and believable — a one-van outfit, and a busy one.
+JOBS_A_MONTH = [1, 4, 8]
 
 # The value band a customer picks when posting. A job is visible to every tier
 # whose rank is at least the band's rank.

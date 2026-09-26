@@ -94,7 +94,7 @@
     </div>
 
     <div class="card" style="margin-top:22px">
-      <h3 style="margin-top:0">Side by side</h3>
+      <h3 style="margin-top:0">Side by side, on the subscriptions alone</h3>
       <table class="table">
         <thead>
           <tr><th scope="col">Both of ours</th><th scope="col">Us</th>
@@ -112,9 +112,9 @@
         </tbody>
       </table>
 
-      <p style="margin:12px 0 0">On the headline numbers we’re cheaper on the two smaller plans and
+      <p style="margin:12px 0 0">On the subscriptions alone we’re cheaper on the two smaller plans and
         <b>level pegging on the biggest</b> — and we’d rather say that than pick a dearer competitor to
-        compare against. But the headline isn’t what you end up paying, and here’s why:</p>
+        compare against. But a subscription isn’t what you end up paying a lead site, and here’s why:</p>
       <ul class="checklist" style="margin-top:10px">
         <li><b>Their lead price is the start, not the total.</b> On Builderscrack the $79 buys you the right
           to buy credits, and a job with plenty of tradies chasing it costs more of them. A single
@@ -129,6 +129,45 @@
       </ul>
       <p class="small muted" style="margin:10px 0 0">Their prices are what they publish, excluding GST,
         checked on 26 September 2026. Check them yourself before you decide anything — we’d rather you did.</p>
+    </div>
+
+    {% set rows = by_volume['medium'] %}
+    <div class="card" style="margin-top:22px">
+      <h3 style="margin-top:0">Now add the jobs you actually want to quote on</h3>
+      <p class="muted" style="margin:0 0 12px">This is the part a monthly price hides. On a credit or
+        token system, every job you chase costs money whether you win it or not — so the busier you get,
+        the more you pay to stay busy. On {{ cfg.BRAND }} the number below never moves.</p>
+      <table class="table">
+        <caption class="small muted">{{ cfg.BRAND }} {{ tiers['medium'].name }} + Docket
+          {{ rows[0].ours.plan_name }}, monthly, {{ cfg.PRICE_GST_NOTE }}.</caption>
+        <thead>
+          <tr><th scope="col">Jobs you quote on</th><th scope="col">Us</th>
+              <th scope="col">Cheapest of theirs</th></tr>
+        </thead>
+        <tbody>
+          {% for c in rows %}
+          <tr>
+            <th scope="row">{{ c.jobs }} a month</th>
+            <td><b>${{ c.ours.both }}</b></td>
+            <td>${{ c.theirs.total }}{% if c.theirs.a_range %}–{{ c.theirs.total_high }}{% endif %}{%
+              if c.theirs.incomplete %} <span class="small muted">plus credits</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      {% if rows[-1].theirs.incomplete %}
+      <p class="notice" style="margin:12px 0 0"><b>We’ve left their credit cost out of that column,
+        because we can’t quote a figure we haven’t confirmed.</b> Builderscrack prices credits by how
+        many tradies are chasing a job, so there’s no single number to put here — but it is real money,
+        it is charged per job rather than per win, and it goes on top of every figure in the right-hand
+        column. Ask them what a lead in your trade and your town actually costs before you compare
+        anything. On {{ cfg.BRAND }} the answer is nothing: {{ cfg.MAX_QUOTES }} quotes go on a job and
+        none of them cost you.</p>
+      {% else %}
+      <p class="small muted" style="margin:12px 0 0">Their column is costed at the <i>cheap</i> end of
+        their credit pricing. A job with plenty of tradies chasing it costs more than that.</p>
+      {% endif %}
     </div>
 
     <p style="margin-top:22px">

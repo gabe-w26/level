@@ -148,6 +148,72 @@ class TheComparisonTest(Base):
         self.assertEqual(c['difference'], c['theirs']['total'] - c['ours']['both'])
 
 
+class CostPerJobTest(Base):
+    """A lead site's bill depends on how many jobs you chase. Ours doesn't."""
+
+    def test_ours_does_not_move_with_how_many_jobs_you_quote_on(self):
+        prices = {bundle.compared_with('medium', jobs)['ours']['both']
+                  for jobs in (0, 1, 4, 8, 50)}
+        self.assertEqual(len(prices), 1, 'the flat price is the product')
+
+    def test_an_unconfirmed_lead_price_is_left_out_and_owned_up_to(self):
+        """We don't know Builderscrack's token price yet. Until we do, their
+        total is a floor and `incomplete` says so — inventing a figure to make
+        our own case is the one thing this page must not do."""
+        rival = config.RIVALS['finding work'][0]
+        was = rival.get('per_lead')
+        try:
+            rival['per_lead'] = None
+            base = bundle.elsewhere(0)['total']
+            busy = bundle.elsewhere(8)
+            self.assertEqual(busy['total'], base, 'nothing may be guessed at')
+            self.assertTrue(busy['incomplete'], 'and the page has to know it is short')
+        finally:
+            rival['per_lead'] = was
+
+    def test_a_confirmed_lead_price_is_multiplied_by_the_jobs(self):
+        rival = config.RIVALS['finding work'][0]
+        was = rival.get('per_lead')
+        try:
+            rival['per_lead'] = 25
+            base = bundle.elsewhere(0)['total']
+            self.assertEqual(bundle.elsewhere(4)['total'], base + 100)
+            self.assertFalse(bundle.elsewhere(4)['incomplete'])
+        finally:
+            rival['per_lead'] = was
+
+    def test_a_demand_priced_lead_becomes_a_range_not_a_single_number(self):
+        rival = config.RIVALS['finding work'][0]
+        was = rival.get('per_lead')
+        try:
+            rival['per_lead'] = (25, 70)
+            e = bundle.elsewhere(4)
+            self.assertTrue(e['a_range'])
+            self.assertEqual(e['total_high'] - e['total'], (70 - 25) * 4)
+        finally:
+            rival['per_lead'] = was
+
+    def test_we_are_compared_against_the_cheap_end_of_their_range(self):
+        """Costing their surge pricing at its worst would flatter us."""
+        rival = config.RIVALS['finding work'][0]
+        was = rival.get('per_lead')
+        try:
+            rival['per_lead'] = (25, 70)
+            c = bundle.compared_with('medium', 4)
+            self.assertEqual(c['difference'], c['theirs']['total'] - c['ours']['both'])
+            self.assertLess(c['theirs']['total'], c['theirs']['total_high'])
+        finally:
+            rival['per_lead'] = was
+
+    def test_no_lead_price_at_all_means_quoting_adds_nothing(self):
+        self.assertEqual(bundle.lead_cost({'from': 50}, 10), (0, 0))
+        self.assertEqual(bundle.lead_cost({'from': 50, 'per_lead': 25}, 0), (0, 0))
+
+    def test_there_is_a_row_for_every_volume_we_show(self):
+        rows = bundle.by_volume('medium')
+        self.assertEqual([r['jobs'] for r in rows], config.JOBS_A_MONTH)
+
+
 class WhoGetsItTest(Base):
 
     def test_a_paying_trade_gets_the_offer(self):
