@@ -143,6 +143,7 @@ def health():
                     # web workers and a settings cache with nothing to look at
                     # wasted an afternoon; one line here ends that for good.
                     'waitlist': wl.is_on(),
+                    'waitlist_from_env': integrations.from_env('waitlist'),
                     'waitlist_stored': bool(db().execute(
                         "SELECT 1 FROM settings WHERE key = 'integration.waitlist'").fetchone()),
                     'version': os.environ.get('RENDER_GIT_COMMIT', 'local')[:7]}, 200
@@ -2453,6 +2454,7 @@ def admin_waitlist():
     return render_template('admin/waitlist.html',
                            areas=wl.by_area(db()), totals=wl.totals(db()),
                            trades=wl.trades_wanted(db()), on=wl.is_on(),
+                           from_env=integrations.from_env('waitlist'),
                            ready_trades=wl.READY_TRADES, ready_customers=wl.READY_CUSTOMERS,
                            rows=db().execute(
                                'SELECT w.*, a.name AS area_name, c.name AS category_name '

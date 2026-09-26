@@ -11,13 +11,23 @@
     </div>
     <div class="actions">
       <span class="pill {{ 'hired' if on }}">{{ 'Front door shut' if on else 'Front door open' }}</span>
+      {% if from_env %}
+      <span class="small muted">Set in Render’s environment — the button can’t change it.</span>
+      {% else %}
       <form method="post" action="{{ url_for('admin_waitlist_switch') }}" class="inline">
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
         <input type="hidden" name="on" value="{{ '0' if on else '1' }}">
         <button class="btn btn-sm{{ ' btn-ghost' if on }}">{{ 'Open the front door' if on else 'Shut the front door' }}</button>
       </form>
+      {% endif %}
     </div>
   </div>
+
+  {% if from_env %}
+  <p class="notice"><b>A <code>WAITLIST</code> variable in Render’s environment is deciding this</b>,
+    and it wins over anything saved here — so the button above would do nothing and has been hidden.
+    Delete that variable in Render to get the switch back.</p>
+  {% endif %}
 
   {% if not on %}
   <p class="notice">The waitlist is <b>off</b> — visitors can post jobs and sign up as normal. These
