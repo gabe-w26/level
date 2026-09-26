@@ -726,7 +726,8 @@ def answer_extra(job_id, trade_id, request_id, decision):
     if not job:
         return fail('Not found. It may have closed or been removed.', 404)
     try:
-        convo.answer(db(), request_id, me()['id'], decision, text(payload(), 'note') or None)
+        convo.answer(db(), request_id, me()['id'], decision, job, trade_id,
+                     text(payload(), 'note') or None)
         db().commit()
     except convo.ThreadError as e:
         return fail(str(e))

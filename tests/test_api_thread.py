@@ -336,6 +336,54 @@ class ExtraWorkFromThePhoneTest(Base):
             'SELECT body FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 1',
             (self.trade,)).fetchone()['body'])
 
+    def test_a_stranger_cannot_answer_a_request_on_a_job_that_is_not_theirs(self):
+        """The one that matters.
+
+        Answering used to be looked up by request id alone, so the job and trade
+        in the URL were decoration: anyone who could reach *a* thread could
+        accept or decline a request in *someone else's*. work_requests.id is a
+        sequential integer, so the whole table was walkable — an attacker could
+        bind strangers to priced variations they were never shown, or decline
+        every pending one on the platform. The record exists to be evidence of
+        what two people agreed; a third party must not be able to write it.
+        """
+        self.ask(self.t_token)                         # Bob asks Carol for $800
+        victim = self.latest()['id']
+
+        # An outsider with a perfectly ordinary thread of their own.
+        outsider_trade = self.user('trade')
+        outsider_customer = self.user('customer')
+        now = utcnow()
+        other_job = engine.post_job(self.db, outsider_customer, dict(
+            category_id=self.cat, area_id=self.area, suburb='Grey Lynn',
+            title='Hang a gate', description='One gate, one afternoon, posts are sound.',
+            value_band='medium', timing='weeks', property_type='house'), at=now)[0]
+        engine.submit_quote(self.db, other_job, outsider_trade, dict(
+            price_type='fixed', amount_low=400, gst_included=1,
+            message='Half a day, gate and hardware supplied.'), at=now + timedelta(minutes=1))
+        token = self.login(self.email(outsider_trade))
+
+        for decision in ('accepted', 'declined'):
+            r = self.call('post', f'/threads/{other_job}/{outsider_trade}/ask/{victim}/{decision}',
+                          token, json={})
+            self.assertEqual(r.status_code, 400, f'{decision} on a stranger’s request must be refused')
+        row = self.db.execute('SELECT * FROM work_requests WHERE id = ?', (victim,)).fetchone()
+        self.assertEqual(row['status'], 'asked', 'the victim’s request is untouched')
+        self.assertIsNone(row['answered_at'])
+
+    def test_a_stranger_cannot_withdraw_someone_elses_request_either(self):
+        self.ask(self.t_token)
+        victim = self.latest()['id']
+        outsider = self.login(self.email(self.user('customer')))
+        self.call('post', f'{self.url()}/ask/{victim}/withdrawn', outsider, json={})
+        self.assertEqual(self.latest()['status'], 'asked')
+
+    def test_the_customer_on_that_job_is_still_the_one_who_can_answer(self):
+        """The fix must not break the person it exists for."""
+        self.ask(self.t_token)
+        self.assertEqual(self.answer(self.c_token, 'accepted').status_code, 200)
+        self.assertEqual(self.latest()['status'], 'accepted')
+
     def test_nothing_agreed_means_nothing_to_show(self):
         self.assertIsNone(self.call('get', self.url(), self.c_token).get_json()['extra'])
 

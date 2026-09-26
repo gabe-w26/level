@@ -18,7 +18,7 @@ export default function Thread() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { refresh: refreshCounts } = useAuth();
-  const { data, error, reload } = useLoad(async () => {
+  const { data, error, stale, reload } = useLoad(async () => {
     const res = await api.thread(Number(jobId), Number(tradeId));
     refreshCounts();                     // opening the thread marks it read
     return res;
@@ -96,7 +96,16 @@ export default function Thread() {
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.concrete }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={insets.top + 44}>
       {data ? <Text style={styles.jobTitle} numberOfLines={1}>{data.job.title}</Text> : null}
+      {/* `error` only fires when there's nothing to read; `sendError` is
+          something the person just did. A poll that dropped out gets the quiet
+          line instead — the conversation below it is still true. */}
       <View style={{ paddingHorizontal: space.lg }}><ErrorText>{error || sendError}</ErrorText></View>
+      {stale && !sendError ? (
+        <Text style={styles.stale}>
+          <Ionicons name="cloud-offline-outline" size={12} color={colors.ink3} /> Not up to date —
+          we’ll keep trying.
+        </Text>
+      ) : null}
       <FlatList
         ref={list}
         data={data?.messages || []}
@@ -179,6 +188,7 @@ export default function Thread() {
 
 const styles = StyleSheet.create({
   jobTitle: { fontSize: 14, color: colors.ink2, paddingHorizontal: space.lg, paddingTop: space.md, fontWeight: '600' },
+  stale: { fontSize: 12, color: colors.ink3, paddingHorizontal: space.lg, paddingTop: 4 },
   empty: { textAlign: 'center', color: colors.ink2, marginTop: space.xxl, fontSize: 15, paddingHorizontal: space.xl },
   bubble: { maxWidth: '82%', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 8 },
   mine: { alignSelf: 'flex-end', backgroundColor: colors.chalk, borderBottomRightRadius: 4 },

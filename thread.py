@@ -158,10 +158,23 @@ def _money(value):
         return None
 
 
-def answer(db, request_id, user_id, decision, note=None, at=None):
-    """Accept or decline. Only the person who wasn't the one asking."""
+def answer(db, request_id, user_id, decision, job, trade_id, note=None, at=None):
+    """Accept, decline or withdraw — as the other person on *this* job.
+
+    `job` and `trade_id` are the thread the caller has already been authorised
+    for, and they are required rather than optional on purpose. Looking a request
+    up by id alone meant the job and trade in the URL were decoration: anybody
+    who could reach a thread of their own could answer a request belonging to two
+    strangers, and `work_requests.id` is a sequential integer, so the whole table
+    was walkable. This record is the evidence of what two people agreed. A third
+    party writing it is the worst thing that could happen to it.
+
+    So the row is fetched scoped to the thread, and the answerer has to be the
+    *other side of that thread* — not merely somebody who isn't the asker.
+    """
     from engine import ts, utcnow
-    row = db.execute('SELECT * FROM work_requests WHERE id = ?', (request_id,)).fetchone()
+    row = db.execute('SELECT * FROM work_requests WHERE id = ? AND job_id = ? AND trade_id = ?',
+                     (request_id, job['id'], trade_id)).fetchone()
     if not row:
         raise ThreadError('That request has gone.')
     if row['status'] != 'asked':
@@ -170,19 +183,18 @@ def answer(db, request_id, user_id, decision, note=None, at=None):
         if user_id != row['asked_by']:
             raise ThreadError('Only the person who asked can take it back.')
     elif decision in ('accepted', 'declined'):
-        if user_id == row['asked_by']:
+        # The other side of this job, by name — which also rules out anybody who
+        # isn't on it at all, where "not the asker" did not.
+        if user_id != _other_side(job, trade_id, row['asked_by']):
             raise ThreadError('The other person has to answer this one.')
     else:
         raise ThreadError('Accept it or decline it.')
     db.execute('UPDATE work_requests SET status = ?, answered_at = ?, answered_note = ? WHERE id = ?',
                (decision, ts(at or utcnow()), (note or '').strip()[:500] or None, request_id))
-    job = db.execute('SELECT id, title, customer_id FROM jobs WHERE id = ?', (row['job_id'],)).fetchone()
-    if job:
-        word = {'accepted': 'agreed to', 'declined': 'said no to', 'withdrawn': 'withdrawn'}[decision]
-        # Whoever asked hears the answer — including when they took it back
-        # themselves, so the record of who did what stays on both sides.
-        _tell(db, row['asked_by'], job, row['trade_id'],
-              f'“{row["title"]}” on “{job["title"]}” was {word}.')
+    word = {'accepted': 'agreed to', 'declined': 'said no to', 'withdrawn': 'withdrawn'}[decision]
+    # Whoever asked hears the answer — including when they took it back
+    # themselves, so the record of who did what stays on both sides.
+    _tell(db, row['asked_by'], job, trade_id, f'“{row["title"]}” on “{job["title"]}” was {word}.')
     db.commit()
     return row
 

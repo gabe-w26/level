@@ -1258,7 +1258,7 @@ def answer_work_request(job_id, trade_id, request_id, decision):
     if not threads.can_see(job, quote, u['id']):
         abort(404)
     try:
-        threads.answer(db(), request_id, u['id'], decision, request.form.get('note'))
+        threads.answer(db(), request_id, u['id'], decision, job, trade_id, request.form.get('note'))
         db().commit()
         flash({'accepted': 'Agreed, and written down.', 'declined': 'Declined — they’ve been told.',
                'withdrawn': 'Taken back.'}[decision])
