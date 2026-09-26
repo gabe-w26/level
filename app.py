@@ -733,6 +733,25 @@ def read_all():
 
 # ── Posting a job ─────────────────────────────────────────────────────────────
 
+@app.get('/pros/<int:trade_id>/ask')
+def ask_trade(trade_id):
+    """"Ask this business to quote" from their profile.
+
+    Remembers who, then drops into the normal post form — same job, same rules,
+    it just goes to one business instead of the board.
+    """
+    trade = db().execute('SELECT t.business_name, t.user_id FROM trades t JOIN users u ON u.id = t.user_id '
+                         'WHERE t.user_id = ? AND u.closed_at IS NULL', (trade_id,)).fetchone()
+    if not trade:
+        abort(404)
+    ok, why = engine.can_be_asked(db(), trade_id)
+    if not ok:
+        flash(f'{trade["business_name"]}: {why} You can still post the job and we’ll find someone.', 'error')
+        return redirect(url_for('post_job'))
+    session['ask_trade'] = trade_id
+    return redirect(url_for('post_job'))
+
+
 @app.route('/post', methods=['GET', 'POST'])
 def post_job():
     u = current_user()
@@ -783,11 +802,14 @@ def post_job():
             # With texts switched on, a job only goes out once the phone number is confirmed —
             # that's what stops fake and dead jobs reaching tradies.
             hold = sms.enabled() and not poster['phone_verified_at']
+            # "Ask this business" — set when they came from a trade's profile.
+            asked = session.pop('ask_trade', None) if f.get('ask_trade') == '1' else None
             job_id, offered = engine.post_job(db(), session['uid'], dict(
                 category_id=cat['id'], area_id=area['id'], suburb=f['suburb'].strip(),
                 address=f.get('address', '').strip() or None, title=f['title'].strip(),
                 description=f['description'].strip(), value_band=f['value_band'], timing=f['timing'],
-                property_type=f['property_type']), hold=hold)
+                property_type=f['property_type']), hold=hold, direct_trade_id=asked,
+                direct_fallback=f.get('fallback') != 'only')
             for p in photos:
                 name = f'{uuid.uuid4().hex}.{p.filename.rsplit(".", 1)[-1].lower()}'
                 p.save(os.path.join(UPLOAD_DIR, name))
@@ -797,12 +819,22 @@ def post_job():
             if hold:
                 accounts.send_phone_code(db(), poster)
                 return redirect(url_for('verify_phone', next=url_for('customer_job', job_id=job_id)))
-            if offered:
+            if asked:
+                who = db().execute('SELECT business_name FROM trades WHERE user_id = ?',
+                                   (asked,)).fetchone()
+                flash(f'Sent to {who["business_name"] if who else "them"}, and nobody else. '
+                      f'They have {config.DIRECT_WINDOW_HOURS} hours.')
+            elif offered:
                 flash(f'Job posted. {offered} local {cat["name"].lower()} trades can see it now.')
             else:
                 flash('Job posted. No trades cover this area yet — we’ll offer it the moment one joins.')
             return redirect(url_for('customer_job', job_id=job_id))
+    asking = None
+    if session.get('ask_trade'):
+        asking = db().execute('SELECT user_id, business_name FROM trades WHERE user_id = ?',
+                              (session['ask_trade'],)).fetchone()
     return render_template('post.html', form=form, errors=errors, categories=all_categories(), ai_on=ai.enabled(),
+                           asking=asking, direct_hours=config.DIRECT_WINDOW_HOURS,
                            regions=areas_by_region())
 
 

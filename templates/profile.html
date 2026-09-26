@@ -14,6 +14,11 @@
         </div>
       </div>
       {{ m.badges(t) }}
+      <p style="margin:14px 0 0">
+        <a class="btn" href="{{ url_for('ask_trade', trade_id=t.user_id) }}">Ask {{ t.business_name }} to quote</a>
+      </p>
+      <p class="small muted" style="margin:6px 0 0">Goes to them and nobody else. If they don’t take it up,
+        you can have it offered round instead.</p>
       {% if report_record or report_plan %}
       <div class="notice small" style="margin-top:14px">
         {% if report_record %}<b>Keeps customers updated:</b> {{ report_record.pct }}% of promised progress updates on time, across {{ report_record.jobs }} job{{ 's' if report_record.jobs != 1 }} ({{ report_record.kept }} of {{ report_record.expected }}).

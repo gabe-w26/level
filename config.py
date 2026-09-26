@@ -41,6 +41,10 @@ AUTO_PAUSE_AFTER = 5         # consecutive offers left to expire before a trade'
 TICKET_POINTS = 5            # what one checked, in-date ticket is worth on the trust score
 QUIET_AFTER_HOURS = 24       # tell the customer if their job still has no quotes after this
 
+# A job sent to one business by name. They were chosen, so there's no race and
+# no reason to hurry them — but a customer shouldn't wait forever either.
+DIRECT_WINDOW_HOURS = int(os.environ.get('DIRECT_WINDOW_HOURS', '24'))
+
 # ── How much email we'll send in a day ────────────────────────────────────────
 # A free Gmail account will send about 500 messages a day over SMTP. Go past it
 # and Google locks the mailbox for 24 hours — which takes password resets and

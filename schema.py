@@ -578,6 +578,11 @@ MIGRATIONS = [
     'ALTER TABLE jobs ADD COLUMN docket_tries INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE trades ADD COLUMN docket_hidden INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE trades ADD COLUMN docket_off INTEGER NOT NULL DEFAULT 0',
+
+    # A job the customer sent to one business by name, rather than to the board.
+    'ALTER TABLE jobs ADD COLUMN direct_trade_id INTEGER',
+    'ALTER TABLE jobs ADD COLUMN direct_opened_at TEXT',
+    'ALTER TABLE jobs ADD COLUMN direct_fallback INTEGER NOT NULL DEFAULT 1',
 ]
 
 

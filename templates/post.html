@@ -5,6 +5,22 @@
 {% set band_help = {'small': 'Repairs, small installs, a day or two of work', 'medium': 'Renovations, decks, re-roofs, rewires', 'large': 'New builds, extensions, full renovations'} %}
 {% block main %}
 <div class="wrap page narrow">
+  {% if asking %}
+  <div class="card notice notice-chalk" style="margin-bottom:18px">
+    <input type="hidden" name="ask_trade" value="1" form="post-job">
+    <p style="margin:0 0 8px"><b>You’re asking {{ asking.business_name }} to quote.</b>
+      This goes to them and nobody else, and they have {{ direct_hours }} hours.</p>
+    <p class="small muted" style="margin:0 0 10px">Everything else works the same — they see the job, quote
+      on it, and you decide.</p>
+    <div class="choices">
+      <label class="choice"><input type="radio" name="fallback" value="open" form="post-job" checked>
+        <span>If they don’t take it up<small>Offer it to other local trades after {{ direct_hours }} hours</small></span></label>
+      <label class="choice"><input type="radio" name="fallback" value="only" form="post-job">
+        <span>Only them<small>If they pass, close the job rather than offering it round</small></span></label>
+    </div>
+  </div>
+  {% endif %}
+
   <div class="page-head">
     <div>
       <h1>Post a job</h1>
@@ -13,7 +29,8 @@
   </div>
   {% if errors %}<p class="notice error" role="alert">Check the {{ errors|length }} highlighted field{{ 's' if errors|length > 1 }} below.</p>{% endif %}
 
-  <form method="post" enctype="multipart/form-data" class="form" novalidate>
+  {# id so the "ask this business" choice above can post with this form #}
+  <form id="post-job" method="post" enctype="multipart/form-data" class="form" novalidate>
     {{ m.csrf() }}
 
     <fieldset class="form-step">

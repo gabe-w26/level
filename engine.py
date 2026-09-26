@@ -194,10 +194,92 @@ def change_category(db, job, category_id, at=None):
     return n
 
 
+def can_be_asked(db, trade_id, at=None):
+    """Could this business take a job someone asked them for by name?
+
+    Says why not, in words a customer reads — "not taking work right now" is a
+    useful thing to know before you wait a day for a reply, and it is kinder to
+    the tradie than silence they get blamed for.
+    """
+    at = at or utcnow()
+    row = db.execute('SELECT t.*, u.closed_at FROM trades t JOIN users u ON u.id = t.user_id '
+                     'WHERE t.user_id = ?', (trade_id,)).fetchone()
+    if not row or row['closed_at']:
+        return False, 'That business isn’t on Level any more.'
+    if row['paused']:
+        return False, 'They’ve paused new work at the moment.'
+    if not is_subscribed(row, at):
+        return False, 'They’re not set up to take jobs right now.'
+    return True, None
+
+
+def ask_directly(db, job, trade_id, at=None):
+    """Offer a job to one business only, because the customer asked for them.
+
+    No rotation and no other trades: the customer chose. They get longer than
+    the usual window because there is nobody racing them, and if they pass or
+    run out of time the job opens to everyone — unless the customer said they
+    only wanted this one.
+    """
+    at = at or utcnow()
+    ok, why = can_be_asked(db, trade_id, at)
+    if not ok:
+        raise RuleError(why)
+    if trade_id == job['customer_id']:
+        raise RuleError('That’s your own business.')
+    expires = ts(at + timedelta(hours=config.DIRECT_WINDOW_HOURS))
+    db.execute('INSERT OR IGNORE INTO offers (job_id, trade_id, wave, status, offered_at, expires_at) '
+               "VALUES (?,?,1,'active',?,?)", (job['id'], trade_id, ts(at), expires))
+    db.execute('UPDATE trades SET last_offered_at = ? WHERE user_id = ?', (ts(at), trade_id))
+    db.execute('UPDATE jobs SET direct_trade_id = ? WHERE id = ?', (trade_id, job['id']))
+    notify(db, trade_id,
+           f'A customer has asked for you by name: “{job["title"]}”. You’ve got '
+           f'{config.DIRECT_WINDOW_HOURS} hours, and nobody else has been sent it.',
+           f'/trade/jobs/{job["id"]}', at, sms=True)
+    db.commit()
+    return True
+
+
+def open_up_direct_jobs(db, at=None):
+    """A job asked of one business that they never answered.
+
+    Opens it to everyone, once, if the customer allowed that. Runs with the
+    other background work. A job whose customer said "only them" is closed
+    instead, because offering it round would be the opposite of what they asked.
+    """
+    at = at or utcnow()
+    rows = db.execute(
+        "SELECT * FROM jobs WHERE status = 'open' AND direct_trade_id IS NOT NULL "
+        'AND direct_opened_at IS NULL AND quote_count = 0 '
+        'AND NOT EXISTS (SELECT 1 FROM offers o WHERE o.job_id = jobs.id '
+        "                AND o.trade_id = jobs.direct_trade_id AND o.status = 'active')",
+        ()).fetchall()
+    opened = 0
+    for job in rows:
+        db.execute('UPDATE jobs SET direct_opened_at = ? WHERE id = ?', (ts(at), job['id']))
+        if job['direct_fallback']:
+            name = db.execute('SELECT business_name FROM trades WHERE user_id = ?',
+                              (job['direct_trade_id'],)).fetchone()
+            notify(db, job['customer_id'],
+                   f'{name["business_name"] if name else "They"} didn’t take up “{job["title"]}”. '
+                   'It’s gone out to other local trades now, as you asked.',
+                   f'/me/jobs/{job["id"]}', at)
+            db.commit()
+            opened += fill_slots(db, get_job(db, job['id']), at)
+            db.commit()
+        else:
+            close_job(db, get_job(db, job['id']), 'not_going_ahead', at=at)
+        opened += 0
+    return opened
+
+
 def fill_slots(db, job, at=None):
     """Top a job back up to TRADES_PER_JOB live slots. Returns how many trades were offered it."""
     at = at or utcnow()
     if job['status'] != 'open' or job['quote_count'] >= config.MAX_QUOTES:
+        return 0
+    # Asked of one business by name: nobody else gets it until that plays out.
+    if job['direct_trade_id'] and not job['direct_opened_at']:
         return 0
     if parse_ts(job['closes_at']) <= at:
         return 0
@@ -229,7 +311,7 @@ def fill_slots(db, job, at=None):
     return len(picks)
 
 
-def post_job(db, customer_id, f, at=None, hold=False):
+def post_job(db, customer_id, f, at=None, hold=False, direct_trade_id=None, direct_fallback=True):
     """Create a job and offer it out. With `hold`, it waits (status 'held') until
     the customer confirms their phone number — see release_held()."""
     at = at or utcnow()
@@ -241,11 +323,20 @@ def post_job(db, customer_id, f, at=None, hold=False):
          f['title'], f['description'], f['value_band'], f.get('timing'), f.get('property_type'),
          'held' if hold else 'open', ts(at), ts(at + timedelta(days=config.JOB_OPEN_DAYS))))
     job_id = cur.lastrowid
+    if direct_trade_id:
+        db.execute('UPDATE jobs SET direct_trade_id = ?, direct_fallback = ? WHERE id = ?',
+                   (direct_trade_id, 1 if direct_fallback else 0, job_id))
     # Read the job before it goes anywhere. A wrong trade caught now costs
     # nothing; caught two minutes later it has already burned fifteen slots and
     # fifteen people's attention. It never changes the category — see matching.py.
     _check_routing_one(db, job_id, at)
-    offered = 0 if hold else fill_slots(db, get_job(db, job_id), at)
+    if hold:
+        offered = 0
+    elif direct_trade_id:
+        # One business, by name. fill_slots deliberately refuses to touch it.
+        offered = 1 if ask_directly(db, get_job(db, job_id), direct_trade_id, at) else 0
+    else:
+        offered = fill_slots(db, get_job(db, job_id), at)
     db.commit()
     return job_id, offered
 
@@ -679,6 +770,7 @@ def sweep(db, at=None):
 
     import credentials
     report['tickets_warned'] = credentials.warn_about_expiries(db, at)
+    report['direct_opened'] = open_up_direct_jobs(db, at)
     return report
 
 
