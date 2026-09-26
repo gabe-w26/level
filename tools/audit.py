@@ -5,7 +5,8 @@ Full-app audit for Level. Four passes:
      database (catches columns/tables that don't exist);
   2. every render_template target exists, and every url_for endpoint in the
      templates resolves;
-  3. every GET route is fetched as each role, and anything 5xx is reported;
+  3. every GET route is fetched as each role, and anything 5xx is reported
+     (except a deliberate 503 from an endpoint that needs another system);
   4. the numbers are checked against a seeded database, with a guard that each
      login actually landed (a bounced login makes the whole sweep meaningless).
 
@@ -169,7 +170,12 @@ def sweep(client, role, skip_prefixes=()):
             fail('crash', f'{role} GET {url}', traceback.format_exc().strip().splitlines()[-1])
             continue
         seen += 1
-        if r.status_code >= 500:
+        if r.status_code == 503:
+            # "Not configured, ask again later" — a real answer from an endpoint
+            # that talks to another system, and the right one on a scratch
+            # database with no integrations set up. 500 is still a fault.
+            pass
+        elif r.status_code >= 500:
             fail('5xx', f'{role} GET {url}', f'{r.status_code}')
         elif r.status_code == 302 and '/login' in (r.headers.get('Location') or '') and role != 'anonymous':
             bounced.append(url)                         # signed in, but sent to the login page

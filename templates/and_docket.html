@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% block title %}{{ cfg.BRAND }} and Docket — the work, and running the work{% endblock %}
+{% block main %}
+<section class="band" style="padding-top:48px">
+  <div class="wrap">
+    <div class="band-head">
+      <h1 style="font-size:clamp(32px,4.4vw,52px)">Find the work in one place. Run it in the other.</h1>
+      <p>Most tradies pay a lead site to find jobs and a job management system to run them — two
+        subscriptions, two companies, and nothing passing between them. {{ cfg.BRAND }} is the first
+        half. Docket is the second. Win a job here and it’s already in there.</p>
+    </div>
+
+    <div class="split" style="align-items:start;gap:28px">
+      <div class="card">
+        <p class="label">{{ cfg.BRAND }}</p>
+        <h3 style="margin-top:2px">Where the work comes from</h3>
+        <ul class="checklist">
+          <li>Local jobs offered to you by rotation, not by who pays most</li>
+          <li>At most {{ cfg.MAX_QUOTES }} quotes on a job, so quoting is worth the time</li>
+          <li>No lead fees and no credits — one flat price</li>
+          <li>Message the customer, quote with a breakdown, get hired</li>
+        </ul>
+      </div>
+      <div class="card">
+        <p class="label">Docket</p>
+        <h3 style="margin-top:2px">Where the work gets run</h3>
+        <ul class="checklist">
+          <li>Jobs, scheduling and who’s on what this week</li>
+          <li>Site safety: pre-starts, hazards, SSSP, inductions</li>
+          <li>Timesheets, certifications and vehicle checks</li>
+          <li>Invoices, and a client portal for the ones who ask</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="small muted" style="margin-top:14px">Straight up: they’re two products, made by the same
+      people, billed separately. {{ cfg.BRAND }} works exactly the same whether you use Docket or not —
+      jobs are offered by rotation and nothing about that changes.</p>
+  </div>
+</section>
+
+<section class="band band-paper" id="bundle">
+  <div class="wrap">
+    <div class="band-head">
+      <h2>Docket is ${{ cfg.BUNDLE_PRICE }} a month on a {{ cfg.BRAND }} plan</h2>
+      <p>Instead of ${{ cfg.DOCKET_PLANS.starter.price }}–${{ cfg.DOCKET_PLANS.enterprise.price }} on its
+        own. You get the Docket plan that fits the size of work your {{ cfg.BRAND }} plan covers, and
+        Docket’s price is flat — not per user, so putting an apprentice on doesn’t change the bill.</p>
+    </div>
+
+    <table class="table">
+      <caption class="small muted">Monthly, {{ cfg.PRICE_GST_NOTE }}. Month to month on both.</caption>
+      <thead>
+        <tr><th scope="col">Your {{ cfg.BRAND }} plan</th><th scope="col">{{ cfg.BRAND }}</th>
+            <th scope="col">Docket</th><th scope="col">Both</th><th scope="col">You save</th></tr>
+      </thead>
+      <tbody>
+        {% for key in cfg.TIER_ORDER %}{% set c = compared[key] %}{% set b = c.ours %}
+        <tr>
+          <th scope="row">{{ tiers[key].name }}<span class="small muted"> — Docket {{ b.plan_name }},
+            {{ b.covers }}</span></th>
+          <td>${{ b.level_price }}</td>
+          <td>${{ b.price }} <span class="small muted"><s>${{ b.list_price }}</s></span></td>
+          <td><b>${{ b.both }}</b></td>
+          <td>${{ b.saving }}/mo</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <div class="band-head">
+      <h2>What the same two things cost separately</h2>
+      <p>The cheapest each side can be bought for anywhere else, as published. Both numbers are
+        <i>starting</i> prices, and the notes are the part that matters.</p>
+    </div>
+
+    <div class="split" style="align-items:start;gap:28px">
+      {% for job, part in elsewhere.parts.items() %}
+      <div class="card">
+        <p class="label">{{ job|capitalize }}</p>
+        <div class="tier-price" style="font-size:34px">from ${{ part['from'] }}<small> /mo</small></div>
+        <p style="margin:2px 0 0"><b>{{ part.name }}</b> — {{ part.note }}.</p>
+        {% if part.others %}
+        <p class="small muted" style="margin:8px 0 0">Also:
+          {% for o in part.others %}{{ o.name }} from ${{ o['from'] }} ({{ o.note }}){% if not loop.last %};
+          {% endif %}{% endfor %}.</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="card" style="margin-top:22px">
+      <h3 style="margin-top:0">Side by side</h3>
+      <table class="table">
+        <thead>
+          <tr><th scope="col">Both of ours</th><th scope="col">Us</th>
+              <th scope="col">Cheapest of theirs</th><th scope="col">Difference</th></tr>
+        </thead>
+        <tbody>
+          {% for key in cfg.TIER_ORDER %}{% set c = compared[key] %}
+          <tr>
+            <th scope="row">{{ tiers[key].name }} + Docket {{ c.ours.plan_name }}</th>
+            <td><b>${{ c.ours.both }}</b>/mo</td>
+            <td>${{ c.theirs.total }}/mo</td>
+            <td>{% if c.cheaper %}${{ c.difference }} cheaper{% else %}${{ -c.difference }} dearer{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <p style="margin:12px 0 0">On the headline numbers we’re cheaper on the two smaller plans and
+        <b>level pegging on the biggest</b> — and we’d rather say that than pick a dearer competitor to
+        compare against. But the headline isn’t what you end up paying, and here’s why:</p>
+      <ul class="checklist" style="margin-top:10px">
+        <li><b>Their lead price is the start, not the total.</b> On Builderscrack the $79 buys you the right
+          to buy credits, and a job with plenty of tradies chasing it costs more of them. A single
+          worthwhile connection can run past $250. Here, {{ cfg.MAX_QUOTES }} quotes go on a job and you
+          never pay for one.</li>
+        <li><b>Their job-system price is per user.</b> Fergus and Tradify are priced per person, so the bill
+          goes up every time you put an apprentice on. Docket is flat.</li>
+        <li><b>The ${{ elsewhere.parts['running the work']['from'] }} one is capped on jobs, not people.</b>
+          That’s why it’s the cheapest, and it’s why it stops being the cheapest once you’re busy.</li>
+        <li><b>Nothing passes between theirs.</b> You win a job on one and type it into the other. That’s the
+          bit we actually built.</li>
+      </ul>
+      <p class="small muted" style="margin:10px 0 0">Their prices are what they publish, excluding GST,
+        checked on 26 September 2026. Check them yourself before you decide anything — we’d rather you did.</p>
+    </div>
+
+    <p style="margin-top:22px">
+      <a class="btn" href="{{ url_for('signup') }}">Start on {{ cfg.BRAND }}</a>
+      <a class="btn btn-ghost" href="{{ url_for('pricing') }}">See the plans</a>
+    </p>
+  </div>
+</section>
+{% endblock %}

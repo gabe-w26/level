@@ -67,6 +67,36 @@ TIERS = {
 }
 TIER_ORDER = ['small', 'medium', 'large']
 
+# ── Level and Docket together ─────────────────────────────────────────────────
+# The two halves of the same job. Level is where the work comes from; Docket is
+# where the work gets run — scheduling, timesheets, site safety, invoices. A
+# tradie paying for a Level plan gets Docket for a flat add-on instead of its own
+# list price, on the Docket plan that matches their Level tier.
+BUNDLE_PRICE = int(os.environ.get('BUNDLE_PRICE', '19'))
+BUNDLE_TIERS = {'small': 'starter', 'medium': 'professional', 'large': 'enterprise'}
+DOCKET_PLANS = {
+    'starter':      {'name': 'Starter',      'price': 29, 'covers': 'up to 5 people'},
+    'professional': {'name': 'Professional', 'price': 35, 'covers': 'up to 15 people'},
+    'enterprise':   {'name': 'Business',     'price': 40, 'covers': 'any number of people'},
+}
+
+# What the same two jobs cost on the tools tradies actually compare us with.
+# Every figure is a published starting price in NZD excluding GST, and the note
+# is the part that makes a starting price misleading. Checked 2026-09-26 — if
+# you're reading this a long way past that, check them again before quoting them.
+RIVALS = {
+    'finding work': [
+        {'name': 'Builderscrack', 'from': 79,
+         'note': 'plus credits for each job you want to quote on, priced by demand'},
+        {'name': 'NoCowboys', 'from': 83, 'note': 'billed yearly, $999 up front'},
+    ],
+    'running the work': [
+        {'name': 'Fergus', 'from': 53, 'note': 'per user once you pass the first one'},
+        {'name': 'Tradify', 'from': 48, 'note': 'per user, every user'},
+        {'name': 'ServiceM8', 'from': 29, 'note': 'capped on jobs per month, not people'},
+    ],
+}
+
 # The value band a customer picks when posting. A job is visible to every tier
 # whose rank is at least the band's rank.
 VALUE_BANDS = {

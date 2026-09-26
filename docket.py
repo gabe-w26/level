@@ -178,7 +178,8 @@ def worth_mentioning(db, trade_id):
                      (trade_id,)).fetchone()['n'] or 0
     if won < 1:
         return None
-    return {'won': won}
+    import bundle
+    return {'won': won, 'offer': bundle.offer_for(db, trade_id)}
 
 
 # ── Sending, and not minding when it fails ──────────────────────────────────

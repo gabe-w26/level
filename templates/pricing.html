@@ -44,6 +44,22 @@
       </div>
       <p class="small muted" style="margin:14px 0 0">The customer picks a rough budget when they post, and that decides which plans include the job. You can still quote whatever the work really costs.</p>
     </div>
+
+    <div class="card" style="margin-top:24px">
+      <h3 style="margin-top:0">Need to run the jobs as well as find them?</h3>
+      <p class="muted" style="margin:0 0 10px">{{ cfg.BRAND }} is where the work comes from. <b>Docket</b> is
+        where it gets run — scheduling, timesheets, site safety and pre-starts, invoices. On a
+        {{ cfg.BRAND }} plan it’s <b>${{ cfg.BUNDLE_PRICE }} a month {{ cfg.PRICE_GST_NOTE }}</b> instead of
+        ${{ cfg.DOCKET_PLANS.starter.price }}–${{ cfg.DOCKET_PLANS.enterprise.price }}, and jobs you win here
+        land in it without being retyped.</p>
+      <p style="margin:0 0 10px">
+        {% for key in cfg.TIER_ORDER %}{% set b = bundles[key] %}
+        <span class="pill">{{ tiers[key].name }} + Docket — ${{ b.both }}/mo</span>
+        {% endfor %}
+      </p>
+      <a class="btn btn-sm btn-ghost" href="{{ url_for('with_docket') }}">Both together, and what the two
+        halves cost separately</a>
+    </div>
   </div>
 </section>
 

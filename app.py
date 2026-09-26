@@ -22,7 +22,7 @@ import uuid
 from collections import defaultdict
 from datetime import timedelta, timezone
 
-from flask import (Flask, Response, abort, flash, g, redirect, render_template, request,
+from flask import (Flask, Response, abort, flash, g, jsonify, redirect, render_template, request,
                    send_from_directory, session, url_for)
 from werkzeug.security import check_password_hash
 
@@ -30,6 +30,7 @@ import accounts
 import ai
 import backup
 import billing
+import bundle
 import compare
 import credentials
 import deliverability
@@ -405,7 +406,22 @@ def index():
 
 @app.route('/pricing')
 def pricing():
-    return render_template('pricing.html')
+    return render_template('pricing.html',
+                           bundles={tier: bundle.price_for(tier) for tier in config.TIER_ORDER})
+
+
+@app.route('/and-docket')
+def with_docket():
+    """The two halves, and what the two halves cost anywhere else.
+
+    Its own page rather than a panel on the pricing page, because it answers a
+    different question: not "which Level plan" but "do I still need to pay a
+    lead site and a job management system separately". The comparison is built
+    from config.RIVALS so there's one place to keep it honest.
+    """
+    return render_template('and_docket.html',
+                           compared={tier: bundle.compared_with(tier) for tier in config.TIER_ORDER},
+                           elsewhere=bundle.elsewhere())
 
 
 @app.route('/terms')
@@ -1821,6 +1837,7 @@ def trade_docket():
     return render_template('trade/docket.html', t=t, error=error, sent=sent,
                            found=None if t['docket_url'] else docket.look_for(db(), t['user_id']),
                            shared_on=bool(docket.platform()),
+                           offer=bundle.offer_for(db(), t['user_id']),
                            form=request.form if request.method == 'POST' else {})
 
 
@@ -2270,6 +2287,35 @@ def admin_setup():
                                      how=mailer.how(), pinned=bool(config.MAIL_DAILY_CAP),
                                      alerts_left=mailer.allowance(db(), 'alert'),
                                      leads_left=mailer.allowance(db(), 'outreach')))
+
+
+@app.get('/api/bundle')
+def bundle_price():
+    """Docket asking what to charge somebody: `GET /api/bundle?email=…`.
+
+    The one question Docket needs answered and the only one this answers. It
+    holds the shared platform key — the same key the job sync uses — because
+    without it anyone could ask whether an address is on Level, and an address
+    is the one thing about a person that's worth guessing.
+
+    A wrong answer here means somebody is billed wrongly, so it prefers no
+    answer to a guess: an unconfigured Level returns 503 rather than "not
+    entitled", which Docket must treat as "ask again later" and charge its
+    normal price in the meantime.
+    """
+    shared = docket.platform()
+    if not shared:
+        return {'error': 'not configured'}, 503
+    given = (request.headers.get('X-Level-Key') or '').strip()
+    if not given or not hmac.compare_digest(given, shared['key']):
+        abort(403)
+    answer = bundle.entitlement(db(), request.args.get('email') or '')
+    # Cache only as long as the plan is paid up. Docket honouring a stale yes is
+    # the one failure this costs real money, so the header and `until` say the
+    # same thing twice.
+    resp = jsonify(answer)
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
 
 
 @app.post('/hooks/resend')

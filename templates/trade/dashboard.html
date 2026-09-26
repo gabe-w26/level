@@ -28,6 +28,11 @@
           site safety and pre-starts, invoices, and the paperwork that comes with residential work.
           Connect it and every job you win here turns up there on its own — customer, address, access
           notes and your quote — with nothing retyped.</p>
+        {% if docket_hint.offer %}
+        <p style="margin:0 0 8px"><b>${{ docket_hint.offer.price }} a month {{ cfg.PRICE_GST_NOTE }}</b> while
+          you’re on a {{ cfg.BRAND }} plan, instead of ${{ docket_hint.offer.list_price }} — flat, not per
+          user. That’s ${{ docket_hint.offer.both }} for both halves of the job.</p>
+        {% endif %}
         <p class="small muted" style="margin:0 0 10px">Straight up: Docket is made by the same people who
           built {{ cfg.BRAND }}. It’s a separate product you pay for separately, and nothing here works any
           differently whether you use it or not.</p>
