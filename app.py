@@ -138,6 +138,13 @@ def health():
             db().execute('SELECT 1 FROM users LIMIT 1').fetchone()
             return {'status': 'ok', 'database': 'postgres' if _USE_PG else 'sqlite',
                     'free_pilot': config.FREE_PILOT, 'charging': config.CHARGING, 'email': mailer.enabled(), 'texts': sms.enabled(), 'ai': ai.enabled(),
+                    # Whether the front door is shut, and whether that setting
+                    # survived being written down. Chasing "is it on?" across two
+                    # web workers and a settings cache with nothing to look at
+                    # wasted an afternoon; one line here ends that for good.
+                    'waitlist': wl.is_on(),
+                    'waitlist_stored': bool(db().execute(
+                        "SELECT 1 FROM settings WHERE key = 'integration.waitlist'").fetchone()),
                     'version': os.environ.get('RENDER_GIT_COMMIT', 'local')[:7]}, 200
         except Exception as e:
             app.logger.warning('Health check attempt %s failed: %s', attempt, e)

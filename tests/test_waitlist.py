@@ -166,6 +166,33 @@ class TheSwitchInAdminTest(Base):
         self.assertNotIn('waitlist', names)
 
 
+class HealthTellsTheTruthTest(Base):
+    """So "is it actually on in production?" has an answer you can curl.
+
+    Without this the only way to know was to log in as admin, and the two
+    failure modes — the setting never saved, versus saved but the gate not
+    firing — looked identical from outside.
+    """
+
+    def health(self):
+        return self.client().get('/health').get_json()
+
+    def test_it_reports_off_when_it_is_off(self):
+        h = self.health()
+        self.assertFalse(h['waitlist'])
+        self.assertFalse(h['waitlist_stored'])
+
+    def test_it_reports_on_and_stored_when_it_is_on(self):
+        row = self.db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+        admin = row['id'] if row else self.user('admin')
+        self.client(admin).post('/admin/waitlist/switch', data={'on': '1', '_csrf': 't'})
+        import integrations as ig
+        ig.refresh(self.db, force=True)
+        h = self.health()
+        self.assertTrue(h['waitlist'], 'the gate agrees')
+        self.assertTrue(h['waitlist_stored'], 'and it survived being written down')
+
+
 class TheDoorTest(Base):
 
     def test_with_it_off_the_normal_doors_work(self):
