@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% block title %}Waitlist — admin{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Waitlist</h1>
+      <p class="muted">Who’s waiting, and where you could actually open. Sorted by how close each area
+        is to having both sides — not by how many names it has, because a hundred homeowners in a
+        town with two builders isn’t a place you can open.</p>
+    </div>
+    <div class="actions">
+      <span class="pill {{ 'hired' if on }}">{{ 'Front door shut' if on else 'Front door open' }}</span>
+      <a class="btn btn-sm btn-ghost" href="{{ url_for('admin_setup') }}">Change</a>
+    </div>
+  </div>
+
+  {% if not on %}
+  <p class="notice">The waitlist is <b>off</b> — visitors can post jobs and sign up as normal. These
+    are the names collected while it was on. Turn it on in Admin → Setup.</p>
+  {% endif %}
+
+  <div class="card">
+    <div class="admin-stats">
+      <div><b>{{ totals.total }}</b><span class="small muted">on the list</span></div>
+      <div><b>{{ totals.customers }}</b><span class="small muted">homeowners</span></div>
+      <div><b>{{ totals.trades }}</b><span class="small muted">tradies</span></div>
+      <div><b>{{ areas | selectattr('ready') | list | length }}</b><span class="small muted">areas ready to open</span></div>
+    </div>
+    <p class="small muted" style="margin-top:10px">An area counts as ready at
+      <b>{{ ready_trades }} trades</b> and <b>{{ ready_customers }} homeowners</b>. Trades already
+      signed up and paying count towards it — they’re supply whether they came through the waitlist
+      or before it.</p>
+  </div>
+
+  {% if areas %}
+  <div class="card">
+    <h3 style="margin-top:0">Where you could open</h3>
+    <table class="table">
+      <thead>
+        <tr><th scope="col">Area</th><th scope="col">Tradies</th><th scope="col">Homeowners</th>
+            <th scope="col">Still short</th></tr>
+      </thead>
+      <tbody>
+        {% for a in areas %}
+        <tr>
+          <th scope="row">{{ a.name }}<span class="small muted"> — {{ a.region }}</span></th>
+          <td>{{ a.trades }}{% if a.live_trades %} <span class="small muted">({{ a.live_trades }}
+            already signed up)</span>{% endif %}</td>
+          <td>{{ a.customers }}</td>
+          <td>{% if a.ready %}<span class="pill hired">Ready</span>{% else %}{{ a.short }}
+            more{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if trades %}
+  <div class="card">
+    <h3 style="margin-top:0">Trades on the list</h3>
+    <p class="small muted" style="margin:0 0 10px">Who has come to you. The gap between this and what
+      homeowners are asking for is the outreach list.</p>
+    <p style="margin:0">
+      {% for t in trades %}<span class="pill">{{ t.name }} — {{ t.n }}</span> {% endfor %}
+    </p>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h3 style="margin-top:0">Everyone, newest first</h3>
+    {% if rows %}
+    <table class="table">
+      <thead>
+        <tr><th scope="col">Who</th><th scope="col">Side</th><th scope="col">Where</th>
+            <th scope="col">Trade</th><th scope="col">Joined</th></tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <th scope="row">{{ r.email }}{% if r.name %}<span class="small muted"> — {{ r.name }}</span>{% endif %}</th>
+          <td>{{ 'Homeowner' if r.side == 'customer' else 'Tradie' }}</td>
+          <td>{{ r.area_name or '—' }}</td>
+          <td>{{ r.category_name or '—' }}</td>
+          <td class="small muted">{{ r.created_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="small muted" style="margin:10px 0 0">Showing the most recent 200.</p>
+    {% else %}
+    <p class="muted" style="margin:0">Nobody yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

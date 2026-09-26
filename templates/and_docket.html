@@ -169,7 +169,8 @@
     </div>
 
     <p style="margin-top:22px">
-      <a class="btn" href="{{ url_for('signup') }}">Start on {{ cfg.BRAND }}</a>
+      <a class="btn" href="{{ url_for('join_waitlist', side='trade') if waitlist_on else url_for('signup') }}">{{
+        'Get on the list' if waitlist_on else 'Start on ' ~ cfg.BRAND }}</a>
       <a class="btn btn-ghost" href="{{ url_for('pricing') }}">See the plans</a>
     </p>
   </div>

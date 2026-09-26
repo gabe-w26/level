@@ -579,6 +579,20 @@ MIGRATIONS = [
     'ALTER TABLE trades ADD COLUMN docket_hidden INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE trades ADD COLUMN docket_off INTEGER NOT NULL DEFAULT 0',
 
+    # Names collected while the front door is shut. One row per person per side,
+    # so somebody who signs up twice is updated rather than duplicated.
+    '''CREATE TABLE IF NOT EXISTS waitlist (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         side TEXT NOT NULL,
+         email TEXT NOT NULL,
+         name TEXT,
+         area_id INTEGER,
+         category_id INTEGER,
+         created_at TEXT NOT NULL,
+         told_at TEXT)''',
+    'CREATE UNIQUE INDEX IF NOT EXISTS waitlist_once ON waitlist (email, side)',
+    'CREATE INDEX IF NOT EXISTS waitlist_area ON waitlist (area_id, side)',
+
     # A job the customer sent to one business by name, rather than to the board.
     'ALTER TABLE jobs ADD COLUMN direct_trade_id INTEGER',
     'ALTER TABLE jobs ADD COLUMN direct_opened_at TEXT',

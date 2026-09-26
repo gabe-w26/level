@@ -4,6 +4,19 @@
 <section class="hero">
   <div class="wrap hero-grid">
     <div>
+      {% if waitlist_on %}
+      {# Opening an area with nobody in it wastes the one impression you get, so
+         while a region is filling up the front page collects names instead. #}
+      <h1>15 trades see it. {{ cfg.MAX_QUOTES }} can quote. Nobody pays per lead.</h1>
+      <p class="lede">That’s how {{ cfg.BRAND }} works — once it’s open where you are. We’re turning
+        on one area at a time, as soon as there are enough local trades in it to actually quote your
+        job. Leave your email and we’ll tell you the day yours is one of them.</p>
+      <div class="actions" style="margin-top:22px">
+        <a class="btn" href="{{ url_for('join_waitlist', side='customer') }}">I need a tradie</a>
+        <a class="btn btn-ghost" href="{{ url_for('join_waitlist', side='trade') }}">I’m a tradie</a>
+      </div>
+      <a class="trade-link" href="{{ url_for('pricing') }}">See what it’ll cost trades →</a>
+      {% else %}
       <h1>15 trades see it. 6 can quote. Nobody pays per lead.</h1>
       <p class="lede">Post a job free and get up to {{ cfg.MAX_QUOTES }} quotes from local trades — without your phone ringing off the hook. Trades pay one flat monthly price, and get the month back if they don’t win a job.</p>
       <form class="quickstart" action="{{ url_for('post_job') }}" method="get">
@@ -14,6 +27,7 @@
         <button class="btn" type="submit">Post a job — free</button>
       </form>
       <a class="trade-link" href="{{ url_for('pricing') }}">I’m a trade — see how pricing works →</a>
+      {% endif %}
     </div>
 
     <div class="board" data-board>
@@ -146,7 +160,7 @@
       <p class="lede">Subscribe to the size of job you want. Every plan includes all the jobs below it.</p>
       <p class="muted">Quote on five jobs in a month and don’t win one? That month is refunded.</p>
       <div class="actions" style="margin-top:22px">
-        <a class="btn" href="{{ url_for('signup') }}">Join as a trade</a>
+        <a class="btn" href="{{ url_for('join_waitlist', side='trade') if waitlist_on else url_for('signup') }}">{{ 'Get on the list' if waitlist_on else 'Join as a trade' }}</a>
         <a class="btn btn-ghost" href="{{ url_for('pricing') }}">Pricing and guarantee terms</a>
       </div>
     </div>

@@ -93,7 +93,11 @@
           <a href="{{ url_for('index') }}#how">How it works</a>
           <a href="{{ url_for('pricing') }}">For trades</a>
           <a href="{{ url_for('login') }}">Log in</a>
+          {% if waitlist_on %}
+          <a class="btn btn-sm" href="{{ url_for('join_waitlist') }}">Join the waitlist</a>
+          {% else %}
           <a class="btn btn-sm" href="{{ url_for('post_job') }}">Post a job</a>
+          {% endif %}
         {% else %}
           <a href="{{ url_for('admin_home') }}">Overview</a>
           <a href="{{ url_for('admin_inspect') }}">Behind the scenes</a>
@@ -126,7 +130,7 @@
         <p class="small">{% if cfg.FREE_PILOT %}Free for trades while we get going.{% else %}Trade prices are shown {{ cfg.PRICE_GST_NOTE }}.{% endif %} Posting a job is always free.</p>
       </div>
       <ul>
-        <li><a href="{{ url_for('post_job') }}">Post a job</a></li>
+        <li><a href="{{ url_for('join_waitlist', side='customer') if waitlist_on else url_for('post_job') }}">{{ 'Join the waitlist' if waitlist_on else 'Post a job' }}</a></li>
         <li><a href="{{ url_for('index') }}#how">How it works</a></li>
         <li><a href="{{ url_for('pricing') }}">Pricing for trades</a></li>
         <li><a href="{{ url_for('find_index') }}">Find a tradie near you</a></li>
@@ -134,7 +138,7 @@
         <li><a href="{{ url_for('pricing') }}#guarantee">No-job guarantee</a></li>
       </ul>
       <ul>
-        <li><a href="{{ url_for('signup') }}">Join as a trade</a></li>
+        <li><a href="{{ url_for('join_waitlist', side='trade') if waitlist_on else url_for('signup') }}">{{ 'Trades: join the waitlist' if waitlist_on else 'Join as a trade' }}</a></li>
         <li><a href="{{ url_for('with_docket') }}">{{ cfg.BRAND }} and Docket</a></li>
         <li><a href="{{ url_for('login') }}">Log in</a></li>
         <li><a href="{{ url_for('terms') }}">Terms of use</a></li>

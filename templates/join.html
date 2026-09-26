@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% block title %}Join the waitlist — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<section class="band" style="padding-top:48px">
+  <div class="wrap narrow">
+
+    {% if joined %}
+    {% set n = joined.nearby %}
+    <div class="page-head">
+      <div>
+        <h1>{{ 'You’re still on the list' if joined.again else 'You’re on the list' }}</h1>
+        <p class="muted">We’ll email you the day {{ n.area or 'your area' }} opens, and not before.
+          No newsletter, nothing else.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">How {{ n.area }} is looking</h3>
+      <dl class="kv">
+        <dt>Tradies</dt>
+        <dd>{{ n.trades }}{% if n.needs_trades %} <span class="small muted">— {{ n.needs_trades }}
+          more and there’s enough cover to open</span>{% endif %}</dd>
+        <dt>Homeowners</dt>
+        <dd>{{ n.customers }}{% if n.needs_customers %} <span class="small muted">—
+          {{ n.needs_customers }} more</span>{% endif %}</dd>
+      </dl>
+      {% if n.ready %}
+      <p class="notice ok" style="margin:12px 0 0"><b>{{ n.area }} has enough of both.</b> We’re
+        opening it shortly — you’ll hear from us.</p>
+      {% elif joined.side == 'trade' %}
+      <p class="small muted" style="margin:10px 0 0">Straight up: there are {{ n.customers }}
+        homeowner{{ 's' if n.customers != 1 }} waiting near you, so there isn’t work here for you
+        yet. That’s exactly why we haven’t taken your money.</p>
+      {% else %}
+      <p class="small muted" style="margin:10px 0 0">Straight up: there
+        {{ 'is' if n.trades == 1 else 'are' }} {{ n.trades }}
+        trade{{ 's' if n.trades != 1 }} near you so far. We’d rather tell you that than take your
+        job and leave it sitting there with no quotes.</p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">One thing that would help</h3>
+      <p style="margin:0 0 10px">{% if joined.side == 'trade' %}Know other {{ n.area }} trades who’d
+        want local work without paying per lead? Send them this page — the sooner an area fills up,
+        the sooner it opens.{% else %}Know a tradie you already rate? Send them this page. A
+        homeowner who brings their own tradie is how an area gets going.{% endif %}</p>
+      <p class="small muted" style="margin:0">{{ request.url_root }}join</p>
+    </div>
+
+    <p><a class="btn btn-ghost" href="{{ url_for('index') }}">Back to the front page</a></p>
+
+    {% else %}
+    <div class="page-head">
+      <div>
+        <h1>{{ cfg.BRAND }} isn’t open in your area yet</h1>
+        <p class="muted">A site like this is no use to the first person through the door. We’re
+          opening one area at a time, once there are enough tradies in it to actually quote your
+          job — leave your details and we’ll tell you when yours is one of them.</p>
+      </div>
+    </div>
+
+    {% if not on %}
+    <p class="notice ok"><b>{{ cfg.BRAND }} is open.</b> You don’t need the waitlist —
+      <a href="{{ url_for('post_job') }}">post a job</a> or
+      <a href="{{ url_for('signup') }}">join as a trade</a>.</p>
+    {% endif %}
+
+    {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+
+    <form method="post" class="form card">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+      <fieldset>
+        <legend>Which are you?</legend>
+        {% set side = form.get('side') or request.args.get('side') %}
+        <div class="choices">
+          <label class="choice">
+            <input type="radio" name="side" value="customer" {{ 'checked' if side != 'trade' }}
+                   onchange="document.getElementById('trade-only').hidden = true">
+            <span><b>I need a tradie</b><br><span class="small muted">I’ve got work that needs
+              doing</span></span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="side" value="trade" {{ 'checked' if side == 'trade' }}
+                   onchange="document.getElementById('trade-only').hidden = false">
+            <span><b>I’m a tradie</b><br><span class="small muted">I want local work</span></span>
+          </label>
+        </div>
+      </fieldset>
+
+      <div>
+        <label for="email">Email address</label>
+        <input id="email" name="email" type="email" inputmode="email" autocomplete="email" required
+               value="{{ form.get('email', '') }}">
+      </div>
+
+      <div>
+        <label for="name">Your name <span class="small muted">— optional</span></label>
+        <input id="name" name="name" type="text" autocomplete="name" value="{{ form.get('name', '') }}">
+      </div>
+
+      <div>
+        <label for="area">Where are you?</label>
+        <select id="area" name="area" required>
+          <option value="">Pick an area</option>
+          {% for region, list in areas.items() %}
+          <optgroup label="{{ region }}">
+            {% for a in list %}
+            <option value="{{ a.id }}" {{ 'selected' if form.get('area')|string == a.id|string }}>{{ a.name }}</option>
+            {% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div id="trade-only" {{ 'hidden' if side != 'trade' }}>
+        <label for="category">What do you do?</label>
+        <select id="category" name="category">
+          <option value="">Pick a trade</option>
+          {% for c in categories %}
+          <option value="{{ c.id }}" {{ 'selected' if form.get('category')|string == c.id|string }}>{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-foot">
+        <span class="small muted">One email when your area opens. Nothing else, and you can reply
+          “stop” to any of it.</span>
+        <button class="btn" type="submit">Join the waitlist</button>
+      </div>
+    </form>
+
+    <p class="small muted">Already have an account? <a href="{{ url_for('login') }}">Log in</a> —
+      the waitlist only stands in front of new sign-ups.</p>
+    {% endif %}
+
+  </div>
+</section>
+{% endblock %}

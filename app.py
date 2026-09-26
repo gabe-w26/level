@@ -50,6 +50,7 @@ import matching
 import sms
 import thread as threads
 import trust
+import waitlist as wl
 import worksite
 from db import _USE_PG, get_db, release_db
 from engine import RuleError, parse_ts, ts, utcnow
@@ -349,7 +350,8 @@ def _globals():
                                          'AND expires_at > ?', (u['id'], ts(utcnow()))).fetchone()['n']
     return dict(cfg=config, me=u, my_trade=current_trade(), unread=unread, unread_msgs=unread_msgs,
                 leads_waiting=leads_waiting, csrf_token=_csrf_token, demo_tools=DEMO_TOOLS, licences=LICENCES,
-                bands=config.VALUE_BANDS, tiers=config.TIERS, joining_for=_joining_for())
+                bands=config.VALUE_BANDS, tiers=config.TIERS, joining_for=_joining_for(),
+                waitlist_on=wl.is_on())
 
 
 def all_categories():
@@ -483,8 +485,38 @@ def create_user(role, f):
     return cur.lastrowid
 
 
+def _door_shut():
+    """Is this visitor being sent to the waitlist instead?
+
+    Only somebody who isn't already in. Anyone with an account carries on
+    exactly as before — closing the front door must never lock out the people
+    already inside, who are the whole reason there's anything to protect.
+    """
+    return wl.is_on() and not current_user()
+
+
+@app.route('/join', methods=['GET', 'POST'])
+def join_waitlist():
+    """The front door while Level is filling up a region.
+
+    Reachable whether or not the waitlist is switched on, so a link in an email
+    keeps working the week after it's turned off — it just says so.
+    """
+    joined = error = None
+    if request.method == 'POST':
+        try:
+            joined = wl.join(db(), request.form)
+        except wl.WaitlistError as e:
+            error = str(e)
+    return render_template('join.html', joined=joined, error=error, on=wl.is_on(),
+                           areas=areas_by_region(), categories=all_categories(),
+                           form=request.form if request.method == 'POST' else {})
+
+
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
+    if _door_shut():
+        return redirect(url_for('join_waitlist', side='trade'))
     role = request.values.get('role', 'trade')
     role = role if role in ('trade', 'customer') else 'trade'
     if role == 'customer' and request.method == 'GET':
@@ -771,6 +803,8 @@ def ask_trade(trade_id):
 
 @app.route('/post', methods=['GET', 'POST'])
 def post_job():
+    if _door_shut():
+        return redirect(url_for('join_waitlist', side='customer'))
     u = current_user()
     if u and u['role'] != 'customer':
         flash('Trade and admin accounts can’t post jobs. Log out and post with a customer account.', 'error')
@@ -2207,6 +2241,12 @@ def sitemap():
 # ── Admin: setup (email, texts, AI, site address) ─────────────────────────────
 
 SETUP_GROUPS = [
+    ('Waitlist',
+     'Shuts the front door while you fill a region. New visitors are asked for their email and area '
+     'instead of posting a job or signing up — everyone who already has an account carries on exactly '
+     'as before. Put 1 in the box to switch it on, and clear it the day you open. '
+     'See who’s waiting under Admin → Waitlist.',
+     [('waitlist', 'Waitlist on (1 = yes, blank = no)', '1')]),
     ('Email', 'So customers and tradies get alerts, and people can reset their passwords.',
      [('smtp_host', 'Email server', 'smtp.gmail.com'), ('smtp_port', 'Port', '587'),
       ('smtp_user', 'Username (your email address)', 'you@gmail.com'),
@@ -2380,6 +2420,26 @@ def _resend_signature_ok(secret, raw):
     signed = f'{msg_id}.{stamp}.'.encode() + raw
     want = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
     return any(secrets.compare_digest(part.split(',', 1)[-1], want) for part in sent.split(' ') if ',' in part)
+
+
+@app.get('/admin/waitlist')
+@requires('admin')
+def admin_waitlist():
+    """Who's waiting, and — the only question that matters — where you could open.
+
+    Sorted by how close an area is to having both sides rather than by how many
+    names it has, because a hundred homeowners in a town with two builders is
+    not a place you can open.
+    """
+    return render_template('admin/waitlist.html',
+                           areas=wl.by_area(db()), totals=wl.totals(db()),
+                           trades=wl.trades_wanted(db()), on=wl.is_on(),
+                           ready_trades=wl.READY_TRADES, ready_customers=wl.READY_CUSTOMERS,
+                           rows=db().execute(
+                               'SELECT w.*, a.name AS area_name, c.name AS category_name '
+                               'FROM waitlist w LEFT JOIN areas a ON a.id = w.area_id '
+                               'LEFT JOIN categories c ON c.id = w.category_id '
+                               'ORDER BY w.id DESC LIMIT 200').fetchall())
 
 
 @app.get('/admin/coverage')
