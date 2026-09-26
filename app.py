@@ -2319,6 +2319,27 @@ def bundle_price():
     return resp
 
 
+@app.get('/api/work')
+def bundle_work():
+    """Docket's Level tab asking what work is waiting: `GET /api/work?email=…`.
+
+    Same shared key and the same reasoning as /api/bundle. What comes back is
+    deliberately thin — the trade, the suburb, the rough size and the deadline —
+    because this is a prompt to come and look at Level, not a copy of Level
+    living inside Docket, and the key that opens it is a shared secret rather
+    than the tradie's own login. A customer's name and address stay here.
+    """
+    shared = docket.platform()
+    if not shared:
+        return {'error': 'not configured'}, 503
+    given = (request.headers.get('X-Level-Key') or '').strip()
+    if not given or not hmac.compare_digest(given, shared['key']):
+        abort(403)
+    resp = jsonify(bundle.work_waiting(db(), request.args.get('email') or ''))
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
+
 @app.post('/hooks/resend')
 def resend_hook():
     """Resend telling us an address bounced or somebody pressed "spam".

@@ -355,6 +355,104 @@ class TheApiTest(Base):
         self.assertIsNone(body['price'])
 
 
+class WorkForDocketsTabTest(Base):
+    """What Level hands Docket for its Find Work tab.
+
+    The rule that matters is what is NOT in it. The platform key is a shared
+    secret between two systems, not this tradie's own login, so a customer's
+    name, address and words stay on Level. Docket is being given a reason to
+    click through, not a copy of the job.
+    """
+
+    def a_job(self, suburb='Karori', title='Rebuild the back steps'):
+        customer = self.db.execute(
+            'INSERT INTO users (role, email, password_hash, name, created_at) VALUES (?,?,?,?,?)',
+            ('customer', f'c{self.n}@test.nz', hash_password('password123'),
+             'Mrs Wilberforce', ts(utcnow()))).lastrowid
+        self.n += 1
+        self.db.commit()
+        import engine
+        return engine.post_job(self.db, customer, dict(
+            category_id=self.cat, area_id=self.area, suburb=suburb, title=title,
+            description='Four treads, treated pine, handrail one side, side gate is padlocked.',
+            value_band='medium', timing='weeks', property_type='house'), at=utcnow())[0]
+
+    def test_it_lists_the_work_waiting(self):
+        self.a_job()
+        self.a_job(suburb='Brooklyn', title='Reline a bedroom ceiling')
+        w = bundle.work_waiting(self.db, self.email)
+        self.assertTrue(w['on_level'])
+        self.assertEqual(w['waiting'], 2)
+        self.assertEqual({j['suburb'] for j in w['jobs']}, {'Karori', 'Brooklyn'})
+
+    def test_it_hands_over_nothing_about_the_customer(self):
+        self.a_job()
+        w = bundle.work_waiting(self.db, self.email)
+        blob = repr(w)
+        self.assertNotIn('Wilberforce', blob, 'the customer’s name is not Docket’s to hold')
+        self.assertNotIn('padlocked', blob, 'nor the description')
+        self.assertNotIn('@test.nz', blob, 'nor any address')
+        for job in w['jobs']:
+            self.assertEqual(set(job), {'title', 'suburb', 'area', 'trade', 'size', 'closes'})
+
+    def test_it_says_when_the_soonest_one_closes(self):
+        self.a_job()
+        w = bundle.work_waiting(self.db, self.email)
+        self.assertEqual(w['deadline'], min(j['closes'] for j in w['jobs']))
+
+    def test_an_expired_offer_is_not_offered_up(self):
+        self.a_job()
+        self.db.execute("UPDATE offers SET expires_at = ? WHERE trade_id = ?",
+                        (ts(utcnow() - timedelta(hours=1)), self.trade))
+        self.db.commit()
+        self.assertEqual(bundle.work_waiting(self.db, self.email)['waiting'], 0)
+
+    def test_it_is_capped_so_one_tab_cannot_pull_the_whole_board(self):
+        for i in range(9):
+            self.a_job(title=f'Job {i}')
+        w = bundle.work_waiting(self.db, self.email, limit=4)
+        self.assertEqual(len(w['jobs']), 4)
+        self.assertEqual(w['waiting'], 4)
+
+    def test_somebody_who_is_not_on_level_gets_a_flat_no(self):
+        w = bundle.work_waiting(self.db, 'nobody@test.nz')
+        self.assertFalse(w['on_level'])
+        self.assertEqual(w['jobs'], [])
+
+    def test_a_closed_account_gets_a_flat_no(self):
+        self.db.execute('UPDATE users SET closed_at = ? WHERE id = ?', (ts(utcnow()), self.trade))
+        self.db.commit()
+        self.assertFalse(bundle.work_waiting(self.db, self.email)['on_level'])
+
+    def test_a_paused_or_unpaid_account_says_which(self):
+        """The tab explains why it's quiet instead of looking broken."""
+        self.db.execute('UPDATE trades SET paused = 1 WHERE user_id = ?', (self.trade,))
+        self.db.commit()
+        self.assertTrue(bundle.work_waiting(self.db, self.email)['paused'])
+        self.db.execute("UPDATE trades SET sub_status = 'cancelled' WHERE user_id = ?", (self.trade,))
+        self.db.commit()
+        self.assertFalse(bundle.work_waiting(self.db, self.email)['subscribed'])
+
+    def test_the_endpoint_needs_the_shared_key(self):
+        self.connected()
+        c = A.app.test_client()
+        self.assertEqual(c.get('/api/work', query_string={'email': self.email}).status_code, 403)
+        r = c.get('/api/work', query_string={'email': self.email}, headers={'X-Level-Key': KEY})
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.get_json()['on_level'])
+
+    def test_an_unconfigured_level_says_ask_again_later(self):
+        self.assertEqual(A.app.test_client().get(
+            '/api/work', query_string={'email': self.email},
+            headers={'X-Level-Key': KEY}).status_code, 503)
+
+    def test_the_answer_is_never_cached_by_anything_in_between(self):
+        self.connected()
+        r = A.app.test_client().get('/api/work', query_string={'email': self.email},
+                                    headers={'X-Level-Key': KEY})
+        self.assertEqual(r.headers.get('Cache-Control'), 'no-store')
+
+
 class ThePagesTest(Base):
 
     def test_the_comparison_page_shows_both_totals(self):

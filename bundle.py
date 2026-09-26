@@ -29,7 +29,7 @@ address is on Level, so the answer carries the minimum to price an account and
 nothing else about the person.
 """
 import config
-from engine import is_subscribed, parse_ts, utcnow
+from engine import is_subscribed, parse_ts, ts, utcnow
 
 
 def docket_plan_for(tier):
@@ -204,6 +204,46 @@ def entitlement(db, email, at=None):
         # Named so Docket can say why the price is what it is, without Docket
         # needing to know anything about how Level's plans work.
         'because': f"On Level’s {config.TIERS[t['tier']]['name'].lower()} plan",
+    }
+
+
+def work_waiting(db, email, at=None, limit=6):
+    """What work is waiting for the holder of this address, for Docket's Level tab.
+
+    Deliberately thin. Docket is showing a tradie a reason to click through to
+    Level, not reproducing Level inside itself, so this carries only what's needed
+    to decide whether to go and look: the trade, the suburb, the rough size, and
+    how long is left. No customer name, no street address, no contact details, no
+    description — none of that is Docket's to hold, and the platform key that
+    opens this endpoint is a shared secret rather than this tradie's own login.
+
+    `deadline` is the soonest offer expiry, which is the only urgent thing here.
+    """
+    at = at or utcnow()
+    blank = {'on_level': False, 'waiting': 0, 'quoted': 0, 'jobs': [], 'deadline': None}
+    t = db.execute('SELECT t.*, u.closed_at FROM trades t JOIN users u ON u.id = t.user_id '
+                   'WHERE lower(u.email) = lower(?)', ((email or '').strip(),)).fetchone()
+    if not t or t['closed_at']:
+        return blank
+    rows = db.execute(
+        'SELECT j.title, j.suburb, j.value_band, o.expires_at, c.name AS category_name, '
+        'a.name AS area_name FROM offers o JOIN jobs j ON j.id = o.job_id '
+        'JOIN categories c ON c.id = j.category_id JOIN areas a ON a.id = j.area_id '
+        "WHERE o.trade_id = ? AND o.status = 'active' AND o.expires_at > ? "
+        'ORDER BY o.expires_at LIMIT ?', (t['user_id'], ts(at), limit)).fetchall()
+    quoted = db.execute(
+        "SELECT COUNT(*) AS n FROM quotes q JOIN jobs j ON j.id = q.job_id "
+        "WHERE q.trade_id = ? AND j.status = 'open'", (t['user_id'],)).fetchone()['n'] or 0
+    return {
+        'on_level': True,
+        'subscribed': is_subscribed(t, at),
+        'paused': bool(t['paused']),
+        'waiting': len(rows),
+        'quoted': quoted,
+        'deadline': rows[0]['expires_at'] if rows else None,
+        'jobs': [{'title': r['title'], 'suburb': r['suburb'], 'area': r['area_name'],
+                  'trade': r['category_name'], 'size': config.VALUE_BANDS[r['value_band']]['short'],
+                  'closes': r['expires_at']} for r in rows],
     }
 
 
