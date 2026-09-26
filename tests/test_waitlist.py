@@ -114,6 +114,58 @@ class TheSwitchTest(Base):
         self.assertFalse(wl.is_on())
 
 
+class TheSwitchInAdminTest(Base):
+    """One button, both ways.
+
+    This started life as a text box in Admin → Setup, which was wrong: that form
+    is for credentials and only saves what you type into it, so you could switch
+    the waitlist on there and never switch it off. The bug reached production.
+    """
+
+    def setUp(self):
+        super().setUp()
+        row = self.db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+        self.admin = row['id'] if row else self.user('admin')
+
+    def flip(self, on):
+        return self.client(self.admin).post('/admin/waitlist/switch',
+                                            data={'on': '1' if on else '0', '_csrf': 't'},
+                                            follow_redirects=True)
+
+    def test_one_click_shuts_it(self):
+        self.assertEqual(self.flip(True).status_code, 200)
+        import integrations as ig
+        ig.refresh(self.db, force=True)
+        self.assertTrue(wl.is_on())
+        self.assertEqual(self.client().get('/post').status_code, 302)
+
+    def test_one_click_opens_it_again(self):
+        """The half that the Setup box could not do."""
+        self.flip(True)
+        self.flip(False)
+        import integrations as ig
+        ig.refresh(self.db, force=True)
+        self.assertFalse(wl.is_on())
+        self.assertEqual(self.client().get('/post').status_code, 200)
+
+    def test_it_is_not_a_get(self):
+        """A link that shuts the shop is one stray crawler away from a bad day."""
+        self.assertEqual(self.client(self.admin).get('/admin/waitlist/switch').status_code, 405)
+
+    def test_only_an_admin_can_touch_it(self):
+        for who in (None, self.user('customer'), self.user('trade')):
+            r = self.client(who).post('/admin/waitlist/switch', data={'on': '1', '_csrf': 't'})
+            self.assertIn(r.status_code, (302, 403, 404), 'not for anybody else')
+        import integrations as ig
+        ig.refresh(self.db, force=True)
+        self.assertFalse(wl.is_on())
+
+    def test_the_credentials_form_no_longer_pretends_to_own_it(self):
+        """It couldn't turn it off, so it shouldn't offer to turn it on."""
+        names = [n for _, _, fields in A.SETUP_GROUPS for n, _, _ in fields]
+        self.assertNotIn('waitlist', names)
+
+
 class TheDoorTest(Base):
 
     def test_with_it_off_the_normal_doors_work(self):

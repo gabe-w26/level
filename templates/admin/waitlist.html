@@ -11,13 +11,17 @@
     </div>
     <div class="actions">
       <span class="pill {{ 'hired' if on }}">{{ 'Front door shut' if on else 'Front door open' }}</span>
-      <a class="btn btn-sm btn-ghost" href="{{ url_for('admin_setup') }}">Change</a>
+      <form method="post" action="{{ url_for('admin_waitlist_switch') }}" class="inline">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="on" value="{{ '0' if on else '1' }}">
+        <button class="btn btn-sm{{ ' btn-ghost' if on }}">{{ 'Open the front door' if on else 'Shut the front door' }}</button>
+      </form>
     </div>
   </div>
 
   {% if not on %}
   <p class="notice">The waitlist is <b>off</b> — visitors can post jobs and sign up as normal. These
-    are the names collected while it was on. Turn it on in Admin → Setup.</p>
+    are the names collected while it was on. Use the button above to shut it.</p>
   {% endif %}
 
   <div class="card">

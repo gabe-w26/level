@@ -2241,12 +2241,6 @@ def sitemap():
 # ── Admin: setup (email, texts, AI, site address) ─────────────────────────────
 
 SETUP_GROUPS = [
-    ('Waitlist',
-     'Shuts the front door while you fill a region. New visitors are asked for their email and area '
-     'instead of posting a job or signing up — everyone who already has an account carries on exactly '
-     'as before. Put 1 in the box to switch it on, and clear it the day you open. '
-     'See who’s waiting under Admin → Waitlist.',
-     [('waitlist', 'Waitlist on (1 = yes, blank = no)', '1')]),
     ('Email', 'So customers and tradies get alerts, and people can reset their passwords.',
      [('smtp_host', 'Email server', 'smtp.gmail.com'), ('smtp_port', 'Port', '587'),
       ('smtp_user', 'Username (your email address)', 'you@gmail.com'),
@@ -2420,6 +2414,24 @@ def _resend_signature_ok(secret, raw):
     signed = f'{msg_id}.{stamp}.'.encode() + raw
     want = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
     return any(secrets.compare_digest(part.split(',', 1)[-1], want) for part in sent.split(' ') if ',' in part)
+
+
+@app.post('/admin/waitlist/switch')
+@requires('admin')
+def admin_waitlist_switch():
+    """Shut the front door, or open it. One button, both ways.
+
+    Deliberately not a field in Admin → Setup: that form is for credentials and
+    only saves what you type into it, so "leave it blank to keep what's saved"
+    means you can switch a toggle on there and never switch it off. A thing with
+    two states needs a control with two states.
+    """
+    on = request.form.get('on') == '1'
+    integrations.save(db(), {'waitlist': '1' if on else ''})
+    flash('The front door is shut — new visitors go to the waitlist. Everyone with an account '
+          'carries on as normal.' if on else
+          'The front door is open. Anyone can post a job or sign up.')
+    return redirect(url_for('admin_waitlist'))
 
 
 @app.get('/admin/waitlist')
