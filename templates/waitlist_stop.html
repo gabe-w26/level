@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}Off the list — {{ cfg.BRAND }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="auth">
+    {# No confirmation step. They clicked a link in an email asking to be left
+       alone; making them press a second button to prove it is the behaviour
+       this page exists to apologise for. #}
+    {% if gone %}
+      <h1 style="font-size:34px">You’re off the list</h1>
+      <p class="muted">We’ve removed <b>{{ email }}</b>. You won’t hear from us again — not when
+        your area opens, not at all.</p>
+      <p class="small muted">If that was a mistake you can <a href="{{ url_for('join_waitlist') }}">put
+        your name back down</a>, and nothing is held against you for leaving.</p>
+    {% else %}
+      <h1 style="font-size:34px">That link’s already been used</h1>
+      <p class="muted">Either you’ve come off the list already, or the link has expired. Either way
+        you’re not on it, so you won’t be emailed.</p>
+      <p class="small muted">If you’re still getting mail from us, reply to any of it with
+        “stop” and we’ll sort it by hand.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

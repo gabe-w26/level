@@ -205,7 +205,7 @@ def _csrf_token():
 # by pressing it. Rejecting these would be far worse: we'd be telling Gmail we
 # honour one-click and then returning 400, which is exactly what gets a sender
 # marked down.
-NO_CSRF = {'stripe_webhook', 'outreach_stop', 'unsubscribe', 'resend_hook'}
+NO_CSRF = {'stripe_webhook', 'outreach_stop', 'unsubscribe', 'resend_hook', 'waitlist_stop'}
 
 
 @app.before_request
@@ -2437,6 +2437,44 @@ def _resend_signature_ok(secret, raw):
     return any(secrets.compare_digest(part.split(',', 1)[-1], want) for part in sent.split(' ') if ',' in part)
 
 
+@app.post('/admin/waitlist/open')
+@requires('admin')
+def admin_waitlist_open():
+    """Tell everyone waiting in one area that it's open.
+
+    The whole point of collecting the names. Safe to press twice — people are
+    marked told one at a time, and only once their email actually went, so a
+    run that stops halfway just needs running again.
+    """
+    area_id = request.form.get('area', type=int)
+    try:
+        out = wl.open_area(db(), area_id)
+    except wl.WaitlistError as e:
+        flash(str(e), 'error')
+        return redirect(url_for('admin_waitlist'))
+    if out['sent']:
+        flash(f'Told {out["sent"]} {"person" if out["sent"] == 1 else "people"} that '
+              f'{out["area"]} is open.' + (f' {out["left"]} still to go — press it again.'
+                                           if out['left'] else ''))
+    if out['failed']:
+        flash(f'{out["failed"]} didn’t send' +
+              ('. Email isn’t set up, so nothing went out — they keep their place and nobody '
+               'has been marked as told.' if not mailer.enabled() else
+               ' — they keep their place and will go next time.'), 'error')
+    return redirect(url_for('admin_waitlist'))
+
+
+@app.route('/waitlist/stop/<token>', methods=['GET', 'POST'])
+def waitlist_stop(token):
+    """Off the list, in one click. No login, no confirmation step.
+
+    Both verbs on purpose: a mail client's one-click unsubscribe POSTs here,
+    and a person clicking the link in the message GETs it.
+    """
+    email = wl.forget(db(), token)
+    return render_template('waitlist_stop.html', email=email, gone=bool(email))
+
+
 @app.post('/admin/waitlist/switch')
 @requires('admin')
 def admin_waitlist_switch():
@@ -2488,6 +2526,7 @@ def admin_waitlist():
                            areas=wl.by_area(db()), totals=wl.totals(db()),
                            trades=wl.trades_wanted(db()), on=wl.is_on(),
                            from_env=integrations.from_env('waitlist'),
+                           email_on=mailer.enabled(),
                            ready_trades=wl.READY_TRADES, ready_customers=wl.READY_CUSTOMERS,
                            rows=db().execute(
                                'SELECT w.*, a.name AS area_name, c.name AS category_name '

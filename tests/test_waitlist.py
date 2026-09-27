@@ -578,6 +578,143 @@ class WhatPeopleAreToldTest(Base):
         self.assertEqual(out['nearby']['needs_trades'], 0)
 
 
+class TellingThemItIsOpenTest(Base):
+    """The one email these people agreed to — and the ways it could become two.
+
+    Everything here is about not breaking the single promise on the join page.
+    Someone who gets told twice, or who gets marked as told when nothing was
+    sent, is worse off than someone who was never on the list.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.sent = []
+        import mailer
+        self.real_send = mailer.send
+        mailer.send = self.fake_send
+
+    def tearDown(self):
+        import mailer
+        mailer.send = self.real_send
+        super().tearDown()
+
+    def fake_send(self, to, name, subject, body, unsubscribe_url=None, reply_to=None):
+        self.sent.append({'to': to, 'subject': subject, 'body': body, 'unsub': unsubscribe_url})
+        return True
+
+    def waiting(self, n=3, side='customer'):
+        for i in range(n):
+            wl.join(self.db, self.form(side=side, email=f'{side}{i}@test.nz',
+                                       category=str(self.cat) if side == 'trade' else None))
+
+    def test_everyone_waiting_is_told_once(self):
+        self.waiting(3)
+        out = wl.open_area(self.db, self.area)
+        self.assertEqual(out['sent'], 3)
+        self.assertEqual(len(self.sent), 3)
+
+    def test_running_it_again_tells_nobody_twice(self):
+        self.waiting(3)
+        wl.open_area(self.db, self.area)
+        again = wl.open_area(self.db, self.area)
+        self.assertEqual(again['sent'], 0)
+        self.assertEqual(len(self.sent), 3, 'the single email stays single')
+
+    def test_a_send_that_fails_leaves_them_to_be_told_later(self):
+        """Marking somebody told when nothing went out loses them silently."""
+        import mailer
+        mailer.send = lambda *a, **k: False
+        self.waiting(2)
+        out = wl.open_area(self.db, self.area)
+        self.assertEqual(out['sent'], 0)
+        self.assertEqual(out['failed'], 2)
+        self.assertEqual(out['left'], 2)
+        told = self.db.execute('SELECT COUNT(*) AS n FROM waitlist WHERE told_at IS NOT NULL').fetchone()['n']
+        self.assertEqual(told, 0, 'nobody may be marked told when nothing was sent')
+
+    def test_a_half_finished_run_can_simply_be_run_again(self):
+        self.waiting(4)
+        first = wl.open_area(self.db, self.area, limit=2)
+        self.assertEqual(first['sent'], 2)
+        self.assertEqual(first['left'], 2)
+        second = wl.open_area(self.db, self.area)
+        self.assertEqual(second['sent'], 2)
+        self.assertEqual(second['left'], 0)
+
+    def test_only_that_area_is_told(self):
+        self.waiting(2)
+        wl.join(self.db, self.form(side='customer', email='elsewhere@test.nz',
+                                   area=str(self.other_area)))
+        wl.open_area(self.db, self.area)
+        self.assertNotIn('elsewhere@test.nz', [m['to'] for m in self.sent])
+
+    def test_each_side_is_told_the_thing_that_matters_to_them(self):
+        self.waiting(1, side='customer')
+        self.waiting(1, side='trade')
+        wl.open_area(self.db, self.area)
+        to_customer = next(m for m in self.sent if m['to'].startswith('customer'))
+        to_trade = next(m for m in self.sent if m['to'].startswith('trade'))
+        self.assertIn('/post', to_customer['body'])
+        self.assertIn('/signup', to_trade['body'])
+        self.assertIn('refunded', to_trade['body'], 'the guarantee is the tradie’s reason to bother')
+
+    def test_every_message_carries_a_real_way_out(self):
+        self.waiting(2)
+        wl.open_area(self.db, self.area)
+        for m in self.sent:
+            self.assertTrue(m['unsub'], 'no unsubscribe link')
+            self.assertIn('/waitlist/stop/', m['unsub'])
+
+    def test_that_link_actually_removes_them(self):
+        self.waiting(1)
+        wl.open_area(self.db, self.area)
+        token = self.sent[0]['unsub'].rsplit('/', 1)[-1]
+        page = self.client().get(f'/waitlist/stop/{token}').data.decode()
+        self.assertIn('off the list', page)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) AS n FROM waitlist').fetchone()['n'], 0)
+
+    def test_a_used_link_says_so_rather_than_erroring(self):
+        self.waiting(1)
+        wl.open_area(self.db, self.area)
+        token = self.sent[0]['unsub'].rsplit('/', 1)[-1]
+        self.client().get(f'/waitlist/stop/{token}')
+        r = self.client().get(f'/waitlist/stop/{token}')
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('already been used', r.data.decode())
+
+    def test_one_click_unsubscribe_works_without_a_form_token(self):
+        """Mail clients POST to that header's URL with no CSRF token."""
+        self.waiting(1)
+        wl.open_area(self.db, self.area)
+        token = self.sent[0]['unsub'].rsplit('/', 1)[-1]
+        r = A.app.test_client().post(f'/waitlist/stop/{token}')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) AS n FROM waitlist').fetchone()['n'], 0)
+
+    def test_an_admin_can_find_the_page_without_being_told_the_url(self):
+        """It wasn't in the admin nav, so the only way to reach the one control
+        that opens a region was to already know the address."""
+        row = self.db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+        admin = row['id'] if row else self.user('admin')
+        page = self.client(admin).get('/admin').data.decode()
+        self.assertIn('/admin/waitlist', page)
+
+    def test_an_admin_can_do_it_from_the_page(self):
+        self.waiting(2)
+        row = self.db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+        admin = row['id'] if row else self.user('admin')
+        r = self.client(admin).post('/admin/waitlist/open',
+                                    data={'area': self.area, '_csrf': 't'}, follow_redirects=True)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(self.sent), 2)
+
+    def test_nobody_else_can(self):
+        self.waiting(1)
+        for who in (None, self.user('customer'), self.user('trade')):
+            self.client(who).post('/admin/waitlist/open', data={'area': self.area, '_csrf': 't'})
+        self.assertEqual(self.sent, [], 'only an admin opens an area')
+
+
 class WhereToOpenTest(Base):
 
     def test_the_closest_area_comes_first(self):

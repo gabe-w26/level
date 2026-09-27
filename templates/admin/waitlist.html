@@ -29,6 +29,14 @@
     Delete that variable in Render to get the switch back.</p>
   {% endif %}
 
+  {% if not email_on %}
+  <p class="notice error"><b>Email isn’t set up, so nothing can be sent.</b> Names are still being
+    collected, but the one thing they were promised — a message the day their area opens — can’t
+    go out. Opening an area will report every send as failed and mark nobody as told, so nothing
+    is lost; it just can’t happen until email works. Set it up in
+    <a href="{{ url_for('admin_setup') }}">Admin → Setup</a>.</p>
+  {% endif %}
+
   {% if not on %}
   <p class="notice">The waitlist is <b>off</b> — visitors can post jobs and sign up as normal. These
     are the names collected while it was on. Use the button above to shut it.</p>
@@ -53,7 +61,7 @@
     <table class="table">
       <thead>
         <tr><th scope="col">Area</th><th scope="col">Tradies</th><th scope="col">Homeowners</th>
-            <th scope="col">Still short</th></tr>
+            <th scope="col">Still short</th><th scope="col">Open it</th></tr>
       </thead>
       <tbody>
         {% for a in areas %}
@@ -64,6 +72,17 @@
           <td>{{ a.customers }}</td>
           <td>{% if a.ready %}<span class="pill hired">Ready</span>{% else %}{{ a.short }}
             more{% endif %}</td>
+          <td>
+            {% if a.untold %}
+            <form method="post" action="{{ url_for('admin_waitlist_open') }}" class="inline"
+                  onsubmit="return confirm('Email the {{ a.untold }} {{ 'person' if a.untold == 1 else 'people' }} waiting in {{ a.name }} to say it is open?')">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <input type="hidden" name="area" value="{{ a.id }}">
+              <button class="btn btn-sm{{ '' if a.ready else ' btn-ghost' }}">Tell {{ a.untold }}
+                {{ 'person' if a.untold == 1 else 'people' }}</button>
+            </form>
+            {% else %}<span class="small muted">all told</span>{% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>

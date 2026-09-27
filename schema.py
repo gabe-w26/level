@@ -595,6 +595,9 @@ MIGRATIONS = [
     # the area opens — otherwise closing the door quietly cancels the programme
     # that brings people to it.
     'ALTER TABLE waitlist ADD COLUMN invited_by TEXT',
+    # So the one email we promised can carry a real unsubscribe link. These
+    # people have no account, so there's no users.unsub_token to borrow.
+    'ALTER TABLE waitlist ADD COLUMN unsub_token TEXT',
     'CREATE INDEX IF NOT EXISTS waitlist_area ON waitlist (area_id, side)',
 
     # A job the customer sent to one business by name, rather than to the board.
