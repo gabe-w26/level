@@ -6,11 +6,25 @@
 <div class="wrap page narrow">
   <h1 style="font-size:clamp(30px,4vw,44px)">Find a tradie near you</h1>
   <p class="lede">Pick your area to see the trades that cover it, what each job usually involves, and what to check before you hire.</p>
-  <p style="margin:20px 0"><a class="btn" href="{{ url_for('post_job') }}">Post a job — free</a></p>
+  <p style="margin:20px 0">
+    {% if waitlist_on %}
+    <a class="btn" href="{{ url_for('join_waitlist', side='customer') }}">Tell me when my area opens</a>
+    {% else %}
+    <a class="btn" href="{{ url_for('post_job') }}">Post a job — free</a>
+    {% endif %}
+  </p>
 
+  {# A run of underlined links reads as a sitemap. These are places, so they get
+     the shape of a place list: one tap target each, ruled by region. #}
   {% for region, areas in regions.items() %}
-  <div class="section-title"><h2 style="font-size:20px">{{ region }}</h2></div>
-  <p class="small">{% for a in areas %}<a href="{{ url_for('find_area', area_slug=a.slug) }}">{{ a.name }}</a>{{ ' · ' if not loop.last }}{% endfor %}</p>
+  <div class="region-block">
+    <h2 class="region-name">{{ region }}</h2>
+    <ul class="area-list">
+      {% for a in areas %}
+      <li><a href="{{ url_for('find_area', area_slug=a.slug) }}">{{ a.name }}</a></li>
+      {% endfor %}
+    </ul>
+  </div>
   {% endfor %}
 </div>
 {% endblock %}

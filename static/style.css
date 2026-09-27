@@ -675,3 +675,18 @@ body.is-offline .offline-banner { display: block; }
   .ledger-col + .ledger-col { border-left: 0; border-top: 1px solid #3A4654; padding-left: 0; }
   .ledger-col:first-child { padding-right: 0; }
 }
+
+/* ── Area index ────────────────────────────────────────────────────────────
+   A long run of underlined links reads as a sitemap and is miserable to tap on
+   a phone. These are places, so they get the shape of a place list: a ruled
+   band per region, and one honest tap target per area. */
+.region-block { border-top: 1px solid var(--rule); padding: 18px 0 6px; }
+.region-block:first-of-type { border-top: 2px solid var(--ink); }
+.region-name { font-family: var(--f-mono); font-size: 11.5px; font-weight: 600; letter-spacing: .08em;
+               text-transform: uppercase; color: var(--ink-3); margin: 0 0 12px; }
+.area-list { list-style: none; margin: 0; padding: 0;
+             display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; }
+.area-list a { display: block; padding: 9px 12px; border: 1px solid var(--rule-soft); border-radius: 8px;
+               background: var(--paper); color: var(--ink); text-decoration: none; font-weight: 600;
+               font-size: 15px; transition: border-color .15s, background .15s; }
+.area-list a:hover { border-color: var(--chalk); background: var(--chalk-wash); color: var(--chalk-deep); }

@@ -336,13 +336,30 @@ class TheDoorTest(Base):
         self.assertNotIn('Post a job — free', page)
 
     def test_no_page_still_invites_a_visitor_through_a_shut_door(self):
-        """A nav or footer link saying "Post a job" while the door is shut sends
-        somebody to a redirect and makes us look broken."""
+        """Every public page, not a list I remembered to keep up to date.
+
+        The hardcoded four missed /find, which kept a "Post a job — free" button
+        pointing at a door that redirects. Walking the URL map means a page added
+        next month is covered without anyone thinking about it.
+        """
         self.shut(True)
-        for path in ('/', '/pricing', '/and-docket', '/join'):
-            page = self.client().get(path).data.decode()
-            self.assertNotIn('>Post a job<', page, path)
-            self.assertNotIn('>Join as a trade<', page, path)
+        checked = 0
+        for rule in A.app.url_map.iter_rules():
+            if 'GET' not in rule.methods or rule.arguments or rule.endpoint == 'static':
+                continue
+            path = str(rule.rule)
+            if path.startswith(('/admin', '/api', '/trade', '/customer', '/hooks')):
+                continue
+            r = self.client().get(path)
+            if r.status_code != 200:
+                continue                      # gated or a redirect — not a public page
+            page = r.data.decode()
+            checked += 1
+            for invitation in ('>Post a job<', '>Join as a trade<', 'Post a job — free',
+                               '>Start with ', 'Start on Level'):
+                self.assertNotIn(invitation, page,
+                                 f'{path} still invites a visitor through a shut door: {invitation}')
+        self.assertGreater(checked, 5, 'the sweep should be reaching real pages')
 
 
 class NobodyAlreadyInIsLockedOutTest(Base):

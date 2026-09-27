@@ -19,7 +19,10 @@
       </div>
       <div class="actions"><button class="btn" type="submit">Log in</button><a class="small" href="{{ url_for('forgot') }}">Forgot your password?</a></div>
     </form>
-    <p class="small muted" style="margin-top:16px">New here? <a href="{{ url_for('post_job') }}">Post a job</a> or <a href="{{ url_for('signup') }}">join as a trade</a>.</p>
+    <p class="small muted" style="margin-top:16px">{% if waitlist_on %}New here? We’re not open in
+      your area yet — <a href="{{ url_for('join_waitlist') }}">join the waitlist</a> and we’ll tell
+      you the day it is.{% else %}New here? <a href="{{ url_for('post_job') }}">Post a job</a> or
+      <a href="{{ url_for('signup') }}">join as a trade</a>.{% endif %}</p>
     {% if demo_tools %}
     <div class="notice small">
       <p><b>Open the demo as</b> <a href="{{ url_for('demo_login', role='customer') }}">a customer</a> · <a href="{{ url_for('demo_login', role='trade') }}">a trade</a> · <a href="{{ url_for('demo_login', role='admin') }}">admin</a></p>
