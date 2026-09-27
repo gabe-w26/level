@@ -15,7 +15,11 @@
       </div>
       {{ m.badges(t) }}
       <p style="margin:14px 0 0">
+        {% if waitlist_on %}
+        <a class="btn" href="{{ url_for('join_waitlist', side='customer') }}">Tell me when {{ cfg.BRAND }} opens here</a>
+        {% else %}
         <a class="btn" href="{{ url_for('ask_trade', trade_id=t.user_id) }}">Ask {{ t.business_name }} to quote</a>
+        {% endif %}
       </p>
       <p class="small muted" style="margin:6px 0 0">Goes to them and nobody else. If they don’t take it up,
         you can have it offered round instead.</p>

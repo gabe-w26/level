@@ -95,17 +95,41 @@ def join(db, form, at=None):
         category_id = None          # a homeowner picking a trade would be noise
 
     now = ts(at or utcnow())
+    invited_by = (form.get('invited_by') or '').strip().lower()[:40] or None
     existing = db.execute('SELECT id FROM waitlist WHERE lower(email) = ? AND side = ?',
                           (email, side)).fetchone()
     if existing:
-        db.execute('UPDATE waitlist SET name = ?, area_id = ?, category_id = ? WHERE id = ?',
-                   (name, area_id, category_id, existing['id']))
+        # Never blank out a referral on a repeat visit — somebody arriving a
+        # second time without the link still came from whoever sent them first.
+        db.execute('UPDATE waitlist SET name = ?, area_id = ?, category_id = ?, '
+                   'invited_by = COALESCE(?, invited_by) WHERE id = ?',
+                   (name, area_id, category_id, invited_by, existing['id']))
     else:
-        db.execute('INSERT INTO waitlist (side, email, name, area_id, category_id, created_at) '
-                   'VALUES (?,?,?,?,?,?)', (side, email, name, area_id, category_id, now))
+        db.execute('INSERT INTO waitlist (side, email, name, area_id, category_id, invited_by, '
+                   'created_at) VALUES (?,?,?,?,?,?,?)',
+                   (side, email, name, area_id, category_id, invited_by, now))
     db.commit()
     return {'side': side, 'area_id': area_id, 'category_id': category_id,
-            'again': bool(existing), 'nearby': nearby(db, side, area_id, category_id)}
+            'again': bool(existing), 'invited_by': invited_by,
+            'nearby': nearby(db, side, area_id, category_id)}
+
+
+def who_invited(db, code):
+    """The business or person behind a referral code, for saying so on the page.
+
+    Checks both kinds: a trade's invite code and a customer's share code. Returns
+    a plain name or None — an unrecognised code is not an error, just nobody.
+    """
+    code = (code or '').strip().lower()
+    if not code:
+        return None
+    row = db.execute('SELECT business_name AS name FROM trades t JOIN users u ON u.id = t.user_id '
+                     'WHERE t.invite_code = ? AND u.closed_at IS NULL', (code,)).fetchone()
+    if row:
+        return row['name']
+    row = db.execute('SELECT name FROM users WHERE lower(ref_code) = ? AND closed_at IS NULL',
+                     (code,)).fetchone()
+    return (row['name'] or '').split(' ')[0] if row else None
 
 
 def _int(value):

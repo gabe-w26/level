@@ -591,6 +591,10 @@ MIGRATIONS = [
          created_at TEXT NOT NULL,
          told_at TEXT)''',
     'CREATE UNIQUE INDEX IF NOT EXISTS waitlist_once ON waitlist (email, side)',
+    # Who sent them. A referral that arrives while we're shut still counts when
+    # the area opens — otherwise closing the door quietly cancels the programme
+    # that brings people to it.
+    'ALTER TABLE waitlist ADD COLUMN invited_by TEXT',
     'CREATE INDEX IF NOT EXISTS waitlist_area ON waitlist (area_id, side)',
 
     # A job the customer sent to one business by name, rather than to the board.

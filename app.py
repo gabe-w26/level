@@ -517,12 +517,16 @@ def join_waitlist():
     keeps working the week after it's turned off — it just says so.
     """
     joined = error = None
+    # Carried from /join/<code> (a trade's invite) or /r/<code> (a customer's
+    # share), so a referral made while we're shut still counts when we open.
+    code = session.get('invite') or session.get('ref') or ''
     if request.method == 'POST':
         try:
-            joined = wl.join(db(), request.form)
+            joined = wl.join(db(), dict(request.form, invited_by=code))
         except wl.WaitlistError as e:
             error = str(e)
     return render_template('join.html', joined=joined, error=error, on=wl.is_on(),
+                           invited_by=wl.who_invited(db(), code),
                            areas=areas_by_region(), categories=all_categories(),
                            form=request.form if request.method == 'POST' else {})
 
@@ -2137,6 +2141,9 @@ def _inviter():
 
 @app.route('/join/<code>')
 def join(code):
+    """A tradie's invite link. Redirects to sign-up, or to the waitlist when
+    we're shut — carrying the invite either way, so being early doesn't cost
+    the person who sent them the credit for it."""
     trade = db().execute('SELECT business_name FROM trades WHERE invite_code = ?', (code.lower(),)).fetchone()
     if trade:
         session['invite'] = code.lower()
@@ -3259,8 +3266,15 @@ def customer_ref(code):
     sharer = referrals.referrer_for_code(db(), code)
     if sharer and not current_user():
         session['ref'] = code.lower()
-        flash(f'{(sharer["name"] or "A friend").split(" ")[0]} shared {config.BRAND} with you. '
-              f'Post your job free and get up to {config.MAX_QUOTES} quotes from local trades.')
+        who = (sharer['name'] or 'A friend').split(' ')[0]
+        # Don't promise a job post while the door is shut — they'd follow a
+        # friend's link, be told to post a job free, and immediately be told
+        # they can't. A referral that lands on a broken promise is worse than
+        # no referral.
+        flash(f'{who} shared {config.BRAND} with you. We’re not open in your area yet — leave your '
+              f'email and we’ll tell you the day we are.' if wl.is_on() else
+              f'{who} shared {config.BRAND} with you. Post your job free and get up to '
+              f'{config.MAX_QUOTES} quotes from local trades.')
     return redirect(url_for('post_job'))
 
 

@@ -9,7 +9,13 @@
   <h1 style="font-size:clamp(30px,4vw,44px)">{{ cat.name }} in {{ area.name }}</h1>
   <p class="lede">{{ info.blurb }} Post your job once and up to {{ cfg.TRADES_PER_JOB }} local {{ trade }} businesses see it. You get up to {{ cfg.MAX_QUOTES }} quotes and pick who you like.</p>
 
-  <p style="margin:20px 0"><a class="btn" href="{{ url_for('post_job', category=cat.slug, area=area.slug) }}">Post a {{ trade }} job — free</a></p>
+  <p style="margin:20px 0">
+    {% if waitlist_on %}
+    <a class="btn" href="{{ url_for('join_waitlist', side='customer') }}">Tell me when {{ area.name }} opens</a>
+    {% else %}
+    <a class="btn" href="{{ url_for('post_job', category=cat.slug, area=area.slug) }}">Post a {{ trade }} job — free</a>
+    {% endif %}
+  </p>
 
   {% if covering or posted %}
   <div class="card" style="margin-bottom:24px">
@@ -61,7 +67,13 @@
     <p class="small" style="margin:0">We show what we’ve actually checked on each profile — licence number on the public register, NZBN, and a public liability certificate — with the date we checked it. We don’t claim more than that. Reviews come only from customers who hired someone through {{ cfg.BRAND }}, and can’t be bought.</p>
   </div>
 
-  <p style="margin:24px 0"><a class="btn" href="{{ url_for('post_job', category=cat.slug, area=area.slug) }}">Post a {{ trade }} job in {{ area.name }}</a></p>
+  <p style="margin:24px 0">
+    {% if waitlist_on %}
+    <a class="btn" href="{{ url_for('join_waitlist', side='customer') }}">Get told when we open here</a>
+    {% else %}
+    <a class="btn" href="{{ url_for('post_job', category=cat.slug, area=area.slug) }}">Post a {{ trade }} job in {{ area.name }}</a>
+    {% endif %}
+  </p>
 
   {% if nearby %}
   <div class="section-title"><h2>Nearby</h2></div>

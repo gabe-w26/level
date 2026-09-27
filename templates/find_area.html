@@ -7,7 +7,13 @@
   <p class="small"><a href="{{ url_for('find_index') }}">← All areas</a></p>
   <h1 style="font-size:clamp(30px,4vw,44px)">Tradies in {{ area.name }}</h1>
   <p class="lede">Post your job once and up to {{ cfg.TRADES_PER_JOB }} local trades in that trade see it. You get up to {{ cfg.MAX_QUOTES }} quotes, and your name and address stay private until you choose someone.</p>
-  <p style="margin:20px 0"><a class="btn" href="{{ url_for('post_job', area=area.slug) }}">Post a job in {{ area.name }} — free</a></p>
+  <p style="margin:20px 0">
+    {% if waitlist_on %}
+    <a class="btn" href="{{ url_for('join_waitlist', side='customer') }}">Tell me when {{ area.name }} opens</a>
+    {% else %}
+    <a class="btn" href="{{ url_for('post_job', area=area.slug) }}">Post a job in {{ area.name }} — free</a>
+    {% endif %}
+  </p>
 
   <div class="section-title"><h2>Trades</h2></div>
   <div class="card table-wrap" style="padding:6px 10px">

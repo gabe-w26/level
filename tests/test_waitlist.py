@@ -361,6 +361,26 @@ class TheDoorTest(Base):
                                  f'{path} still invites a visitor through a shut door: {invitation}')
         self.assertGreater(checked, 5, 'the sweep should be reaching real pages')
 
+    def test_the_pages_google_lands_people_on_are_swept_too(self):
+        """The routes with a slug in them — the local SEO pages and trade
+        profiles — are most of the public surface and the first thing a stranger
+        sees. The argument-free sweep above skipped every one of them, and all
+        four were still offering a door that redirects."""
+        self.shut(True)
+        trade = self.user('trade')
+        self.db.execute("UPDATE trades SET business_name = 'Karori Building' WHERE user_id = ?",
+                        (trade,))
+        self.db.commit()
+        area = self.db.execute('SELECT slug FROM areas WHERE id = ?', (self.area,)).fetchone()['slug']
+        cat = self.db.execute('SELECT slug FROM categories WHERE id = ?', (self.cat,)).fetchone()['slug']
+        for path in (f'/find/{area}', f'/find/{cat}/{area}', f'/pros/{trade}'):
+            r = self.client().get(path)
+            if r.status_code != 200:
+                continue
+            page = r.data.decode()
+            for door in ('href="/post', 'href="/signup', '/ask"'):
+                self.assertNotIn(door, page, f'{path} still links to a door that redirects')
+
 
 class NobodyAlreadyInIsLockedOutTest(Base):
     """The whole risk of this feature, in one class."""
@@ -450,6 +470,74 @@ class JoiningTest(Base):
         page = self.client().get('/join').data.decode()
         self.assertIn('is open', page)
         self.assertIn('/post', page)
+
+
+class ReferralsSurviveTheShutDoorTest(Base):
+    """Closing the door must not quietly cancel the thing that brings people to it.
+
+    /r/<code> used to flash "post your job free" and send them to a door that
+    redirects, and a tradie's invite link dropped the invite on the way past. A
+    referral that lands on a broken promise is worse than no referral.
+    """
+
+    def a_trade_with_an_invite_code(self):
+        uid = self.user('trade')
+        self.db.execute("UPDATE trades SET invite_code = 'abc123', business_name = 'Karori Building' "
+                        'WHERE user_id = ?', (uid,))
+        self.db.commit()
+        return uid
+
+    def test_an_invite_link_carries_through_to_the_waitlist(self):
+        self.a_trade_with_an_invite_code()
+        self.shut(True)
+        c = self.client()
+        c.get('/join/abc123', follow_redirects=True)
+        page = c.get('/join').data.decode()
+        self.assertIn('Karori Building pointed you here', page)
+
+    def test_the_referral_is_recorded_against_the_name(self):
+        self.a_trade_with_an_invite_code()
+        self.shut(True)
+        c = self.client()
+        c.get('/join/abc123', follow_redirects=True)
+        c.post('/join', data=self.form(side='trade', category=str(self.cat), _csrf='t'))
+        row = self.db.execute('SELECT invited_by FROM waitlist ORDER BY id DESC LIMIT 1').fetchone()
+        self.assertEqual(row['invited_by'], 'abc123', 'the credit has to survive until we open')
+
+    def test_a_second_visit_without_the_link_does_not_wipe_the_credit(self):
+        self.a_trade_with_an_invite_code()
+        self.shut(True)
+        c = self.client()
+        c.get('/join/abc123', follow_redirects=True)
+        c.post('/join', data=self.form(side='customer', email='sam@test.nz', _csrf='t'))
+        # Comes back later, no link, different browser session.
+        self.client().post('/join', data=self.form(side='customer', email='sam@test.nz', _csrf='t'))
+        row = self.db.execute('SELECT invited_by FROM waitlist WHERE email = ?',
+                              ('sam@test.nz',)).fetchone()
+        self.assertEqual(row['invited_by'], 'abc123')
+
+    def test_a_shared_link_does_not_promise_a_job_post_we_cannot_take(self):
+        uid = self.user('customer')
+        self.db.execute("UPDATE users SET ref_code = 'share99' WHERE id = ?", (uid,))
+        self.db.commit()
+        self.shut(True)
+        page = self.client().get('/r/share99', follow_redirects=True).data.decode()
+        self.assertNotIn('Post your job free', page)
+        self.assertIn('not open in your area yet', page)
+
+    def test_with_the_door_open_the_old_promise_is_back(self):
+        uid = self.user('customer')
+        self.db.execute("UPDATE users SET ref_code = 'share99' WHERE id = ?", (uid,))
+        self.db.commit()
+        self.shut(False)
+        page = self.client().get('/r/share99', follow_redirects=True).data.decode()
+        self.assertIn('Post your job free', page)
+
+    def test_an_unknown_code_is_nobody_not_a_crash(self):
+        self.shut(True)
+        self.assertIsNone(wl.who_invited(self.db, 'nosuchcode'))
+        self.assertIsNone(wl.who_invited(self.db, ''))
+        self.assertEqual(self.client().get('/join/nosuchcode').status_code, 302)
 
 
 class WhatPeopleAreToldTest(Base):

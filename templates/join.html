@@ -9,6 +9,9 @@
     <div class="page-head">
       <div>
         <h1>{{ 'You’re still on the list' if joined.again else 'You’re on the list' }}</h1>
+        {% if joined.invited_by and invited_by %}
+        <p class="small muted" style="margin:0 0 6px">Credited to {{ invited_by }}.</p>
+        {% endif %}
         <p class="muted">We’ll email you the day {{ n.area or 'your area' }} opens, and not before.
           No newsletter, nothing else.</p>
       </div>
@@ -64,6 +67,11 @@
     <p class="notice ok"><b>{{ cfg.BRAND }} is open.</b> You don’t need the waitlist —
       <a href="{{ url_for('post_job') }}">post a job</a> or
       <a href="{{ url_for('signup') }}">join as a trade</a>.</p>
+    {% endif %}
+
+    {% if invited_by %}
+    <p class="notice ok"><b>{{ invited_by }} pointed you here.</b> That still counts — we’ll keep it
+      against your name, so when your area opens they get the credit for it.</p>
     {% endif %}
 
     {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
