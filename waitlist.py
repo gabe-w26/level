@@ -42,8 +42,28 @@ class WaitlistError(Exception):
 
 
 def is_on():
-    """Is the front door closed? Off unless somebody turned it on."""
-    return integrations.get('waitlist') == '1'
+    """Is the front door closed?
+
+    **Shut by default.** It used to be open unless a saved setting said
+    otherwise, which meant shipping the waitlist did nothing until somebody
+    clicked a button — and when that write silently failed three times, the site
+    went on taking sign-ups it couldn't serve. A launch gate that depends on a
+    successful database write to engage is a gate that fails open, which is the
+    wrong way round: the safe state is the one that doesn't promise anybody
+    anything.
+
+    Precedence: a WAITLIST environment variable, then the saved setting, then
+    the default. "Off" is now stored as '0' rather than as a missing row, so
+    that "somebody opened it" is distinguishable from "nobody has said".
+    """
+    raw = integrations.get('waitlist')
+    if raw in ('0', 'off', 'no', 'false'):
+        return False
+    if raw in ('1', 'on', 'yes', 'true'):
+        return True
+    # Read per call, not at import, so a test or a deploy can set it either way
+    # without depending on which module got imported first.
+    return os.environ.get('WAITLIST_DEFAULT', '1') != '0'
 
 
 # ── Joining ───────────────────────────────────────────────────────────────────

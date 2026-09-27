@@ -2442,7 +2442,7 @@ def admin_waitlist_switch():
     """
     on = request.form.get('on') == '1'
     try:
-        integrations.save(db(), {'waitlist': '1' if on else ''})
+        integrations.save(db(), {'waitlist': '1' if on else '0'})
     except Exception as e:                       # noqa: BLE001 — we want to see it, not 500
         app.logger.exception('waitlist switch failed')
         flash(f'Saving that failed: {e.__class__.__name__}: {e}', 'error')
@@ -2453,8 +2453,9 @@ def admin_waitlist_switch():
     # this button changed nothing in production and reported success, which cost
     # an afternoon of guessing from the outside. A write that says it worked
     # should have checked.
-    stored = bool(db().execute(
-        "SELECT 1 FROM settings WHERE key = 'integration.waitlist'").fetchone())
+    row = db().execute(
+        "SELECT value FROM settings WHERE key = 'integration.waitlist'").fetchone()
+    stored = (row['value'] if row else '') == '1'
     if stored != on:
         flash(f'That didn’t stick. Asked to turn it {"on" if on else "off"}, but the setting '
               f'{"is still missing" if on else "is still there"} when read straight back on the '

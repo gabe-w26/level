@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.environ.pop('DATABASE_URL', None)
+os.environ['WAITLIST_DEFAULT'] = '0'   # these tests exercise the open site
 
 import billing  # noqa: E402
 import config  # noqa: E402

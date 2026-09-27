@@ -8,9 +8,12 @@
       {# Opening an area with nobody in it wastes the one impression you get, so
          while a region is filling up the front page collects names instead. #}
       <h1>15 trades see it. {{ cfg.MAX_QUOTES }} can quote. Nobody pays per lead.</h1>
-      <p class="lede">That’s how {{ cfg.BRAND }} works — once it’s open where you are. We’re turning
-        on one area at a time, as soon as there are enough local trades in it to actually quote your
-        job. Leave your email and we’ll tell you the day yours is one of them.</p>
+      <p class="lede">That’s how {{ cfg.BRAND }} works — once it’s open where you are. We turn on one
+        area at a time, as soon as there are enough local trades in it to actually quote your job.
+        Opening sooner would mean posting your job into an empty room.</p>
+      <p class="lede" style="font-size:17px">Nobody’s proud of a job they had to come back and redo.
+        We’re building this the same way — <b>right the first time</b>, not fast now and patched
+        later. Leave your email and we’ll tell you the day your area is ready.</p>
       <div class="actions" style="margin-top:22px">
         <a class="btn" href="{{ url_for('join_waitlist', side='customer') }}">I need a tradie</a>
         <a class="btn btn-ghost" href="{{ url_for('join_waitlist', side='trade') }}">I’m a tradie</a>

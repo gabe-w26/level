@@ -38,6 +38,7 @@ import mailer
 import referrals
 import reporting
 import sms
+import waitlist as wl
 # Not `as threads`, the way app.py imports it: the /threads route function
 # below is called threads() and would shadow it.
 import thread as convo
@@ -429,8 +430,21 @@ def login():
     return {'token': token, 'user': user_json(u)}
 
 
+def _door_shut():
+    """The waitlist stands in front of the app's front door too.
+
+    The website's gate covered /signup and /post and stopped there, so the phone
+    app could still create accounts and post jobs while the site said we weren't
+    open yet. A launch gate with a second way in isn't a gate.
+    """
+    return wl.is_on()
+
+
 @bp.post('/signup')
 def signup():
+    if _door_shut():
+        return fail('We’re not open in your area yet. Join the waitlist at '
+                    f'{request.url_root.rstrip("/")}/join and we’ll tell you the day it opens.', 403)
     """Customer or trade sign-up, with the web form's checks. Trades finish
     their profile (and plan) on the website."""
     f = payload()

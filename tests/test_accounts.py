@@ -15,6 +15,7 @@ sys.path.insert(0, ROOT)
 os.environ.pop('DATABASE_URL', None)
 os.environ.setdefault('DATABASE', tempfile.NamedTemporaryFile(suffix='.db', delete=False).name)
 os.environ['RUN_SWEEPER'] = '0'
+os.environ['WAITLIST_DEFAULT'] = '0'   # these tests exercise the open site
 
 import accounts  # noqa: E402
 import app as A  # noqa: E402

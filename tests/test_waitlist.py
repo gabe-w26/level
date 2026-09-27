@@ -26,6 +26,7 @@ os.environ.pop('DATABASE_URL', None)
 os.environ.pop('WAITLIST', None)          # the env var would override the switch
 os.environ.setdefault('DATABASE', tempfile.NamedTemporaryFile(suffix='.db', delete=False).name)
 os.environ['RUN_SWEEPER'] = '0'
+os.environ['WAITLIST_DEFAULT'] = '0'   # these tests exercise the open site
 
 import app as A  # noqa: E402
 import billing  # noqa: E402
@@ -219,6 +220,81 @@ class HealthTellsTheTruthTest(Base):
         h = self.health()
         self.assertTrue(h['waitlist'], 'the gate agrees')
         self.assertTrue(h['waitlist_stored'], 'and it survived being written down')
+
+
+class ItFailsShutTest(Base):
+    """The default is closed, and that is the whole point.
+
+    It used to be open unless a saved setting said otherwise, so deploying the
+    waitlist did nothing until somebody clicked a button — and when that write
+    silently failed, the site carried on taking sign-ups it could not serve. A
+    launch gate that needs a successful database write in order to engage is a
+    gate that fails open.
+    """
+
+    def test_with_nothing_configured_the_door_is_shut(self):
+        import integrations as ig
+        was = os.environ.pop('WAITLIST_DEFAULT', None)
+        try:
+            ig._cache.update(at=10 ** 12, values={})
+            self.assertTrue(wl.is_on(), 'a site nobody has configured must not take sign-ups')
+        finally:
+            if was is not None:
+                os.environ['WAITLIST_DEFAULT'] = was
+
+    def test_opening_up_is_stored_not_just_absent(self):
+        """"Somebody opened it" has to be distinguishable from "nobody said"."""
+        row = self.db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+        admin = row['id'] if row else self.user('admin')
+        self.client(admin).post('/admin/waitlist/switch', data={'on': '0', '_csrf': 't'})
+        saved = self.db.execute(
+            "SELECT value FROM settings WHERE key = 'integration.waitlist'").fetchone()
+        self.assertIsNotNone(saved, 'off must be written down, not represented by a missing row')
+        self.assertEqual(saved['value'], '0')
+
+    def test_an_explicit_off_beats_the_default(self):
+        import integrations as ig
+        was = os.environ.pop('WAITLIST_DEFAULT', None)
+        try:
+            ig._cache.update(at=10 ** 12, values={'waitlist': '0'})
+            self.assertFalse(wl.is_on())
+        finally:
+            if was is not None:
+                os.environ['WAITLIST_DEFAULT'] = was
+
+
+class TheAppHasTheSameDoorTest(Base):
+    """The website's gate didn't cover the phone app, so the app could still
+    create accounts while the site said we weren't open. A gate with a second
+    way in isn't a gate."""
+
+    API = '/api/mobile'
+
+    def signup(self):
+        return self.client().post(f'{self.API}/signup', json={
+            'role': 'trade', 'email': 'newtradie@test.nz', 'password': 'password123',
+            'name': 'New Tradie', 'business_name': 'New Co'})
+
+    def test_the_app_cannot_create_an_account_while_the_door_is_shut(self):
+        self.shut(True)
+        before = self.db.execute('SELECT COUNT(*) AS n FROM users').fetchone()['n']
+        r = self.signup()
+        self.assertEqual(r.status_code, 403)
+        self.assertIn('waitlist', r.get_json().get('error', '').lower())
+        self.assertEqual(self.db.execute('SELECT COUNT(*) AS n FROM users').fetchone()['n'], before)
+
+    def test_the_app_can_create_an_account_once_we_are_open(self):
+        self.shut(False)
+        self.assertNotEqual(self.signup().status_code, 403)
+
+    def test_an_existing_account_still_works_from_the_app(self):
+        """Shutting the door must not lock out somebody already inside."""
+        uid = self.user('customer', 'sam@test.nz')
+        self.shut(True)
+        r = self.client().post(f'{self.API}/login',
+                               json={'login': 'sam@test.nz', 'password': 'password123'})
+        self.assertEqual(r.status_code, 200, r.get_json())
+        self.assertTrue(r.get_json()['token'])
 
 
 class TheDoorTest(Base):
