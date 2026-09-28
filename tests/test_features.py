@@ -349,9 +349,13 @@ class LandingPageTellsTheTruthTest(FeatureTest):
         super().setUp()
         self.page = A.app.test_client().get('/').data.decode()
 
-    def test_the_headline_matches_what_the_product_does(self):
-        self.assertIn(f'{config.TRADES_PER_JOB} trades see it. {config.MAX_QUOTES} can quote',
-                      self.page)
+    def test_the_headline_quotes_the_real_cap(self):
+        """The wording will change; the number must always be the live one."""
+        import re
+        h1 = re.search(r'<h1>(.*?)</h1>', self.page, re.S).group(1)
+        self.assertIn(str(config.MAX_QUOTES), h1, 'the headline promises a number of quotes')
+        for stale in ('6 quotes', '6 can quote', '5 quotes'):
+            self.assertNotIn(stale, h1)
 
     def test_no_stale_quote_cap_survives_anywhere_on_it(self):
         import re

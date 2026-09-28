@@ -7,10 +7,16 @@
       {% if waitlist_on %}
       {# Opening an area with nobody in it wastes the one impression you get, so
          while a region is filling up the front page collects names instead. #}
-      <h1>15 trades see it. {{ cfg.MAX_QUOTES }} can quote. Nobody pays per lead.</h1>
-      <p class="lede">That’s how {{ cfg.BRAND }} works — once it’s open where you are. We turn on one
-        area at a time, as soon as there are enough local trades in it to actually quote your job.
-        Opening sooner would mean posting your job into an empty room.</p>
+      {# Three beats, active, with the turn at the end. The old line opened on a
+         number a first-time visitor has no context for — "15 trades see it"
+         means nothing until you already know how this works. #}
+      <h1>Post it once. {{ cfg.MAX_QUOTES }} quotes come back. Nobody paid to reach you.</h1>
+      <p class="lede">Your job goes to {{ cfg.TRADES_PER_JOB }} local trades who do that work —
+        offered in turn, not sold to whoever pays most. The first {{ cfg.MAX_QUOTES }} to quote get
+        it, and then it closes. No lead fees, no credits, no bidding war.</p>
+      <p class="lede">That’s once we’re open where you are. We turn on one area at a time, as soon
+        as there are enough local trades in it to actually quote your job — opening sooner would
+        mean posting into an empty room.</p>
       <p class="lede" style="font-size:17px">Nobody’s proud of a job they had to come back and redo.
         We’re building this the same way — <b>right the first time</b>, not fast now and patched
         later. Leave your email and we’ll tell you the day your area is ready.</p>
@@ -20,8 +26,10 @@
       </div>
       <a class="trade-link" href="{{ url_for('pricing') }}">See what it’ll cost trades →</a>
       {% else %}
-      <h1>{{ cfg.TRADES_PER_JOB }} trades see it. {{ cfg.MAX_QUOTES }} can quote. Nobody pays per lead.</h1>
-      <p class="lede">Post a job free and get up to {{ cfg.MAX_QUOTES }} quotes from local trades — without your phone ringing off the hook. Trades pay one flat monthly price, and get the month back if they don’t win a job.</p>
+      <h1>Post it once. {{ cfg.MAX_QUOTES }} quotes come back. Nobody paid to reach you.</h1>
+      <p class="lede">Free to post. Your job goes to {{ cfg.TRADES_PER_JOB }} local trades who do
+        that work, offered in turn rather than sold to whoever pays most — so your phone doesn’t ring
+        off the hook, and the {{ cfg.MAX_QUOTES }} who quote are the ones who actually want it.</p>
       <form class="quickstart" action="{{ url_for('post_job') }}" method="get">
         <select name="category" aria-label="What kind of trade do you need?">
           <option value="">What do you need done?</option>
@@ -293,7 +301,67 @@
   </div>
 </section>
 
-<section class="band band-paper">
+<section class="band" id="for-homeowners">
+  <div class="wrap">
+    <div class="band-head">
+      <h2>If you’ve posted a job on a site like this before</h2>
+      <p>Most of them are free for you, so the question isn’t what it costs — it’s who ends up
+        quoting, and what that does to the price.</p>
+    </div>
+
+    <div class="card" style="margin-bottom:22px">
+      <h3 style="margin-top:0">The bit nobody mentions: you pay for their lead fees</h3>
+      <p class="lede" style="margin-bottom:10px">On a site where trades buy access to your job, that
+        cost doesn’t vanish. It goes into the quote.</p>
+      <p>A tradie who paid to reach you has to earn that back, and the only place it can come from is
+        the work. Do it a few times a week and it’s a real line in their overheads — one you never
+        see itemised, and one you’re paying whether they win your job or lose it.</p>
+      <p style="margin:0"><b>Here nobody pays a cent to quote your job.</b> Trades pay the same flat
+        monthly price whether they quote once or twenty times, so there is no per-job cost sitting in
+        your number waiting to be recovered.</p>
+    </div>
+
+    <div class="table-wrap">
+      <table class="vs">
+        <thead><tr><th></th><th>{{ cfg.BRAND }}</th><th>A site where trades pay per lead</th></tr></thead>
+        <tbody>
+          <tr><th>Why that tradie is quoting</th>
+              <td>It was their turn, and they do that work near you</td>
+              <td>They chose to spend money on it</td></tr>
+          <tr><th>What their lead costs you</th>
+              <td><b>Nothing — there aren’t any</b></td>
+              <td>It’s in the quote somewhere</td></tr>
+          <tr><th>Comparing the quotes</th>
+              <td>Each one answers the same questions — price, what’s in, what’s out, warranty,
+                when they can start</td>
+              <td>Whatever each person decides to write</td></tr>
+          <tr><th>Your address and phone</th>
+              <td>Trades see your suburb. You hand over the rest only to the ones you pick</td>
+              <td>Varies — read the fine print</td></tr>
+          <tr><th>Licence, NZBN and insurance</th>
+              <td>Shown only after we’ve checked, with what we checked and when</td>
+              <td>Usually whatever the tradie typed in</td></tr>
+          <tr><th>Who can leave a review</th>
+              <td>Only somebody who hired that trade through {{ cfg.BRAND }}</td>
+              <td>Often anyone who says they were a customer</td></tr>
+          <tr><th>Jobs over ${{ '{:,}'.format(cfg.CONTRACT_THRESHOLD) }}</th>
+              <td>Flagged, with the written contract, disclosure statement and MBIE checklist the
+                Building Act requires</td>
+              <td>You find out afterwards, if at all</td></tr>
+          <tr><th>What it costs you</th>
+              <td>Nothing, ever</td>
+              <td>Also nothing — you’re not the customer</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="versus-note">The right-hand column describes the pay-per-lead model rather than any one
+      site, because they differ in the detail — and we’d rather describe the thing than put words in
+      a competitor’s mouth. The named, sourced comparison is
+      <a href="#for-trades">further down, for trades</a>.</p>
+  </div>
+</section>
+
+<section class="band band-paper" id="for-trades">
   <div class="wrap">
     <div class="band-head">
       <h2>Us against Builderscrack, straight</h2>
