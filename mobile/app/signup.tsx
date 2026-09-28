@@ -5,7 +5,7 @@ import * as Device from 'expo-device';
 import { api, Role } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { SITE_URL } from '../lib/config';
-import { Button, Choice, ErrorText, Field, Screen, Title } from '../components/ui';
+import { Body, Button, Choice, ErrorText, Field, Screen, Title } from '../components/ui';
 import { colors } from '../lib/theme';
 
 export default function Signup() {
@@ -17,6 +17,7 @@ export default function Signup() {
   const [f, setF] = useState({ name: '', email: '', phone: '', password: '', business_name: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [closed, setClosed] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f) => (v: string) => setF((old) => ({ ...old, [k]: v }));
 
@@ -33,6 +34,12 @@ export default function Signup() {
         device: Device.modelName ?? undefined });
       await signIn(res.token, res.user);
     } catch (e: any) {
+      // Not open yet isn't a mistake the person made, so it doesn't get shown
+      // as one. The screen becomes the waiting-list explanation instead.
+      if (e?.body?.waitlist) {
+        setClosed(e.body.join_url || `${SITE_URL}/join`);
+        return;
+      }
       setErrors(e.errors || {});
       setError(e.message);
     } finally {
@@ -41,6 +48,25 @@ export default function Signup() {
   }
 
   const links = config?.links || { terms: `${SITE_URL}/terms`, privacy: `${SITE_URL}/privacy` };
+
+  if (closed) {
+    return (
+      <Screen>
+        <Title>We’re not open in your area yet</Title>
+        <Body muted>
+          Level goes live one area at a time, once there are enough local trades in it to actually
+          quote a job. Opening sooner would mean posting work into an empty room.
+        </Body>
+        <Body muted>
+          Nobody’s proud of a job they had to come back and redo — we’re building this the same way.
+          Leave your email and we’ll tell you the day your area is ready.
+        </Body>
+        <Button title="Join the waitlist" icon="open-outline"
+          onPress={() => Linking.openURL(closed)} />
+        <Button title="Back" variant="quiet" onPress={() => router.back()} />
+      </Screen>
+    );
+  }
 
   return (
     <Screen keyboard>

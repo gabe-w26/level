@@ -443,8 +443,13 @@ def _door_shut():
 @bp.post('/signup')
 def signup():
     if _door_shut():
-        return fail('We’re not open in your area yet. Join the waitlist at '
-                    f'{request.url_root.rstrip("/")}/join and we’ll tell you the day it opens.', 403)
+        # A flag, not just a sentence. The app can then show this as what it is
+        # — we haven't opened yet — instead of red error text with a URL in it
+        # that nobody can tap.
+        body = {'error': 'We’re not open in your area yet.',
+                'waitlist': True,
+                'join_url': f'{request.url_root.rstrip("/")}/join'}
+        return jsonify(body), 403
     """Customer or trade sign-up, with the web form's checks. Trades finish
     their profile (and plan) on the website."""
     f = payload()

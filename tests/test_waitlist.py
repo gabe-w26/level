@@ -280,8 +280,17 @@ class TheAppHasTheSameDoorTest(Base):
         before = self.db.execute('SELECT COUNT(*) AS n FROM users').fetchone()['n']
         r = self.signup()
         self.assertEqual(r.status_code, 403)
-        self.assertIn('waitlist', r.get_json().get('error', '').lower())
+        self.assertTrue(r.get_json().get('waitlist'), 'refused because we are shut, and says so')
         self.assertEqual(self.db.execute('SELECT COUNT(*) AS n FROM users').fetchone()['n'], before)
+
+    def test_the_refusal_is_machine_readable_so_the_app_can_show_it_properly(self):
+        """The app renders this as "we haven't opened yet", not as red error text
+        with an untappable URL in it — which needs a flag, not a sentence."""
+        self.shut(True)
+        body = self.signup().get_json()
+        self.assertTrue(body.get('waitlist'), 'the app keys off this')
+        self.assertIn('/join', body.get('join_url', ''))
+        self.assertTrue(body.get('error'), 'and there is still a sentence for anything older')
 
     def test_the_app_can_create_an_account_once_we_are_open(self):
         self.shut(False)

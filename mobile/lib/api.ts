@@ -17,10 +17,16 @@ export async function clearToken(): Promise<void> {
 export class ApiError extends Error {
   status: number;
   errors: Record<string, string>;
-  constructor(message: string, status: number, errors: Record<string, string> = {}) {
+  /** The whole response body, for the few cases where a screen needs more than
+   *  a sentence — e.g. "we haven't opened yet", which is a state to render
+   *  rather than an error to apologise for. */
+  body: Record<string, any>;
+  constructor(message: string, status: number, errors: Record<string, string> = {},
+              body: Record<string, any> = {}) {
     super(message);
     this.status = status;
     this.errors = errors;
+    this.body = body;
   }
 }
 
@@ -73,7 +79,8 @@ async function request<T>(method: Method, path: string, body?: object | FormData
   }
   if (!res.ok) {
     if (res.status === 401 && token && onUnauthorized) onUnauthorized();
-    throw new ApiError(data?.error || `Something went wrong (${res.status}). Try again.`, res.status, data?.errors || {});
+    throw new ApiError(data?.error || `Something went wrong (${res.status}). Try again.`,
+                       res.status, data?.errors || {}, data || {});
   }
   return data as T;
 }
