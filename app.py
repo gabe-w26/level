@@ -38,6 +38,7 @@ import docket
 import config
 import engine
 import integrations
+import launch
 import local_pages
 import mailer
 import metrics
@@ -2554,6 +2555,18 @@ def admin_waitlist_switch():
               'carries on as normal.' if on else
               'The front door is open. Anyone can post a job or sign up.')
     return redirect(url_for('admin_waitlist'))
+
+
+@app.get('/admin/launch')
+@requires('admin')
+def admin_launch():
+    """What's actually standing between this and being open.
+
+    Nothing on it is typed in — every line asks the running system. A checklist
+    that can tell you you're ready when you aren't is worse than none.
+    """
+    return render_template('admin/launch.html', **launch.summary(db()),
+                           cannot_check=launch.CANNOT_CHECK)
 
 
 @app.get('/admin/waitlist')

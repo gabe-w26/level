@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}Launch — admin{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <div>
+      <h1>Ready to open?</h1>
+      <p class="muted">Nothing here is typed in — every line asks the running system and reports
+        what it finds. A list that can tell you you’re ready when you aren’t is worse than no list.</p>
+    </div>
+    <div class="actions">
+      <span class="pill {{ 'hired' if ready }}">{{ done }} of {{ total }} done</span>
+    </div>
+  </div>
+
+  {% if blocking %}
+  <p class="notice error"><b>{{ blocking|length }} thing{{ 's' if blocking|length != 1 }} would
+    make opening a bad idea.</b> They’re first below.</p>
+  {% elif risky %}
+  <p class="notice"><b>Nothing is blocking.</b> {{ risky|length }}
+    thing{{ 's' if risky|length != 1 }} below {{ 'are' if risky|length != 1 else 'is' }} a risk
+    you’d be carrying knowingly.</p>
+  {% else %}
+  <p class="notice ok"><b>Everything this system can check is done.</b> The list underneath is the
+    part it can’t.</p>
+  {% endif %}
+
+  {% for kind, heading, why in [
+      ('blocking', 'Stops you opening', 'Open without these and somebody has a bad time.'),
+      ('risky', 'A loss you haven’t priced', 'You can open. You’d be carrying these knowingly.'),
+      ('worth', 'Worth doing', 'Real, not urgent.')] %}
+  {% set group = items | selectattr('kind', 'equalto', kind) | list %}
+  {% if group %}
+  <div class="section-title"><h2 style="font-size:20px">{{ heading }}</h2></div>
+  <p class="small muted" style="margin:-8px 0 14px">{{ why }}</p>
+  <div class="card" style="padding:0">
+    {% for i in group %}
+    <div class="check-record" style="padding:16px 20px;margin:0">
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <span style="font-family:var(--f-mono);font-size:15px;flex:none;
+              color:{{ 'var(--pine)' if i.done else ('var(--danger)' if i.kind == 'blocking' else 'var(--ink-3)') }}">
+          {{ '✓' if i.done else '·' }}</span>
+        <div style="flex:1">
+          <b>{{ i.title }}</b>
+          <p class="small muted" style="margin:3px 0 0">{{ i.detail }}</p>
+          {% if i.where and not i.done %}
+          <p style="margin:8px 0 0"><a class="btn btn-sm btn-ghost" href="{{ url_for(i.where) }}">Sort it</a></p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endfor %}
+
+  <div class="section-title"><h2 style="font-size:20px">Things this page can’t check</h2></div>
+  <p class="small muted" style="margin:-8px 0 14px">Listed rather than left off, because a checklist
+    showing only what it can measure reads as a complete one.</p>
+  <div class="card">
+    <dl class="kv">
+      {% for title, detail in cannot_check %}
+      <dt>{{ title }}</dt><dd>{{ detail }}</dd>
+      {% endfor %}
+    </dl>
+  </div>
+</div>
+{% endblock %}
