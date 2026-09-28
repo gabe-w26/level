@@ -127,6 +127,45 @@ class BackupTest(unittest.TestCase):
         self.assertIn(b'Download a backup', c.get('/admin/setup').data)
 
 
+
+class TellsYouIfNobodyHasTakenACopyTest(BackupTest):
+    """The nightly zips live on the server's own disk, which a free Render
+    instance wipes on every deploy. "14 kept" can be true and worth nothing.
+    The only number that says anything about surviving a lost database is when
+    somebody last took a copy off the server — and nothing recorded it."""
+
+    def test_it_starts_by_admitting_nobody_ever_has(self):
+        st = backup.status(self.db)
+        self.assertTrue(st['never_downloaded'])
+        self.assertTrue(st['stale'])
+        self.assertIsNone(st['downloaded_days_ago'])
+
+    def test_downloading_one_is_remembered(self):
+        backup.record_download(self.db)
+        st = backup.status(self.db)
+        self.assertFalse(st['never_downloaded'])
+        self.assertEqual(st['downloaded_days_ago'], 0)
+        self.assertFalse(st['stale'])
+
+    def test_it_goes_stale_again(self):
+        from datetime import timedelta
+        from engine import utcnow
+        backup.record_download(self.db)
+        later = utcnow() + timedelta(days=8)
+        st = backup.status(self.db, at=later)
+        self.assertEqual(st['downloaded_days_ago'], 8)
+        self.assertTrue(st['stale'], 'a week-old copy is not a backup of this week')
+
+    def test_the_route_records_it(self):
+        row = self.db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+        admin = row['id'] if row else None
+        c = A.app.test_client()
+        with c.session_transaction() as s:
+            s['uid'] = admin
+            s['_csrf'] = 't'
+        self.assertEqual(c.get('/admin/backup').status_code, 200)
+        self.assertFalse(backup.status(self.db)['never_downloaded'])
+
 if __name__ == '__main__':
     import unittest.mock  # noqa: F401
     unittest.main()

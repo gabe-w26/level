@@ -2296,10 +2296,15 @@ def admin_setup():
         f = request.form
         action = f.get('action', 'save')
         if action == 'save':
-            changes = {}
+            changes, skipped = {}, []
             for _, _, fields in SETUP_GROUPS:
-                for name, _, _ in fields:
+                for name, label, _ in fields:
                     if integrations.from_env(name):
+                        # The field is disabled, so the browser never sends it.
+                        # Saying which ones were ignored beats a bare "Nothing
+                        # changed" when somebody typed into a box they could see.
+                        if f.get(name, '').strip():
+                            skipped.append(label)
                         continue
                     if f.get(f'clear_{name}'):
                         changes[name] = ''
@@ -2307,8 +2312,36 @@ def admin_setup():
                         changes[name] = f[name].strip()
             if changes.get('site_url'):
                 changes['site_url'] = changes['site_url'].rstrip('/')
-            integrations.save(db(), changes)
-            flash('Saved.' if changes else 'Nothing changed.')
+
+            try:
+                integrations.save(db(), changes)
+            except Exception as e:                   # noqa: BLE001 — show it, don't 500
+                app.logger.exception('setup save failed')
+                flash(f'Saving failed: {e.__class__.__name__}: {e}', 'error')
+                return redirect(url_for('admin_setup'))
+
+            # Read every one of them straight back. A save that reports success
+            # without checking is how a setting can silently never land — which
+            # is exactly what happened with the waitlist, and would be far worse
+            # here, where the same form holds the keys that make email work.
+            integrations.refresh(db(), force=True)
+            stuck = [n for n, v in changes.items() if (integrations.get(n) or '') == (v or '')]
+            lost = [n for n in changes if n not in stuck]
+            if lost:
+                flash('Some of that didn’t save: ' + ', '.join(sorted(lost)) +
+                      f'. Nothing is wrong with what you typed — tell Gabriel, and quote this: '
+                      f'db={"postgres" if _USE_PG else "sqlite"} '
+                      f'saved={len(stuck)}/{len(changes)}.', 'error')
+            elif changes:
+                flash(f'Saved — {len(changes)} setting{"s" if len(changes) != 1 else ""}, '
+                      f'checked by reading {"them" if len(changes) != 1 else "it"} back.')
+            elif skipped:
+                flash('Nothing saved: ' + ', '.join(skipped) + ' ' +
+                      ('are' if len(skipped) > 1 else 'is') + ' set in Render’s environment, which '
+                      'wins over anything typed here. Change it there, or remove it to use this '
+                      'form.', 'error')
+            else:
+                flash('Nothing changed — every box was left empty.')
         elif action == 'test_email':
             to = f.get('to', '').strip() or current_user()['email']
             ok = mailer.send(to, current_user()['name'], f'Test email from {config.BRAND}',
@@ -2594,6 +2627,7 @@ def admin_backup():
     """Download the whole database as a zip of CSVs. Keep it somewhere that isn't Render."""
     buf = io.BytesIO()
     backup.dump(db(), buf)
+    backup.record_download(db())          # so the page can say how long it's been
     return Response(buf.getvalue(), mimetype='application/zip', headers={
         'Content-Disposition': f'attachment; filename="{backup.filename()}"',
         'Cache-Control': 'no-store'})

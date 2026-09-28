@@ -271,6 +271,71 @@ class FeatureTest(unittest.TestCase):
 
 
 
+
+class SetupSavesOrSaysWhyNotTest(FeatureTest):
+    """The form that holds the email keys must not be able to lie.
+
+    A setting typed into Admin → Setup silently failed to land once already, and
+    the form said "Saved." The same form is where the Resend key goes, so the
+    same failure would mean email quietly never working.
+    """
+
+    def setUp(self):
+        super().setUp()
+        row = self.db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+        self.admin = row['id'] if row else None
+        self.c = A.app.test_client()
+        with self.c.session_transaction() as s:
+            s['uid'] = self.admin
+            s['_csrf'] = 't'
+
+    def save(self, **fields):
+        return self.c.post('/admin/setup', data=dict(fields, action='save', _csrf='t'),
+                           follow_redirects=True).data.decode()
+
+    def test_a_real_save_is_confirmed_by_reading_it_back(self):
+        page = self.save(site_url='https://level.co.nz')
+        self.assertIn('checked by reading', page)
+        integrations.refresh(self.db, force=True)
+        self.assertEqual(integrations.get('site_url'), 'https://level.co.nz')
+
+    def test_a_save_that_does_not_land_says_so_instead_of_Saved(self):
+        real = integrations.save
+        integrations.save = lambda db, values: None       # silently does nothing
+        try:
+            page = self.save(site_url='https://level.co.nz')
+        finally:
+            integrations.save = real
+        self.assertIn('didn’t save', page)
+        self.assertNotIn('checked by reading', page)
+
+    def test_a_save_that_raises_is_shown_not_swallowed(self):
+        real = integrations.save
+
+        def boom(db, values):
+            raise RuntimeError('connection went away')
+        integrations.save = boom
+        try:
+            page = self.save(site_url='https://level.co.nz')
+        finally:
+            integrations.save = real
+        self.assertIn('Saving failed', page)
+        self.assertIn('connection went away', page)
+
+    def test_typing_into_a_field_the_environment_owns_says_which(self):
+        """The input is disabled, so the browser sends nothing and the old code
+        reported "Nothing changed" — which reads as "your typing was ignored for
+        no reason"."""
+        os.environ['BASE_URL'] = 'https://from-render.example'
+        try:
+            page = self.save(site_url='https://typed-by-hand.example')
+            self.assertIn('Render’s environment', page)
+        finally:
+            del os.environ['BASE_URL']
+
+    def test_an_empty_form_says_plainly_that_it_was_empty(self):
+        self.assertIn('every box was left empty', self.save())
+
 class LandingPageTellsTheTruthTest(FeatureTest):
     """The front page claimed 6 quotes while the product sends 3.
 

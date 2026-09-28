@@ -103,11 +103,35 @@ def maybe_nightly(db, at=None):
     return path
 
 
-def status(db):
-    """What Admin → Setup shows."""
+def record_download(db, at=None):
+    """Remember that somebody actually took a copy off the server."""
+    now = ts(at or utcnow())
+    db.execute("DELETE FROM settings WHERE key = 'last_backup_download'")
+    db.execute("INSERT INTO settings (key, value) VALUES ('last_backup_download', ?)", (now,))
+    db.commit()
+
+
+def status(db, at=None):
+    """What Admin → Setup shows.
+
+    `downloaded_days_ago` is the number that actually matters, and it was the
+    one thing this didn't report. The nightly zips live on the server's own
+    disk, which on a free Render instance is wiped by every deploy — so a long
+    list of them says nothing about whether the data would survive losing the
+    database. Only a copy somebody took off the server does, and until now
+    nothing recorded whether that had ever happened.
+    """
     row = db.execute("SELECT value FROM settings WHERE key = 'last_backup_at'").fetchone()
+    got = db.execute("SELECT value FROM settings WHERE key = 'last_backup_download'").fetchone()
     files = []
     if os.path.isdir(NIGHTLY_DIR):
         files = sorted(f for f in os.listdir(NIGHTLY_DIR) if f.endswith('.zip'))
+    days = None
+    if got and got['value']:
+        days = int((( at or utcnow()) - parse_ts(got['value'])).total_seconds() // 86400)
     return {'last_at': row['value'] if row else None, 'kept': len(files),
-            'newest': files[-1] if files else None, 'folder': NIGHTLY_DIR, 'keep': KEEP_NIGHTLY}
+            'newest': files[-1] if files else None, 'folder': NIGHTLY_DIR, 'keep': KEEP_NIGHTLY,
+            'downloaded_at': got['value'] if got else None,
+            'downloaded_days_ago': days,
+            'never_downloaded': days is None,
+            'stale': days is None or days >= 7}

@@ -70,11 +70,28 @@
       That covers a bad deploy. It does <b>not</b> cover losing the Render account or the free database expiring —
       for that, download a copy now and then and keep it somewhere else.
     </p>
+    {# The only number here that says anything about surviving a lost database.
+       The nightly zips sit on the server's own disk, which a free Render
+       instance wipes on every deploy — so "14 kept" can be true and worth
+       nothing. This is the one to read. #}
+    {% if backups.never_downloaded %}
+    <p class="notice error" style="margin:0 0 12px"><b>You have never downloaded a backup.</b>
+      Everything on this site exists in one place. If the database goes — the free tier expiring,
+      an account problem, a bad migration — there is nothing to restore from. It takes ten
+      seconds.</p>
+    {% elif backups.stale %}
+    <p class="notice" style="margin:0 0 12px"><b>Last download was {{ backups.downloaded_days_ago }}
+      days ago.</b> Anything since then only exists on the server.</p>
+    {% endif %}
     <dl class="kv">
-      <dt>Last backup</dt><dd>{% if backups.last_at %}{{ backups.last_at|when }}{% else %}None yet — the next sweep will write one{% endif %}</dd>
-      <dt>Kept on the server</dt><dd>{{ backups.kept }}{% if backups.newest %} · newest {{ backups.newest }}{% endif %}</dd>
+      <dt>Downloaded off the server</dt>
+      <dd>{% if backups.never_downloaded %}<b>Never</b>{% else %}{{ backups.downloaded_at|when }}
+        ({{ backups.downloaded_days_ago }} day{{ 's' if backups.downloaded_days_ago != 1 }} ago){% endif %}</dd>
+      <dt>Last backup written</dt><dd>{% if backups.last_at %}{{ backups.last_at|when }}{% else %}None yet — the next sweep will write one{% endif %}</dd>
+      <dt>Kept on the server</dt><dd>{{ backups.kept }}{% if backups.newest %} · newest {{ backups.newest }}{% endif %}
+        <span class="small muted">— wiped by a deploy on Render’s free tier</span></dd>
     </dl>
-    <p style="margin:14px 0 0"><a class="btn btn-sm" href="{{ url_for('admin_backup') }}">Download a backup</a></p>
+    <p style="margin:14px 0 0"><a class="btn btn-sm{{ '' if backups.stale else ' btn-ghost' }}" href="{{ url_for('admin_backup') }}">Download a backup</a></p>
     <p class="small muted" style="margin:10px 0 0">The download is a zip of spreadsheets, one per table. It contains customer and tradie
       contact details and password hashes — treat it like a password file.</p>
   </div>
