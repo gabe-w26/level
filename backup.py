@@ -19,7 +19,7 @@ import json
 import os
 import re
 import zipfile
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import config
 import schema
@@ -135,3 +135,70 @@ def status(db, at=None):
             'downloaded_days_ago': days,
             'never_downloaded': days is None,
             'stale': days is None or days >= 7}
+
+
+# ── Nagging, because the copy that matters is the one somebody takes ──────────
+
+NAG_AFTER_DAYS = 7
+
+
+def remind_admins(db, at=None):
+    """Put a notice in front of the admins when nobody has taken a copy lately.
+
+    The nightly zips sit on the server's own disk, which a free Render instance
+    wipes on every deploy — so the site can look thoroughly backed up while
+    being one lost database away from nothing. The only copy that survives is
+    one somebody downloaded, and until now nothing asked them to.
+
+    Deliberately an in-app notice rather than an email: email may not be set up
+    yet, and "we couldn't warn you because the thing you hadn't set up wasn't
+    set up" is not a defence. At most one notice a week, so it stays a reminder
+    and doesn't become wallpaper.
+    """
+    from engine import notify, parse_ts, ts, utcnow
+    at = at or utcnow()
+    st = status(db, at=at)
+    if not st['stale']:
+        return 0
+
+    last = db.execute("SELECT value FROM settings WHERE key = 'last_backup_nag'").fetchone()
+    if last and last['value'] and parse_ts(last['value']) > at - timedelta(days=NAG_AFTER_DAYS):
+        return 0
+
+    if st['never_downloaded']:
+        body = ('Nobody has ever downloaded a backup. Everything on here exists in one place — '
+                'take a copy from Admin → Setup and keep it somewhere that isn’t this server.')
+    else:
+        body = (f'The last backup anyone downloaded was {st["downloaded_days_ago"]} days ago. '
+                'Anything since then only exists on this server.')
+
+    admins = db.execute("SELECT id FROM users WHERE role = 'admin' AND closed_at IS NULL").fetchall()
+    for a in admins:
+        notify(db, a['id'], body, '/admin/setup', at=at)
+    db.execute("DELETE FROM settings WHERE key = 'last_backup_nag'")
+    db.execute("INSERT INTO settings (key, value) VALUES ('last_backup_nag', ?)", (ts(at),))
+    db.commit()
+    return len(admins)
+
+
+def expiry(at=None):
+    """How long the database has left, if somebody has said when it goes.
+
+    A free Postgres instance is deleted on a date, and nothing anywhere warns
+    you. Unset means we say nothing rather than guess — a countdown to a date
+    somebody made up is worse than no countdown.
+    """
+    import integrations
+    from engine import utcnow
+    raw = (integrations.get('db_expires') or '').strip()
+    if not raw:
+        return None
+    try:
+        # engine.utcnow() is naive UTC; match it rather than mix the two.
+        when = datetime.strptime(raw[:10], '%Y-%m-%d')
+    except ValueError:
+        return None
+    # Whole calendar days, not elapsed seconds. "Expires on the 12th" asked on
+    # the 11th means one day, not zero because it's the afternoon.
+    days = (when.date() - (at or utcnow()).date()).days
+    return {'date': raw[:10], 'days': days, 'soon': days <= 14, 'gone': days < 0}

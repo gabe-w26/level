@@ -23,6 +23,7 @@ KEYS = {
     'resend_key': 'RESEND_API_KEY',
     'resend_secret': 'RESEND_WEBHOOK_SECRET',
     'waitlist': 'WAITLIST',
+    'db_expires': 'DB_EXPIRES',
     'docket_url': 'DOCKET_URL',
     'docket_key': 'DOCKET_KEY',
 }

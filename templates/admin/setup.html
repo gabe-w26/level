@@ -83,6 +83,10 @@
     <p class="notice" style="margin:0 0 12px"><b>Last download was {{ backups.downloaded_days_ago }}
       days ago.</b> Anything since then only exists on the server.</p>
     {% endif %}
+    {% if db_expiry %}
+    <p class="small muted" style="margin:0 0 10px">Database expires <b>{{ db_expiry.date }}</b> —
+      {{ db_expiry.days }} day{{ 's' if db_expiry.days != 1 }} away.</p>
+    {% endif %}
     <dl class="kv">
       <dt>Downloaded off the server</dt>
       <dd>{% if backups.never_downloaded %}<b>Never</b>{% else %}{{ backups.downloaded_at|when }}

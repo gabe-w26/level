@@ -365,7 +365,12 @@ def _globals():
     return dict(cfg=config, me=u, my_trade=current_trade(), unread=unread, unread_msgs=unread_msgs,
                 leads_waiting=leads_waiting, csrf_token=_csrf_token, demo_tools=DEMO_TOOLS, licences=LICENCES,
                 bands=config.VALUE_BANDS, tiers=config.TIERS, joining_for=_joining_for(),
-                waitlist_on=wl.is_on())
+                waitlist_on=wl.is_on(),
+                # Two things that are invisible until they've already cost you:
+                # nobody has taken a copy off the server, and the free database
+                # has a deletion date. Shown on every admin page, not just the
+                # one somebody would have to think to open.
+                db_expiry=backup.expiry() if u and u['role'] == 'admin' else None)
 
 
 def all_categories():
@@ -2262,6 +2267,11 @@ def sitemap():
 # ── Admin: setup (email, texts, AI, site address) ─────────────────────────────
 
 SETUP_GROUPS = [
+    ('When the database expires',
+     'A free Postgres instance is deleted on a date, not when you get round to it, and nothing '
+     'warns you. Put that date here and every admin page counts down to it — and starts saying so '
+     'loudly a fortnight out. Format: 2026-11-12. Leave it blank if you are on a paid plan.',
+     [('db_expires', 'Database expiry date', '2026-11-12')]),
     ('Email', 'So customers and tradies get alerts, and people can reset their passwords.',
      [('smtp_host', 'Email server', 'smtp.gmail.com'), ('smtp_port', 'Port', '587'),
       ('smtp_user', 'Username (your email address)', 'you@gmail.com'),
@@ -3181,6 +3191,7 @@ def sweep_once():
                 outreach.flush(conn)
                 reporting.remind(conn)
                 backup.maybe_nightly(conn)
+                backup.remind_admins(conn)
         finally:
             if not _USE_PG:
                 conn.close()

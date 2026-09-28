@@ -166,6 +166,99 @@ class TellsYouIfNobodyHasTakenACopyTest(BackupTest):
         self.assertEqual(c.get('/admin/backup').status_code, 200)
         self.assertFalse(backup.status(self.db)['never_downloaded'])
 
+
+class NagsWhenNobodyHasTakenACopyTest(BackupTest):
+    """An in-app notice, not an email — email may not be set up yet, and
+    "we couldn't warn you because the thing you hadn't set up wasn't set up"
+    is not a defence."""
+
+    def admins(self):
+        return [r['id'] for r in self.db.execute(
+            "SELECT id FROM users WHERE role = 'admin' AND closed_at IS NULL")]
+
+    def notices(self):
+        return [r['body'] for r in self.db.execute(
+            "SELECT body FROM notifications WHERE body LIKE '%backup%'")]
+
+    def test_it_tells_the_admins_when_nobody_ever_has(self):
+        sent = backup.remind_admins(self.db)
+        self.assertEqual(sent, len(self.admins()))
+        self.assertTrue(any('nobody has ever' in n.lower() for n in self.notices()))
+
+    def test_it_does_not_nag_again_the_same_week(self):
+        backup.remind_admins(self.db)
+        before = len(self.notices())
+        backup.remind_admins(self.db)
+        self.assertEqual(len(self.notices()), before, 'a reminder that repeats becomes wallpaper')
+
+    def test_it_nags_again_the_week_after(self):
+        from datetime import timedelta
+        from engine import utcnow
+        backup.remind_admins(self.db)
+        before = len(self.notices())
+        backup.remind_admins(self.db, at=utcnow() + timedelta(days=8))
+        self.assertGreater(len(self.notices()), before)
+
+    def test_a_fresh_download_stops_it(self):
+        backup.record_download(self.db)
+        self.assertEqual(backup.remind_admins(self.db), 0)
+
+    def test_it_says_how_long_it_has_been_once_there_has_been_one(self):
+        from datetime import timedelta
+        from engine import utcnow
+        backup.record_download(self.db)
+        backup.remind_admins(self.db, at=utcnow() + timedelta(days=10))
+        self.assertTrue(any('10 days ago' in n for n in self.notices()))
+
+
+class DatabaseExpiryTest(BackupTest):
+    """A free Postgres instance is deleted on a date, and nothing warns you."""
+
+    def set_date(self, value):
+        integrations._cache.update(at=10 ** 12, values={'db_expires': value})
+
+    def test_nothing_is_claimed_when_nobody_has_said(self):
+        self.set_date('')
+        self.assertIsNone(backup.expiry(), 'a countdown to a made-up date is worse than none')
+
+    def test_rubbish_is_ignored_rather_than_crashing_every_admin_page(self):
+        self.set_date('next tuesday')
+        self.assertIsNone(backup.expiry())
+
+    def test_it_counts_down(self):
+        from datetime import timedelta
+        from engine import utcnow
+        soon = (utcnow() + timedelta(days=30)).strftime('%Y-%m-%d')
+        self.set_date(soon)
+        out = backup.expiry()
+        self.assertEqual(out['days'], 30)
+        self.assertFalse(out['soon'])
+
+    def test_it_gets_loud_a_fortnight_out(self):
+        from datetime import timedelta
+        from engine import utcnow
+        self.set_date((utcnow() + timedelta(days=10)).strftime('%Y-%m-%d'))
+        self.assertTrue(backup.expiry()['soon'])
+
+    def test_a_date_already_past_says_so(self):
+        from datetime import timedelta
+        from engine import utcnow
+        self.set_date((utcnow() - timedelta(days=3)).strftime('%Y-%m-%d'))
+        self.assertTrue(backup.expiry()['gone'])
+
+    def test_the_banner_only_shows_to_an_admin(self):
+        from datetime import timedelta
+        from engine import utcnow
+        self.set_date((utcnow() + timedelta(days=5)).strftime('%Y-%m-%d'))
+        row = self.db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+        c = A.app.test_client()
+        with c.session_transaction() as s:
+            s['uid'] = row['id']
+            s['_csrf'] = 't'
+        self.assertIn('database expires in', c.get('/admin').data.decode().lower())
+        self.assertNotIn('database expires in',
+                         A.app.test_client().get('/').data.decode().lower())
+
 if __name__ == '__main__':
     import unittest.mock  # noqa: F401
     unittest.main()

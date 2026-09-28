@@ -69,7 +69,20 @@
       <button class="install-btn" type="button" hidden>{{ m.icon('plus') }}<span>Add to home screen</span></button>
     </nav>
     <main id="main">
-      {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% if db_expiry and (db_expiry.soon or db_expiry.gone) %}
+  {# A date nothing else warns about. Loud, on every admin page, from a fortnight
+     out — because by the time it matters it is already too late. #}
+  <div class="wrap" style="padding-top:14px">
+    <p class="notice error" style="margin:0">
+      {% if db_expiry.gone %}<b>The database expiry date ({{ db_expiry.date }}) has passed.</b>
+      If it is still up, it is on borrowed time.{% else %}<b>The database expires in
+      {{ db_expiry.days }} day{{ 's' if db_expiry.days != 1 }}</b> ({{ db_expiry.date }}).{% endif %}
+      Move to a paid plan, or <a href="{{ url_for('admin_backup') }}">download everything</a> now —
+      when a free instance goes, it goes with the data in it.
+    </p>
+  </div>
+  {% endif %}
+  {% with msgs = get_flashed_messages(with_categories=true) %}
         {% if msgs %}<div class="wrap flashes">{% for cat, msg in msgs %}<p class="flash flash-{{ cat }}" role="status">{{ msg }}</p>{% endfor %}</div>{% endif %}
       {% endwith %}
       {% block main %}{% endblock %}
@@ -119,6 +132,19 @@
       </nav>
     </div>
   </header>
+  {% if db_expiry and (db_expiry.soon or db_expiry.gone) %}
+  {# A date nothing else warns about. Loud, on every admin page, from a fortnight
+     out — because by the time it matters it is already too late. #}
+  <div class="wrap" style="padding-top:14px">
+    <p class="notice error" style="margin:0">
+      {% if db_expiry.gone %}<b>The database expiry date ({{ db_expiry.date }}) has passed.</b>
+      If it is still up, it is on borrowed time.{% else %}<b>The database expires in
+      {{ db_expiry.days }} day{{ 's' if db_expiry.days != 1 }}</b> ({{ db_expiry.date }}).{% endif %}
+      Move to a paid plan, or <a href="{{ url_for('admin_backup') }}">download everything</a> now —
+      when a free instance goes, it goes with the data in it.
+    </p>
+  </div>
+  {% endif %}
   {% with msgs = get_flashed_messages(with_categories=true) %}
     {% if msgs %}<div class="wrap flashes">{% for cat, msg in msgs %}<p class="flash flash-{{ cat }}" role="status">{{ msg }}</p>{% endfor %}</div>{% endif %}
   {% endwith %}
