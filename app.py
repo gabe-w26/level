@@ -48,6 +48,7 @@ import push
 import quoting
 import referrals
 import reporting
+import research
 import matching
 import sms
 import thread as threads
@@ -2064,6 +2065,34 @@ def trade_vetting():
     return redirect(url_for('trade_trust'))
 
 
+@app.post('/admin/trades/<int:trade_id>/research')
+@requires('admin')
+def admin_trade_research(trade_id):
+    """Search the open web about one business and keep what it found.
+
+    Costs real money and takes a minute, so it runs when you ask rather than on
+    a rota. Everything it returns carries the page it came from, and none of it
+    is shown to a customer or changes a badge.
+    """
+    t = db().execute('SELECT * FROM trades WHERE user_id = ?', (trade_id,)).fetchone()
+    if not t:
+        abort(404)
+    areas = ', '.join(r['name'] for r in db().execute(
+        'SELECT a.name FROM trade_areas ta JOIN areas a ON a.id = ta.area_id WHERE ta.trade_id = ?',
+        (trade_id,)).fetchall())
+    try:
+        findings = research.run(t, areas=areas)
+    except research.ResearchError as e:
+        flash(str(e), 'error')
+        return redirect(url_for('admin_trade', trade_id=trade_id))
+    research.save(db(), trade_id, findings, by=current_user()['id'])
+    found = len(findings['presence'])
+    flash(f'Searched the web — {found} page{"s" if found != 1 else ""} found, '
+          f'{len(findings["observations"])} thing{"s" if len(findings["observations"]) != 1 else ""} '
+          'worth reading. Everything links to where it came from.')
+    return redirect(url_for('admin_trade', trade_id=trade_id))
+
+
 @app.post('/admin/trades/<int:trade_id>/company')
 @requires('admin')
 def admin_trade_company(trade_id):
@@ -2861,6 +2890,7 @@ def admin_trade(trade_id):
         'admin/trade.html', t=t, now=now,
         company=company, company_flags=companies.worth_a_look(company),
         companies_on=companies.configured(),
+        web=research.latest(db(), trade_id), research_on=research.enabled(),
         work=[r['name'] for r in db().execute('SELECT c.name FROM trade_categories tc JOIN categories c '
                                               'ON c.id = tc.category_id WHERE tc.trade_id = ? ORDER BY c.name',
                                               (trade_id,)).fetchall()],

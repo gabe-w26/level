@@ -63,6 +63,12 @@
                 {{ m.csrf() }}<button class="btn btn-quiet btn-sm" type="submit">Ask the register</button>
               </form>
               {% endif %}
+              {% if research_on %}
+              <form method="post" action="{{ url_for('admin_trade_research', trade_id=t.user_id) }}" class="inline"
+                    onsubmit="return confirm('Search the web about {{ t.business_name }}? Takes about a minute and costs a few cents.')">
+                {{ m.csrf() }}<button class="btn btn-quiet btn-sm" type="submit">Search the web</button>
+              </form>
+              {% endif %}
             {% else %}<span class="muted">Not given</span>{% endif %}
           </dd>
           {% if company %}
@@ -104,6 +110,57 @@
               </details>
               {% endif %}
             {% endif %}
+          </dd>
+          {% endif %}
+          {% if web %}
+          {% set f = web.findings %}
+          <dt>On the web</dt>
+          <dd>
+            {# Every line links to the page it came from. This is somebody else's
+               search results, not a finding of ours — the admin reads the page,
+               not the summary. #}
+            {% if f.same_name_confusion %}
+            <p class="notice" style="margin:0 0 8px;padding:8px 10px"><b class="small">More than one
+              business shares this name</b><span class="small"> — the search couldn’t tell them
+              apart, so treat everything below as possibly somebody else.</span></p>
+            {% endif %}
+
+            {% if f.presence %}
+            <ul class="small" style="margin:0;padding-left:16px">
+              {% for p in f.presence %}
+              <li><a href="{{ p.url }}" target="_blank" rel="noopener nofollow">{{ p.platform }}</a>
+                — {{ p.shows }}</li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span class="muted small">Nothing found on the sites we searched.</span>
+            {% endif %}
+
+            {% if f.trading_since %}
+            <p class="small muted" style="margin:6px 0 0">Earliest dated evidence:
+              {{ f.trading_since }}.</p>
+            {% endif %}
+
+            {% if f.observations %}
+            <div class="notice" style="margin:8px 0 0;padding:10px 12px">
+              <b class="small">Worth reading:</b>
+              <ul class="small" style="margin:4px 0 0;padding-left:18px">
+                {% for o in f.observations %}
+                <li>{{ o.note }} <a href="{{ o.url }}" target="_blank" rel="noopener nofollow">source ↗</a></li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+
+            {% if f.not_found %}
+            <p class="small muted" style="margin:8px 0 0"><b>Couldn’t find:</b>
+              {{ f.not_found | join('; ') }}. Not found is not the same as not there.</p>
+            {% endif %}
+
+            <p class="small muted" style="margin:8px 0 0">An automated search of {{ f.searches or 0 }}
+              quer{{ 'y' if (f.searches or 0) == 1 else 'ies' }}, {{ web.checked_at|day }}. It reports
+              pages, not conclusions — open the links before acting on any of it. None of this is
+              shown to customers.</p>
           </dd>
           {% endif %}
           <dt>Insurance</dt>

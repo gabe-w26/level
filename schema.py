@@ -618,6 +618,18 @@ MIGRATIONS = [
          checked_at TEXT NOT NULL,
          checked_by INTEGER)''',
     'CREATE INDEX IF NOT EXISTS company_checks_trade ON company_checks (trade_id, id)',
+
+    # What a web search turned up about a business, and when. A dated snapshot
+    # for the same reason as company_checks: the question that matters later is
+    # what it said at the time, not what it would say now.
+    '''CREATE TABLE IF NOT EXISTS web_checks (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         trade_id INTEGER NOT NULL,
+         findings TEXT,
+         searches INTEGER NOT NULL DEFAULT 0,
+         checked_at TEXT NOT NULL,
+         checked_by INTEGER)''',
+    'CREATE INDEX IF NOT EXISTS web_checks_trade ON web_checks (trade_id, id)',
     'CREATE INDEX IF NOT EXISTS waitlist_area ON waitlist (area_id, side)',
 
     # A job the customer sent to one business by name, rather than to the board.
