@@ -195,6 +195,48 @@ class WhatWeDoWithItTest(Base):
         check = companies.latest(self.db, self.trade['user_id'])
         self.assertEqual(check['ended_companies'], 2, 'but it is on file for a person to read')
 
+    def test_a_badge_that_stops_being_true_comes_down(self):
+        """The bug this found: "NZBN checked on the Companies Office" is shown to
+        customers and is us vouching for something. A company that goes into
+        liquidation after we checked would have kept the badge — a true claim
+        quietly turning false with nobody doing anything."""
+        self.clean_register()
+        companies.run(self.db, self.trade)
+        self.assertIsNotNone(self.db.execute(
+            'SELECT nzbn_checked_at FROM trades WHERE user_id = ?',
+            (self.trade['user_id'],)).fetchone()['nzbn_checked_at'])
+
+        self.register['9429001234567'] = entity('9429001234567', 'Tane Building Limited',
+                                                status='In Liquidation', directors=['Wiremu Tane'])
+        companies.run(self.db, self.trade)
+        t = self.db.execute('SELECT * FROM trades WHERE user_id = ?',
+                            (self.trade['user_id'],)).fetchone()
+        self.assertIsNone(t['nzbn_checked_at'], 'the badge must not outlive the fact')
+        self.assertEqual(t['nzbn_status'], 'In Liquidation', 'and the record says why')
+
+    def test_a_company_that_vanishes_from_the_register_loses_it_too(self):
+        self.clean_register()
+        companies.run(self.db, self.trade)
+        self.register.clear()
+        companies.run(self.db, self.trade)
+        t = self.db.execute('SELECT * FROM trades WHERE user_id = ?',
+                            (self.trade['user_id'],)).fetchone()
+        self.assertIsNone(t['nzbn_checked_at'])
+
+    def test_the_trust_score_drops_with_it(self):
+        """The badge is worth points, so the points have to go too."""
+        import trust
+        self.clean_register()
+        companies.run(self.db, self.trade)
+        before = trust.explain(self.db, self.db.execute(
+            'SELECT * FROM trades WHERE user_id = ?', (self.trade['user_id'],)).fetchone())
+        self.register['9429001234567'] = entity('9429001234567', 'Tane Building Limited',
+                                                status='Removed', directors=['Wiremu Tane'])
+        companies.run(self.db, self.trade)
+        after = trust.explain(self.db, self.db.execute(
+            'SELECT * FROM trades WHERE user_id = ?', (self.trade['user_id'],)).fetchone())
+        self.assertLess(after['score'], before['score'])
+
     def test_it_is_a_dated_snapshot_not_a_running_total(self):
         self.clean_register()
         companies.run(self.db, self.trade)

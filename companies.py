@@ -233,6 +233,8 @@ def run(db, trade, by=None, at=None):
     if not found:
         db.execute('INSERT INTO company_checks (trade_id, nzbn, found, checked_at, checked_by) '
                    'VALUES (?,?,0,?,?)', (trade['user_id'], nzbn, now, by))
+        # Gone from the register entirely — same reasoning as a struck-off one.
+        _drop_the_badge(db, trade['user_id'], 'not on the register', now)
         db.commit()
         return {'found': False, 'nzbn': nzbn, 'checked_at': now}
 
@@ -252,9 +254,26 @@ def run(db, trade, by=None, at=None):
     if matched and not e['ended']:
         db.execute('UPDATE trades SET nzbn_status = ?, nzbn_registered_on = ?, nzbn_checked_at = ? '
                    'WHERE user_id = ?', (e['status'], e['registered_on'], now, trade['user_id']))
+    elif e['ended']:
+        # And the one thing it takes away. "NZBN checked on the Companies
+        # Office" is a badge customers see and a claim we make on our own
+        # behalf — leaving it up for a company the register now calls struck
+        # off turns a true statement into a false one, quietly, with nobody
+        # having done anything. The admin still has the whole history below it.
+        _drop_the_badge(db, trade['user_id'], e['status'], now)
     db.commit()
     return {'found': True, 'nzbn': nzbn, 'name_matched': matched, 'entity': e,
             'others': found['others'], 'ended_count': found['ended_count'], 'checked_at': now}
+
+
+def _drop_the_badge(db, trade_id, status, now):
+    """Take the public "NZBN checked" badge down, and record why."""
+    row = db.execute('SELECT nzbn_checked_at FROM trades WHERE user_id = ?', (trade_id,)).fetchone()
+    if not row or not row['nzbn_checked_at']:
+        return False
+    db.execute('UPDATE trades SET nzbn_checked_at = NULL, nzbn_status = ? WHERE user_id = ?',
+               (status, trade_id))
+    return True
 
 
 def latest(db, trade_id):
