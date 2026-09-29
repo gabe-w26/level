@@ -31,6 +31,7 @@ import ai
 import backup
 import billing
 import bundle
+import companies
 import compare
 import credentials
 import deliverability
@@ -2063,6 +2064,36 @@ def trade_vetting():
     return redirect(url_for('trade_trust'))
 
 
+@app.post('/admin/trades/<int:trade_id>/company')
+@requires('admin')
+def admin_trade_company(trade_id):
+    """Ask the Companies Office about this business, and keep what it said.
+
+    Records a dated snapshot either way. The only thing it changes on its own is
+    the plain fact that the NZBN is registered to this name — what the register
+    says about the people behind it is put in front of you to read, because
+    that is a judgement and this is not the thing to make it.
+    """
+    t = db().execute('SELECT * FROM trades WHERE user_id = ?', (trade_id,)).fetchone()
+    if not t:
+        abort(404)
+    if not companies.configured():
+        flash('No Companies Office key yet — add one in Admin → Setup. It’s free from '
+              'api.business.govt.nz.', 'error')
+    elif not companies.clean(t['nzbn'] or ''):
+        flash('This business hasn’t given an NZBN, so there’s nothing to look up.', 'error')
+    else:
+        out = companies.run(db(), t, by=current_user()['id'])
+        if not out:
+            flash('Couldn’t reach the register. Nothing was recorded — try again shortly.', 'error')
+        elif not out['found']:
+            flash('The register has no entity with that NZBN. Recorded, so it’s on file.', 'error')
+        else:
+            flash(f'Checked. The register calls it “{out["entity"]["name"]}” '
+                  f'({out["entity"]["status"] or "no status given"}).')
+    return redirect(url_for('admin_trade', trade_id=trade_id))
+
+
 @app.post('/admin/trades/<int:trade_id>/vetting')
 @requires('admin')
 def admin_trade_vetting(trade_id):
@@ -2273,6 +2304,12 @@ SETUP_GROUPS = [
      'warns you. Put that date here and every admin page counts down to it — and starts saying so '
      'loudly a fortnight out. Format: 2026-11-12. Leave it blank if you are on a paid plan.',
      [('db_expires', 'Database expiry date', '2026-11-12')]),
+    ('Companies Office checks',
+     'Free from api.business.govt.nz. With a key, Admin → a business gains a button that asks the '
+     'public register who they are, when they registered, and what else the people behind it have '
+     'run. Facts with a date on them, for you to read — nothing about somebody’s past companies is '
+     'ever published automatically.',
+     [('nzbn_key', 'NZBN API key', '')]),
     ('Email', 'So customers and tradies get alerts, and people can reset their passwords.',
      [('smtp_host', 'Email server', 'smtp.gmail.com'), ('smtp_port', 'Port', '587'),
       ('smtp_user', 'Username (your email address)', 'you@gmail.com'),
@@ -2818,8 +2855,11 @@ def admin_trade(trade_id):
     if not t:
         abort(404)
     now = utcnow()
+    company = companies.latest(db(), trade_id)
     return render_template(
         'admin/trade.html', t=t, now=now,
+        company=company, company_flags=companies.worth_a_look(company),
+        companies_on=companies.configured(),
         work=[r['name'] for r in db().execute('SELECT c.name FROM trade_categories tc JOIN categories c '
                                               'ON c.id = tc.category_id WHERE tc.trade_id = ? ORDER BY c.name',
                                               (trade_id,)).fetchall()],

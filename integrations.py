@@ -24,10 +24,11 @@ KEYS = {
     'resend_secret': 'RESEND_WEBHOOK_SECRET',
     'waitlist': 'WAITLIST',
     'db_expires': 'DB_EXPIRES',
+    'nzbn_key': 'NZBN_API_KEY',
     'docket_url': 'DOCKET_URL',
     'docket_key': 'DOCKET_KEY',
 }
-SECRET = {'smtp_pass', 'twilio_token', 'anthropic_key', 'docket_key', 'resend_key', 'resend_secret'}
+SECRET = {'nzbn_key', 'smtp_pass', 'twilio_token', 'anthropic_key', 'docket_key', 'resend_key', 'resend_secret'}
 PREFIX = 'integration.'
 
 _cache = {'at': 0.0, 'values': {}}

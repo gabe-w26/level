@@ -58,8 +58,54 @@
                 {% if t.nzbn_checked_at %}<span class="badge" style="cursor:default">✓ {{ t.nzbn_checked_at|day }}</span> <button class="linkish small" type="submit">Undo</button>
                 {% else %}<button class="btn btn-quiet btn-sm" type="submit">Mark checked</button>{% endif %}
               </form>
+              {% if companies_on %}
+              <form method="post" action="{{ url_for('admin_trade_company', trade_id=t.user_id) }}" class="inline">
+                {{ m.csrf() }}<button class="btn btn-quiet btn-sm" type="submit">Ask the register</button>
+              </form>
+              {% endif %}
             {% else %}<span class="muted">Not given</span>{% endif %}
           </dd>
+          {% if company %}
+          <dt>Companies Office</dt>
+          <dd>
+            {% if not company.found %}
+              <span class="muted">No entity with that NZBN when we looked
+                ({{ company.checked_at|day }}).</span>
+            {% else %}
+              <b>{{ company.registered_name }}</b>{% if company.status %} — {{ company.status }}{% endif %}
+              {% if company.registered_on %}<span class="small muted">, registered
+                {{ company.registered_on }}</span>{% endif %}
+              <div class="small muted" style="margin-top:2px">
+                {{ company.other_companies }} other
+                compan{{ 'y' if company.other_companies == 1 else 'ies' }} connected to the
+                directors{% if company.ended_companies %}, of which
+                <b>{{ company.ended_companies }}</b> removed, in liquidation or struck off{% endif %}.
+                Asked {{ company.checked_at|day }}.
+              </div>
+              {% if company_flags %}
+              <div class="notice" style="margin:8px 0 0;padding:10px 12px">
+                <b class="small">Worth reading properly:</b>
+                <ul class="small" style="margin:4px 0 0;padding-left:18px">
+                  {% for r in company_flags %}<li>{{ r }}</li>{% endfor %}
+                </ul>
+                <p class="small muted" style="margin:6px 0 0">These are things the register said, not
+                  conclusions. Nothing here is shown to customers.</p>
+              </div>
+              {% endif %}
+              {% if company.others %}
+              <details class="small" style="margin-top:8px">
+                <summary>The other companies</summary>
+                <ul style="margin:6px 0 0;padding-left:18px">
+                  {% for c in company.others %}
+                  <li>{{ c.name }} — {{ c.status or 'no status' }}
+                    <span class="muted">({{ c.director }})</span></li>
+                  {% endfor %}
+                </ul>
+              </details>
+              {% endif %}
+            {% endif %}
+          </dd>
+          {% endif %}
           <dt>Insurance</dt>
           <dd>
             {% if t.insurance_insurer %}{{ t.insurance_insurer }}{% if t.insurance_expiry %} to {{ t.insurance_expiry|day }}{% endif %}

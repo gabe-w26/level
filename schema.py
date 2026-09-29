@@ -598,6 +598,26 @@ MIGRATIONS = [
     # So the one email we promised can carry a real unsubscribe link. These
     # people have no account, so there's no users.unsub_token to borrow.
     'ALTER TABLE waitlist ADD COLUMN unsub_token TEXT',
+
+    # What the Companies Office said, and when. Kept as a dated snapshot rather
+    # than folded into the trade's own columns: a register answer is evidence
+    # with a date on it, and "what did it say when we looked" is the question
+    # you need answered if somebody later disputes it.
+    '''CREATE TABLE IF NOT EXISTS company_checks (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         trade_id INTEGER NOT NULL,
+         nzbn TEXT,
+         found INTEGER NOT NULL DEFAULT 0,
+         name_matched INTEGER NOT NULL DEFAULT 0,
+         registered_name TEXT,
+         status TEXT,
+         registered_on TEXT,
+         other_companies INTEGER NOT NULL DEFAULT 0,
+         ended_companies INTEGER NOT NULL DEFAULT 0,
+         detail TEXT,
+         checked_at TEXT NOT NULL,
+         checked_by INTEGER)''',
+    'CREATE INDEX IF NOT EXISTS company_checks_trade ON company_checks (trade_id, id)',
     'CREATE INDEX IF NOT EXISTS waitlist_area ON waitlist (area_id, side)',
 
     # A job the customer sent to one business by name, rather than to the board.
