@@ -1443,11 +1443,14 @@ def trade_setup():
                 'licence_type = ?, licence_number = ?, '
                 'licence_checked_at = CASE WHEN licence_type = ? AND licence_number = ? THEN licence_checked_at END, '
                 'insurance_insurer = ?, insurance_expiry = ?, '
-                'insurance_checked_at = CASE WHEN insurance_insurer = ? AND insurance_expiry = ? THEN insurance_checked_at END '
+                'insurance_checked_at = CASE WHEN insurance_insurer = ? AND insurance_expiry = ? THEN insurance_checked_at END, '
+                # Renewing re-arms the warning, or the next lapse would pass in silence.
+                'insurance_warned_at = CASE WHEN insurance_expiry = ? THEN insurance_warned_at END '
                 'WHERE user_id = ?',
                 (f['business_name'].strip(), f.get('about', '').strip() or None, int(years) if years else None,
                  f.get('workmanship_guarantee', '').strip() or None, nzbn or None, nzbn or '',
-                 lic, lic_no, lic, lic_no or '', insurer, expiry or None, insurer or '', expiry or '', tid))
+                 lic, lic_no, lic, lic_no or '', insurer, expiry or None, insurer or '', expiry or '',
+                 expiry or '', tid))
             db().execute('DELETE FROM trade_categories WHERE trade_id = ?', (tid,))
             db().execute('DELETE FROM trade_areas WHERE trade_id = ?', (tid,))
             for c in chosen_c:
@@ -2747,6 +2750,13 @@ def admin_home():
                           "AND t.licence_type <> 'none' AND t.licence_checked_at IS NULL) "
                           'OR (t.nzbn IS NOT NULL AND t.nzbn_checked_at IS NULL) '
                           'OR (t.insurance_insurer IS NOT NULL AND t.insurance_checked_at IS NULL))'),
+        # Cover we checked and that has since run out. Separate from "to check",
+        # because it is a different job: chasing a certificate we already had,
+        # from somebody working right now whose quotes say the cover has expired.
+        # ISO dates sort chronologically as text, in SQLite and Postgres alike.
+        lapsed=_count(f'SELECT COUNT(*) AS n {live_trade} AND t.insurance_checked_at IS NOT NULL '
+                      'AND t.insurance_expiry IS NOT NULL AND t.insurance_expiry < ?',
+                      (utcnow().strftime('%Y-%m-%d'),)),
     )
     by_tier = {r['tier']: r['n'] for r in db().execute(
         'SELECT t.tier AS tier, COUNT(*) AS n FROM trades t JOIN users u ON u.id = t.user_id '
@@ -2859,6 +2869,10 @@ def admin_trades():
         where.append("((t.licence_type IS NOT NULL AND t.licence_type <> 'none' AND t.licence_checked_at IS NULL) "
                      'OR (t.nzbn IS NOT NULL AND t.nzbn_checked_at IS NULL) '
                      'OR (t.insurance_insurer IS NOT NULL AND t.insurance_checked_at IS NULL))')
+    elif show == 'lapsed':
+        where.append('t.insurance_checked_at IS NOT NULL AND t.insurance_expiry IS NOT NULL '
+                     'AND t.insurance_expiry < ?')
+        args.append(utcnow().strftime('%Y-%m-%d'))
 
     rows = db().execute(
         'SELECT t.*, u.name, u.email, u.username, u.phone, u.closed_at, u.last_login_at, '

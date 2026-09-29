@@ -542,6 +542,10 @@ MIGRATIONS = [
     'ALTER TABLE trades ADD COLUMN business_note TEXT',
     'ALTER TABLE trades ADD COLUMN business_checked_at TEXT',
 
+    # Public liability: whether we've warned this tradie it is about to run out.
+    # 'soon' or 'expired', the same two states credentials.py uses for tickets.
+    'ALTER TABLE trades ADD COLUMN insurance_warned_at TEXT',
+
     # The trust score, recomputed in the sweep so a page load never waits on it.
     'ALTER TABLE trades ADD COLUMN trust_score INTEGER',
     'ALTER TABLE trades ADD COLUMN trust_at TEXT',

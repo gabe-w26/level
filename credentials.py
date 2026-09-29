@@ -170,6 +170,50 @@ def waiting_on_us(db):
         'WHERE d.checked_at IS NULL ORDER BY d.id').fetchall()]
 
 
+def warn_about_cover(db, at=None):
+    """Tell a tradie before their public liability runs out — the one nobody was told about.
+
+    Tickets in this file have had this since the feature was built. Public
+    liability never did: it lives in a column on `trades` rather than in
+    `trade_documents`, so it missed the machinery, and the first a tradie knew
+    was a customer asking why their quote says "Insurance expired".
+
+    Same two states as a ticket, said once each, because the point is to prompt
+    a renewal and not to nag someone who has decided not to bother. Cleared when
+    they change the insurance details, so a renewal re-arms the warning.
+    """
+    from engine import notify, ts, utcnow
+    at = at or utcnow()
+    today = _today(at)
+    told = 0
+    rows = db.execute('SELECT user_id, insurance_expiry, insurance_warned_at FROM trades '
+                      'WHERE insurance_expiry IS NOT NULL AND insurance_checked_at IS NOT NULL').fetchall()
+    for row in rows:
+        expires = _to_date(row['insurance_expiry'])
+        if not expires:
+            continue
+        warned = row['insurance_warned_at'] or ''
+        if expires < today and warned != 'expired':
+            notify(db, row['user_id'],
+                   f'Your public liability cover ran out on {expires:%d %B}. Your quotes now say '
+                   '“Insurance expired” instead of “Insured”, and it has stopped counting towards '
+                   'your score. Send us the new certificate and both come straight back.',
+                   '/trade/trust', at)
+            db.execute("UPDATE trades SET insurance_warned_at = 'expired' WHERE user_id = ?", (row['user_id'],))
+            told += 1
+        elif today <= expires <= today + timedelta(days=EXPIRY_WARN_DAYS) and not warned:
+            days = (expires - today).days
+            notify(db, row['user_id'],
+                   f'Your public liability cover runs out in {days} day{"s" if days != 1 else ""} '
+                   f'({expires:%d %B}). Renew it and send us the certificate, and nothing changes on '
+                   'your profile. Leave it and your quotes will say the cover has expired.',
+                   '/trade/trust', at)
+            db.execute("UPDATE trades SET insurance_warned_at = 'soon' WHERE user_id = ?", (row['user_id'],))
+            told += 1
+    db.commit()
+    return told
+
+
 def warn_about_expiries(db, at=None):
     """Tell a tradie a month before a ticket runs out, and again the day it does.
 

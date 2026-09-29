@@ -30,6 +30,10 @@
     <div><b>{{ stats.open_jobs }}</b><span class="small muted">jobs taking quotes</span></div>
     <div><b>{{ stats.quotes }}</b><span class="small muted">quotes sent</span></div>
     <a href="{{ url_for('admin_trades') }}"><b>{{ stats.unverified }}</b><span class="small muted">trades to check</span></a>
+    {# Only when there are any: a permanent zero teaches you to stop reading it. #}
+    {% if stats.lapsed %}
+    <a href="{{ url_for('admin_trades', show='lapsed') }}"><b>{{ stats.lapsed }}</b><span class="small muted">insurance lapsed</span></a>
+    {% endif %}
     <a href="{{ url_for('admin_claims') }}"><b>{{ stats.claims }}</b><span class="small muted">refunds to review</span></a>
     <a href="{{ url_for('admin_reports') }}"><b>{{ stats.reports }}</b><span class="small muted">reports</span></a>
   </div>

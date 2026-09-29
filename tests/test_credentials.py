@@ -260,3 +260,150 @@ class UploadTest(Base):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CoverWarningTest(Base):
+    """Public liability is the one credential nobody was warned about.
+
+    Tickets have had a 30-day warning since the feature was built. Insurance
+    lives in a column on `trades` rather than in `trade_documents`, so it missed
+    the machinery entirely — the first a tradie knew their cover had lapsed was
+    a customer seeing "Insurance expired" on their quote.
+    """
+
+    def cover(self, expires, checked=True):
+        self.db.execute('UPDATE trades SET insurance_insurer = ?, insurance_expiry = ?, '
+                        'insurance_checked_at = ?, insurance_warned_at = NULL WHERE user_id = ?',
+                        ('AMI', expires.isoformat() if expires else None,
+                         ts(T0) if checked else None, self.trade))
+        self.db.commit()
+
+    def notes(self):
+        return [r['body'] for r in self.db.execute(
+            'SELECT body FROM notifications WHERE user_id = ? ORDER BY id', (self.trade,))]
+
+    def state(self):
+        return self.db.execute('SELECT insurance_warned_at FROM trades WHERE user_id = ?',
+                               (self.trade,)).fetchone()['insurance_warned_at']
+
+    def test_they_are_warned_a_month_out_while_it_can_still_be_renewed(self):
+        self.cover(TODAY + timedelta(days=20))
+        self.assertEqual(credentials.warn_about_cover(self.db, T0), 1)
+        said = [n for n in self.notes() if 'runs out' in n]
+        self.assertEqual(len(said), 1)
+        self.assertIn('20 days', said[0])
+        self.assertEqual(self.state(), 'soon')
+
+    def test_it_is_not_repeated_every_sweep(self):
+        self.cover(TODAY + timedelta(days=20))
+        for _ in range(5):
+            credentials.warn_about_cover(self.db, T0)
+        self.assertEqual(len([n for n in self.notes() if 'runs out' in n]), 1)
+
+    def test_they_are_told_again_the_day_it_actually_goes(self):
+        self.cover(TODAY + timedelta(days=20))
+        credentials.warn_about_cover(self.db, T0)
+        self.cover(TODAY - timedelta(days=1))       # clears warned_at the way an edit does
+        self.db.execute("UPDATE trades SET insurance_warned_at = 'soon' WHERE user_id = ?", (self.trade,))
+        self.db.commit()
+        credentials.warn_about_cover(self.db, T0)
+        gone = [n for n in self.notes() if 'ran out' in n]
+        self.assertEqual(len(gone), 1)
+        self.assertIn('Insurance expired', gone[0], 'say what the customer is now seeing')
+        self.assertEqual(self.state(), 'expired')
+
+    def test_the_expired_notice_is_also_said_only_once(self):
+        self.cover(TODAY - timedelta(days=40))
+        for _ in range(4):
+            credentials.warn_about_cover(self.db, T0)
+        self.assertEqual(len([n for n in self.notes() if 'ran out' in n]), 1)
+
+    def test_cover_we_never_checked_is_not_warned_about(self):
+        # We would be telling them a certificate we never saw has expired.
+        self.cover(TODAY - timedelta(days=5), checked=False)
+        self.assertEqual(credentials.warn_about_cover(self.db, T0), 0)
+        self.assertEqual(self.notes(), [])
+
+    def test_no_expiry_recorded_is_never_warned_about(self):
+        self.cover(None)
+        self.assertEqual(credentials.warn_about_cover(self.db, T0), 0)
+        self.assertEqual(self.notes(), [])
+
+    def test_a_date_we_cannot_read_is_skipped_not_raised(self):
+        self.db.execute("UPDATE trades SET insurance_insurer = 'AMI', insurance_expiry = 'next March', "
+                        'insurance_checked_at = ? WHERE user_id = ?', (ts(T0), self.trade))
+        self.db.commit()
+        self.assertEqual(credentials.warn_about_cover(self.db, T0), 0)
+
+    def test_renewing_re_arms_the_warning(self):
+        """Or the second lapse passes in silence, which is the worse bug.
+
+        Goes through the real setup form, because the clearing is a CASE
+        expression in that UPDATE and nowhere else.
+        """
+        self.cover(TODAY - timedelta(days=2))
+        credentials.warn_about_cover(self.db, T0)
+        self.assertEqual(self.state(), 'expired')
+
+        c = self.client(self.trade)
+        r = c.post('/trade/setup', data={
+            '_csrf': 't', 'business_name': 'Karori Building', 'years_trading': '9',
+            'licence_type': 'none', 'insurance_insurer': 'AMI',
+            'insurance_expiry': (TODAY + timedelta(days=400)).isoformat(),
+            'categories': str(self.cat), 'areas': str(
+                self.db.execute('SELECT id FROM areas LIMIT 1').fetchone()['id'])})
+        self.assertIn(r.status_code, (200, 302), r.data[:400])
+        self.assertIsNone(self.state(), 'a new expiry date must clear the old warning')
+
+    def test_the_sweep_runs_it(self):
+        # A warning nothing calls is a warning nobody gets. This is the wiring.
+        self.cover(TODAY + timedelta(days=10))
+        report = engine.sweep(self.db, at=T0)
+        self.assertIn('cover_warned', report)
+        self.assertEqual(report['cover_warned'], 1)
+
+
+class AdminLapsedQueueTest(Base):
+    """The operational half: somebody has to chase the certificate.
+
+    The tradie is warned, and their badge tells the truth. Neither of those gets
+    the new certificate onto the file — an admin has to ask. Before this there
+    was no page anywhere that listed who had lapsed.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.admin = self.db.execute("SELECT id FROM users WHERE role = 'admin'").fetchone()['id']
+        import billing
+        t = self.db.execute('SELECT * FROM trades WHERE user_id = ?', (self.trade,)).fetchone()
+        billing.choose_plan(self.db, t, 'trade1@test.nz', 'large', '', '')
+        self.db.commit()
+
+    def cover(self, expiry):
+        self.db.execute('UPDATE trades SET insurance_insurer = ?, insurance_expiry = ?, '
+                        'insurance_checked_at = ? WHERE user_id = ?',
+                        ('AMI', expiry, ts(T0), self.trade))
+        self.db.commit()
+
+    def test_a_lapsed_trade_is_counted_and_listed_and_a_current_one_is_not(self):
+        c = self.client(self.admin)
+        past = (date.today() - timedelta(days=30)).isoformat()
+        future = (date.today() + timedelta(days=300)).isoformat()
+
+        self.cover(future)
+        self.assertNotIn(b'insurance lapsed', c.get('/admin').data)
+        self.assertNotIn(b'Karori Building', c.get('/admin/trades?show=lapsed').data)
+
+        self.cover(past)
+        self.assertIn(b'insurance lapsed', c.get('/admin').data)
+        self.assertIn(b'Karori Building', c.get('/admin/trades?show=lapsed').data)
+
+    def test_cover_that_was_never_checked_is_not_in_the_lapsed_queue(self):
+        # It belongs in "need checking". Two different jobs, two different lists.
+        self.db.execute('UPDATE trades SET insurance_insurer = ?, insurance_expiry = ?, '
+                        'insurance_checked_at = NULL WHERE user_id = ?',
+                        ('AMI', (date.today() - timedelta(days=30)).isoformat(), self.trade))
+        self.db.commit()
+        c = self.client(self.admin)
+        self.assertNotIn(b'Karori Building', c.get('/admin/trades?show=lapsed').data)
+        self.assertIn(b'Karori Building', c.get('/admin/trades?show=unchecked').data)

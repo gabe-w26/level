@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% import '_macros.html' as m with context %}
 {% block title %}Businesses — admin{% endblock %}
-{% set filters = [('all', 'All'), ('active', 'Taking jobs'), ('paused', 'Paused'), ('inactive', 'No plan'), ('unchecked', 'Need checking')] %}
+{% set filters = [('all', 'All'), ('active', 'Taking jobs'), ('paused', 'Paused'), ('inactive', 'No plan'), ('unchecked', 'Need checking'), ('lapsed', 'Insurance lapsed')] %}
 {% block main %}
 <div class="wrap page">
   <div class="page-head">

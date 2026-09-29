@@ -770,6 +770,7 @@ def sweep(db, at=None):
 
     import credentials
     report['tickets_warned'] = credentials.warn_about_expiries(db, at)
+    report['cover_warned'] = credentials.warn_about_cover(db, at)
     report['direct_opened'] = open_up_direct_jobs(db, at)
     return report
 
