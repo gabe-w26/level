@@ -354,6 +354,9 @@ def _joining_for():
 # template imported it `with context`, and the day one doesn't, the badges would
 # raise rather than degrade. Globals are always in scope.
 app.jinja_env.globals['insurance_expired'] = trust.insurance_expired
+# Same reasoning: pure, and the admin research block needs it to say whether a
+# trading name and a registered name are the same business.
+app.jinja_env.globals['name_matches'] = companies.name_matches
 
 
 @app.context_processor

@@ -119,6 +119,55 @@
             {# Every line links to the page it came from. This is somebody else's
                search results, not a finding of ours — the admin reads the page,
                not the summary. #}
+            {# The register and the archive answered for themselves, so they go first
+               and they are not styled like the rest: everything below this block is
+               a model's reading of pages, and everything in it is a record. #}
+            {% if f.register %}
+            {% set r = f.register %}
+            <div class="card" style="margin:0 0 10px;padding:10px 12px">
+              <b class="small">The register says</b>
+              <ul class="small" style="margin:4px 0 0;padding-left:18px">
+                <li>{{ r.name }} · NZBN {{ r.nzbn }}{% if r.type %} · {{ r.type }}{% endif %}</li>
+                <li>{{ r.status }}{% if r.registered_on %}, registered {{ r.registered_on|day }}{% endif %}
+                  {%- if r.has_ended %} — <b>this entity has ended</b>{% endif %}</li>
+                {% if r.name and not name_matches(t.business_name, r.name) %}
+                <li><b>Trades here as “{{ t.business_name }}”, registered as “{{ r.name }}”.</b>
+                  Common and usually fine — worth knowing which is which.</li>
+                {% endif %}
+                {% if r.directors %}<li>Directors: {{ r.directors | join(', ') }}</li>{% endif %}
+                {% if r.other_companies_total %}
+                <li>Those directors have run {{ r.other_companies_total }} other
+                  compan{{ 'y' if r.other_companies_total == 1 else 'ies' }},
+                  {{ r.other_companies_ended }} of which
+                  {{ 'has' if r.other_companies_ended == 1 else 'have' }} ended.
+                  {% if r.other_companies %}
+                  <ul style="margin:2px 0 0;padding-left:16px">
+                    {% for c in r.other_companies %}
+                    <li{% if c.has_ended %} class="muted"{% endif %}>{{ c.name }} — {{ c.status }}</li>
+                    {% endfor %}
+                  </ul>
+                  {% endif %}
+                  <span class="muted">A company that ended is not a mark against anybody. Businesses
+                    close for every reason there is.</span>
+                </li>
+                {% endif %}
+              </ul>
+              <p class="small muted" style="margin:6px 0 0">{{ r.source }} · check it on
+                <a href="https://www.nzbn.govt.nz/" target="_blank" rel="noopener">nzbn.govt.nz</a>
+                with that number.</p>
+            </div>
+            {% endif %}
+
+            {% for a in f.archive %}
+            <p class="small" style="margin:0 0 8px">
+              {% if a.captures %}<b>{{ a.domain }}</b> was first archived
+                {{ a.first_capture|day }}{% if a.last_capture %}, most recently
+                {{ a.last_capture|day }}{% endif %} —
+                <a href="{{ a.url }}" target="_blank" rel="noopener nofollow">see the captures ↗</a>
+              {% else %}<span class="muted"><b>{{ a.domain }}</b> has never been archived.</span>{% endif %}
+            </p>
+            {% endfor %}
+
             {% if f.same_name_confusion %}
             <p class="notice" style="margin:0 0 8px;padding:8px 10px"><b class="small">More than one
               business shares this name</b><span class="small"> — the search couldn’t tell them
@@ -157,10 +206,13 @@
               {{ f.not_found | join('; ') }}. Not found is not the same as not there.</p>
             {% endif %}
 
-            <p class="small muted" style="margin:8px 0 0">An automated search of {{ f.searches or 0 }}
-              quer{{ 'y' if (f.searches or 0) == 1 else 'ies' }}, {{ web.checked_at|day }}. It reports
-              pages, not conclusions — open the links before acting on any of it. None of this is
-              shown to customers.</p>
+            <p class="small muted" style="margin:8px 0 0">{{ f.searches or 0 }}
+              search{{ '' if (f.searches or 0) == 1 else 'es' }},
+              {{ f.fetches or 0 }} page{{ '' if (f.fetches or 0) == 1 else 's' }} opened and
+              {{ f.lookups or 0 }} register lookup{{ '' if (f.lookups or 0) == 1 else 's' }},
+              {{ web.checked_at|day }}. Everything above the line is a record; everything below it
+              reports pages, not conclusions — open the links before acting on any of it. None of
+              this is shown to customers.</p>
           </dd>
           {% endif %}
           <dt>Insurance</dt>
