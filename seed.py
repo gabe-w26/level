@@ -129,7 +129,8 @@ def run(db):
         return db.execute('INSERT INTO users (role, email, password_hash, name, phone, created_at) VALUES (?,?,?,?,?,?)',
                           (role, email, pw, name, phone(), ts(created))).lastrowid
 
-    def make_trade(cat, business=None, email=None, person=None, tier=None, cover=None, verified=None):
+    def make_trade(cat, business=None, email=None, person=None, tier=None, cover=None, verified=None,
+                   lapsed=None):
         business = business or f'{next(names)} {rng.choice(SUFFIX[cat])}'
         email = email or business.lower().replace(' ', '').replace('&', '').replace('’', '') + '@demo.level.local'
         person = person or f'{rng.choice(FIRST)} {rng.choice(LAST)}'
@@ -140,13 +141,21 @@ def run(db):
         checked = ts(sub_start) if verified else None
         number = {'lbp': f'BP{rng.randint(100000, 140000)}', 'ewrb': f'EW{rng.randint(100000, 299999)}',
                   'pgdb': str(rng.randint(10000, 39999))}.get(lic)
+        # A few certificates have run out, because in the real world a few always
+        # have. Without one in the demo data, the "Insurance expired" badge and the
+        # zero it scores are never rendered by anything — not the audit sweep, not
+        # a human clicking around — and a path nothing renders is a path nobody
+        # notices breaking.
+        lapsed = (rng.random() < .15) if lapsed is None else lapsed
+        expiry = ((now - timedelta(days=rng.randint(20, 400))).strftime('%Y-%m-%d') if lapsed
+                  else f'{now.year + 1}-0{rng.randint(1, 9)}-15')
         db.execute('INSERT INTO trades (user_id, business_name, about, years_trading, nzbn, nzbn_checked_at, '
                    'licence_type, licence_number, licence_checked_at, insurance_insurer, insurance_expiry, '
                    'insurance_checked_at, workmanship_guarantee, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                    (uid, business, f'Owner-operated {cat} business with a small crew. We look after homes across '
                                    'Auckland and keep customers in the loop from quote to clean-up.',
                     rng.randint(2, 28), _nzbn(rng), checked, lic, number, checked if number else None,
-                    rng.choice(INSURERS), f'{now.year + 1}-0{rng.randint(1, 9)}-15', checked,
+                    rng.choice(INSURERS), expiry, checked,
                     rng.choice(WARRANTY), ts(sub_start)))
         db.execute('INSERT INTO trade_categories (trade_id, category_id) VALUES (?,?)', (uid, cats[cat]))
         for a in cover or rng.sample(AREAS, rng.randint(1, 3)):
@@ -158,7 +167,7 @@ def run(db):
 
     # The demo trade: builder covering Central and the North Shore, on the top plan.
     demo_trade = make_trade('builder', 'Harbourline Builders', 'trade@level.local', 'Tama Ngata', 'large',
-                            ['akl-central', 'akl-north-shore'], True)
+                            ['akl-central', 'akl-north-shore'], True, lapsed=False)
     trades = {'builder': [demo_trade]}
     for cat, n in POOL:
         for i in range(n - (1 if cat == 'builder' else 0)):

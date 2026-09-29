@@ -28,6 +28,8 @@ defensible to the person it is about:
 """
 import json
 
+from datetime import datetime
+
 import config
 
 # ── what each thing is worth ────────────────────────────────────────────────
@@ -89,7 +91,27 @@ def _points(rate, worth):
 
 # ── the three sections ──────────────────────────────────────────────────────
 
-def checked_facts(trade):
+def insurance_expired(trade, at=None):
+    """Has the cover we saw run out?
+
+    credentials.py already settled the principle for tickets — expiry beats
+    checked, and a confirmed thing that ran out last week is expired, not
+    confirmed. Insurance is the one a customer actually leans on, and it was
+    the one place not following it: "we saw a certificate in March" was scoring
+    and badging as cover in September.
+    """
+    from engine import utcnow
+    raw = trade['insurance_expiry'] if 'insurance_expiry' in trade.keys() else None
+    if not raw:
+        return False                      # no date given — we can't say it has run out
+    try:
+        gone = datetime.strptime(str(raw)[:10], '%Y-%m-%d').date()
+    except ValueError:
+        return False
+    return gone < (at or utcnow()).date()
+
+
+def checked_facts(trade, at=None):
     """What we have verified, and when. Nothing here is the tradie's word for it."""
     have = {
         'licence': trade['licence_checked_at'] if 'licence_checked_at' in trade.keys() else None,
@@ -97,11 +119,18 @@ def checked_facts(trade):
         'nzbn': trade['nzbn_checked_at'] if 'nzbn_checked_at' in trade.keys() else None,
         'business': trade['business_checked_at'] if 'business_checked_at' in trade.keys() else None,
     }
+    lapsed = insurance_expired(trade, at)
+    if lapsed:
+        have['insurance'] = None
     out = []
     for key, label, worth in CHECKED:
         on = have.get(key)
+        expired = lapsed and key == 'insurance'
         out.append({'key': key, 'label': label, 'worth': worth, 'got': worth if on else 0,
-                    'when': on, 'done': bool(on)})
+                    'when': on, 'done': bool(on), 'expired': expired,
+                    # The score table prints this, so the zero explains itself rather
+                    # than reading as "we never looked".
+                    'note': (f'expired {str(trade["insurance_expiry"])[:10]}' if expired else None)})
     return out
 
 
@@ -247,8 +276,18 @@ def _next_step(sections):
     todo = [r for s in sections if s['key'] != 'conduct' for r in s['rows'] if not r['got']]
     if not todo:
         return None
-    best = max(todo, key=lambda r: r['worth'])
-    return {'label': best['label'], 'worth': best['worth'], 'key': best['key']}
+    # Something that lapsed comes before something never done, whatever it is
+    # worth. A tradie whose cover expired is losing a badge they had, and their
+    # quotes are carrying "Insurance expired" until they fix it; an unchecked
+    # licence is only a not-yet.
+    best = max(todo, key=lambda r: (1 if r.get('expired') else 0, r['worth']))
+    label = best['label']
+    # A tradie whose cover lapsed did send us a certificate. Telling them to send
+    # one reads as though we lost it; the thing they have to do is renew.
+    if best.get('expired'):
+        label = 'Send us your new insurance certificate — the last one has expired'
+    return {'label': label, 'worth': best['worth'], 'key': best['key'],
+            'expired': bool(best.get('expired'))}
 
 
 def score_for(db, trade):

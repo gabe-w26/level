@@ -208,6 +208,8 @@ export interface Quote {
   licence_type?: string | null;
   licence_checked?: boolean;
   insurance_checked?: boolean;
+  /** Seen, but the certificate has since run out. Never true at the same time as insurance_checked. */
+  insurance_expired?: boolean;
   nzbn_checked?: boolean;
   years_trading?: number | null;
   workmanship_guarantee?: string | null;
@@ -344,6 +346,7 @@ export interface TradeProfile {
   business_name: string; about: string | null; years_trading: number | null;
   licence_type: string | null; licence_number: string | null;
   licence_checked: boolean; insurance_checked: boolean; nzbn_checked: boolean;
+  insurance_expired: boolean; insurance_expiry: string | null;
   workmanship_guarantee: string | null; categories: string[]; areas: string[];
   rating: Rating; public_url: string; edit_url: string | null;
   report_plan: ReportKind[]; report_record: ReportRecord | null;

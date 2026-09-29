@@ -9,6 +9,7 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import timedelta
 from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -128,6 +129,50 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.call('post', '/customer/jobs', trade, json=JOB).status_code, 403)
 
     # ── the whole loop ──
+    def test_the_api_never_calls_an_expired_policy_insured(self):
+        """The web badge and the phone app read the same column; both must obey it.
+
+        `mobile/app/job/[id].tsx` turns `insurance_checked` straight into an
+        "Insured" chip on the quote-comparison card — the screen a homeowner is
+        looking at while deciding who to let into their house. A stale true here
+        is the same untruth as the web badge, on the worse screen.
+        """
+        self.user('customer', 'c@test.nz')
+        trade_id = self.user('trade', 't@test.nz')
+        customer, trade = self.login('c@test.nz'), self.login('t@test.nz')
+        job_id = self.call('post', '/customer/jobs', customer, json=JOB).get_json()['job_id']
+        self.call('post', f'/trade/jobs/{job_id}/quote', trade, json=QUOTE)
+
+        def seen():
+            return self.call('get', f'/customer/jobs/{job_id}', customer).get_json()['quotes'][0]
+
+        def mine():
+            return self.call('get', '/trade/profile', trade).get_json()['profile']
+
+        def set_cover(expiry):
+            self.db.execute('UPDATE trades SET insurance_checked_at = ?, insurance_insurer = ?, '
+                            'insurance_expiry = ? WHERE user_id = ?',
+                            (ts(utcnow()), 'AMI', expiry, trade_id))
+            self.db.commit()
+
+        set_cover((utcnow() + timedelta(days=200)).strftime('%Y-%m-%d'))
+        q, p = seen(), mine()
+        self.assertTrue(q['insurance_checked'])
+        self.assertFalse(q['insurance_expired'])
+        self.assertTrue(p['insurance_checked'])
+
+        set_cover((utcnow() - timedelta(days=20)).strftime('%Y-%m-%d'))
+        q, p = seen(), mine()
+        self.assertFalse(q['insurance_checked'], 'an expired certificate is not cover')
+        self.assertTrue(q['insurance_expired'], 'and saying nothing reads as never checked')
+        self.assertFalse(p['insurance_checked'])
+        self.assertTrue(p['insurance_expired'])
+        self.assertTrue(p['insurance_expiry'], 'the tradie needs the date to know what to renew')
+
+        # Never both. The phone renders them as two separate chips.
+        for row in (q, p):
+            self.assertFalse(row['insurance_checked'] and row['insurance_expired'])
+
     def test_customer_posts_and_trade_quotes_through_the_api(self):
         self.user('customer', 'c@test.nz')
         trade_id = self.user('trade', 't@test.nz')

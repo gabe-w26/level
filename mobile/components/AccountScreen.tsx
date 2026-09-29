@@ -107,6 +107,11 @@ function TradeSection({ profile, status, onChanged }: { profile: TradeProfile; s
         <Row label="Updates on time" value={profile.report_record ? `${profile.report_record.pct}% across ${profile.report_record.jobs} job${profile.report_record.jobs === 1 ? '' : 's'}` : 'Not enough jobs yet'} />
         <Row label="Checked" value={[profile.licence_checked && 'Licence', profile.insurance_checked && 'Insurance',
           profile.nzbn_checked && 'NZBN'].filter(Boolean).join(', ') || 'Nothing checked yet'} />
+        {/* Its own row, not a footnote on the one above: the tradie is losing the
+            badge and the trust points until they send a current certificate. */}
+        {profile.insurance_expired
+          ? <Row label="Insurance" value={`Certificate expired${profile.insurance_expiry ? ` ${day(profile.insurance_expiry)}` : ''} — send a current one to get the badge back`} />
+          : null}
         <Row label="New jobs" value={status.paused ? (status.paused_until ? `Paused until ${day(status.paused_until)}` : 'Paused') : 'On'} />
         <View style={{ marginTop: 10 }}>
           {status.paused

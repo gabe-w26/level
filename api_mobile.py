@@ -38,6 +38,7 @@ import mailer
 import referrals
 import reporting
 import sms
+import trust
 import waitlist as wl
 # Not `as threads`, the way app.py imports it: the /threads route function
 # below is called threads() and would shadow it.
@@ -352,7 +353,11 @@ def quote_json(q, with_contact=False):
             out[k] = q[k]
     if 'licence_type' in keys:
         out['licence_checked'] = bool(q['licence_checked_at'])
-        out['insurance_checked'] = bool(q['insurance_checked_at'])
+        # Expiry beats checked. A certificate that ran out is not cover, and the
+        # app must not be handed a true flag it will render as "Insured".
+        expired = trust.insurance_expired(q)
+        out['insurance_checked'] = bool(q['insurance_checked_at']) and not expired
+        out['insurance_expired'] = bool(q['insurance_checked_at']) and expired
         out['nzbn_checked'] = bool(q['nzbn_checked_at'])
     if 'report_plan' in keys:
         out['report_plan'] = reporting.parse(q['report_plan'])
@@ -1191,7 +1196,10 @@ def trade_profile():
     return {'profile': {
         'business_name': t['business_name'], 'about': t['about'], 'years_trading': t['years_trading'],
         'licence_type': t['licence_type'], 'licence_number': t['licence_number'],
-        'licence_checked': bool(t['licence_checked_at']), 'insurance_checked': bool(t['insurance_checked_at']),
+        'licence_checked': bool(t['licence_checked_at']),
+        'insurance_checked': bool(t['insurance_checked_at']) and not trust.insurance_expired(t),
+        'insurance_expired': bool(t['insurance_checked_at']) and trust.insurance_expired(t),
+        'insurance_expiry': t['insurance_expiry'],
         'nzbn_checked': bool(t['nzbn_checked_at']), 'workmanship_guarantee': t['workmanship_guarantee'],
         'categories': [c['name'] for c in cats], 'areas': [a['name'] for a in areas],
         'rating': engine.trade_rating(db(), uid), 'public_url': f'{site_url()}/pros/{uid}',

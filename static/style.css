@@ -131,6 +131,9 @@ p { margin: 0 0 1em; }
 .badges { list-style: none; padding: 0; margin: 6px 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .badge { font-size: 12.5px; font-weight: 600; background: var(--pine-wash); color: var(--pine); border-radius: 999px; padding: 3px 10px; cursor: help; }
 .badge.wait { background: var(--slab); color: var(--ink-3); border: 1px solid var(--rule); cursor: default; }
+/* A fact that has run out. Deliberately not red: an expired certificate is a
+   thing to renew, not an accusation. It just must not read as confirmed. */
+.badge.badge-off { background: var(--slab); color: var(--ink-3); border: 1px solid var(--rule); font-weight: 500; }
 .stars { font-size: 14px; color: var(--ink); white-space: nowrap; }
 .stars b { font-weight: 700; }
 .stars.new { color: var(--ink-2); }

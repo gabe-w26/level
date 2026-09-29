@@ -204,6 +204,14 @@ def login(email, password='demo1234'):
 def main():
     init_db()
     conn = dbmod.get_db()
+    # Seed if nobody has. Without the demo accounts the customer and trade logins
+    # bounce, those two sweeps are skipped, and the run still prints a tidy
+    # summary of the half it managed to check — the most misleading thing a
+    # harness like this can do. Seeding here means the trap cannot be stepped in.
+    if not conn.execute("SELECT 1 FROM users WHERE email = 'trade@level.local'").fetchone():
+        import seed
+        seed.run(conn)
+        NOTES.append('Database was empty, so it was seeded before the sweep.')
     fill_samples(conn)
     A.app.testing = True
     check_sql()
@@ -217,6 +225,9 @@ def main():
         c = login(email, pw)
         if c:
             sweep(c, role, skip_prefixes=('/logout', '/demo/'))
+        else:
+            # Say it loudly. A skipped role is not a passing role.
+            NOTES.append(f'{role}: NOT SWEPT — the login failed, so none of its pages were checked.')
     conn.close()
 
     print('\n'.join('  ' + n for n in NOTES))

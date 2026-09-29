@@ -58,7 +58,11 @@
   {% endif %}
   {% if t.nzbn_checked_at %}<li class="badge" title="NZBN {{ t.nzbn }} checked on the NZ Business Number register on {{ t.nzbn_checked_at|day }}.">✓ NZBN checked</li>
   {% elif t.nzbn and show_waiting %}<li class="badge wait">NZBN not yet checked</li>{% endif %}
-  {% if t.insurance_checked_at %}<li class="badge" title="We saw a public liability certificate from {{ t.insurance_insurer }}{% if t.insurance_expiry %}, valid to {{ t.insurance_expiry|day }}{% endif %}. Checked {{ t.insurance_checked_at|day }}.">✓ Insured{% if t.insurance_expiry %} to {{ t.insurance_expiry|day }}{% endif %}</li>
+  {# Expiry beats checked — the rule credentials.py already states for tickets.
+     A tick reading "Insured" for a certificate that ran out in March is the one
+     genuinely misleading thing these badges could say. #}
+  {% if t.insurance_checked_at and insurance_expired(t) %}<li class="badge badge-off" title="The public liability certificate we saw from {{ t.insurance_insurer }} ran out on {{ t.insurance_expiry|day }}. We haven’t seen a newer one.">Insurance expired {{ t.insurance_expiry|day }}</li>
+  {% elif t.insurance_checked_at %}<li class="badge" title="We saw a public liability certificate from {{ t.insurance_insurer }}{% if t.insurance_expiry %}, valid to {{ t.insurance_expiry|day }}{% endif %}. Checked {{ t.insurance_checked_at|day }}.">✓ Insured{% if t.insurance_expiry %} to {{ t.insurance_expiry|day }}{% endif %}</li>
   {% elif t.insurance_insurer and show_waiting %}<li class="badge wait">Insurance not yet checked</li>{% endif %}
 </ul>
 {% endmacro %}

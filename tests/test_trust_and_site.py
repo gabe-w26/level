@@ -23,6 +23,7 @@ os.environ['RUN_SWEEPER'] = '0'
 os.environ['WAITLIST_DEFAULT'] = '0'   # these tests exercise the open site
 
 import app as A  # noqa: E402
+from flask import render_template_string  # noqa: E402
 import billing  # noqa: E402
 import config  # noqa: E402
 import db as dbmod  # noqa: E402
@@ -635,3 +636,138 @@ class WorksiteTest(Base):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class InsuranceExpiryTest(Base):
+    """Expiry beats checked.
+
+    `credentials.py` already writes the rule down for licence tickets: "a
+    confirmed ticket that ran out last week is expired, not confirmed, and
+    saying otherwise would be the one genuinely misleading thing this feature
+    could do." Insurance had the expiry date on the row and honoured it nowhere
+    — the badge said "✓ Insured to 12 Mar 2026" with March behind us, and the
+    score paid full points for it.
+
+    Public liability is the badge a customer leans on hardest, so these tests
+    guard the whole path: the fact, the points, and the words on the page.
+    """
+
+    def insured(self, expiry, insurer='AMI'):
+        tid = self.user('trade')
+        self.db.execute('UPDATE trades SET insurance_checked_at = ?, insurance_insurer = ?, '
+                        'insurance_expiry = ? WHERE user_id = ?', (ts(T0), insurer, expiry, tid))
+        self.db.commit()
+        return self.trade(tid)
+
+    def insurance_row(self, t):
+        return next(f for f in trust.checked_facts(t, at=T0) if f['key'] == 'insurance')
+
+    def badges(self, t):
+        with A.app.test_request_context('/'):
+            return render_template_string(
+                '{% import "_macros.html" as m with context %}{{ m.badges(t) }}', t=t)
+
+    # ── the fact ─────────────────────────────────────────────────────────────
+
+    def test_a_policy_that_ran_out_is_expired(self):
+        self.assertTrue(trust.insurance_expired(self.insured('2026-03-12'), at=T0))
+
+    def test_a_policy_still_running_is_not(self):
+        self.assertFalse(trust.insurance_expired(self.insured('2027-03-12'), at=T0))
+
+    def test_expiring_today_still_counts_as_cover(self):
+        # The certificate is valid to and including its expiry date. Calling it
+        # dead at midnight on the day would be wrong by up to 24 hours.
+        self.assertFalse(trust.insurance_expired(self.insured('2026-09-25'), at=T0))
+
+    def test_no_expiry_recorded_is_not_a_claim_that_it_ran_out(self):
+        # Plenty of certificates were checked before we captured the date. Not
+        # knowing when it ends is not the same as knowing it has ended.
+        self.assertFalse(trust.insurance_expired(self.insured(None), at=T0))
+
+    def test_an_unreadable_date_does_not_crash_a_profile(self):
+        # Whatever ends up in that column, rendering somebody's profile must not
+        # raise. An unparseable date reads as "we don't know", never "expired".
+        for junk in ('', 'soon', '12/03/2026', '2026-13-45', 'null'):
+            self.assertFalse(trust.insurance_expired(self.insured(junk), at=T0), junk)
+
+    # ── the points ───────────────────────────────────────────────────────────
+
+    def test_an_expired_certificate_earns_nothing(self):
+        worth = dict((k, w) for k, _label, w in trust.CHECKED)
+        row = self.insurance_row(self.insured('2026-03-12'))
+        self.assertEqual(row['got'], 0)
+        self.assertTrue(row['expired'])
+        self.assertGreater(worth['insurance'], 0, 'insurance should be worth something when valid')
+
+    def test_a_current_certificate_earns_full_marks(self):
+        worth = dict((k, w) for k, _label, w in trust.CHECKED)
+        row = self.insurance_row(self.insured('2027-03-12'))
+        self.assertEqual(row['got'], worth['insurance'])
+        self.assertFalse(row['expired'])
+
+    def test_the_score_actually_falls_when_a_policy_lapses(self):
+        t = self.insured('2027-03-12')
+        before = trust.explain(self.db, t)['score']
+        self.db.execute('UPDATE trades SET insurance_expiry = ? WHERE user_id = ?',
+                        ('2026-03-12', t['user_id']))
+        self.db.commit()
+        after = trust.explain(self.db, self.trade(t['user_id']))['score']
+        self.assertLess(after, before,
+                        'a lapsed policy has to cost points, or the score is telling a story')
+
+    # ── the words on the page ────────────────────────────────────────────────
+
+    def test_the_badge_says_expired_not_insured(self):
+        html = self.badges(self.insured('2026-03-12'))
+        self.assertIn('Insurance expired', html)
+        self.assertNotIn('✓ Insured', html)
+        self.assertIn('badge-off', html)
+
+    def test_the_badge_still_says_insured_while_it_is_valid(self):
+        html = self.badges(self.insured('2027-03-12'))
+        self.assertIn('✓ Insured', html)
+        self.assertNotIn('expired', html)
+
+    def test_the_helper_reaches_the_macro_from_every_template(self):
+        # The macro calls insurance_expired(). It is a Jinja global precisely so
+        # that a template importing macros without `with context` still renders.
+        self.assertIn('insurance_expired', A.app.jinja_env.globals)
+        with A.app.test_request_context('/'):
+            html = render_template_string(
+                '{% import "_macros.html" as m %}{{ m.badges(t) }}', t=self.insured('2026-03-12'))
+        self.assertIn('Insurance expired', html)
+
+    # ── what the tradie is told ──────────────────────────────────────────────
+
+    def test_the_tradie_is_told_to_renew_not_to_send_one(self):
+        # They did send us a certificate. "Public liability insurance seen" as a
+        # to-do reads as though we lost it, and sends them looking for the wrong
+        # thing. The action is renewing.
+        t = self.insured('2026-03-12')
+        e = trust.explain(self.db, t)
+        self.assertEqual(e['next']['key'], 'insurance')
+        self.assertTrue(e['next']['expired'])
+        self.assertIn('expired', e['next']['label'].lower())
+        # And it beats the licence, which is worth more points but was never done.
+        # Losing a badge you had is the more urgent of the two.
+        worth = dict((k, w) for k, _label, w in trust.CHECKED)
+        self.assertGreater(worth['licence'], worth['insurance'])
+        self.assertIsNone(t['licence_checked_at'])
+
+    def test_a_lapsed_thing_only_jumps_the_queue_while_it_is_lapsed(self):
+        e = trust.explain(self.db, self.insured('2027-03-12'))
+        self.assertEqual(e['next']['key'], 'licence', 'with nothing lapsed, points decide again')
+        self.assertFalse(e['next']['expired'])
+
+    def test_the_score_table_explains_its_own_zero(self):
+        row = self.insurance_row(self.insured('2026-03-12'))
+        self.assertEqual(row['note'], 'expired 2026-03-12')
+        self.assertIsNone(self.insurance_row(self.insured('2027-03-12'))['note'])
+
+    def test_the_customer_summary_stops_claiming_it(self):
+        # summary() is the two lines a homeowner reads beside a quote.
+        valid = trust.summary(self.db, self.insured('2027-03-12'))
+        self.assertIn('insurance', ' '.join(valid['lines']).lower())
+        lapsed = trust.summary(self.db, self.insured('2026-03-12'))
+        self.assertNotIn('insurance', ' '.join(lapsed['lines']).lower())

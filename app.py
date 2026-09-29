@@ -349,6 +349,13 @@ def _joining_for():
     return outreach.the_job(db(), job_id) if job_id else None
 
 
+# A pure function the badge macro needs. Registered as a Jinja global rather
+# than passed through the context processor: a macro only sees context when the
+# template imported it `with context`, and the day one doesn't, the badges would
+# raise rather than degrade. Globals are always in scope.
+app.jinja_env.globals['insurance_expired'] = trust.insurance_expired
+
+
 @app.context_processor
 def _globals():
     u = current_user()

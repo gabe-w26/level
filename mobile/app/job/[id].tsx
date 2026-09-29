@@ -193,7 +193,11 @@ function QuoteCard({ q, n, jobOpen, busy, onShare, onAccept, onDecline, onMessag
   onShare: () => void; onAccept: () => void; onDecline: () => void; onMessage: () => void;
 }) {
   const status = QUOTE_STATUS[q.status];
-  const badges = [q.licence_checked && 'Licence checked', q.insurance_checked && 'Insured', q.nzbn_checked && 'NZBN checked']
+  // 'Insured' and 'Insurance expired' are mutually exclusive by construction on
+  // the server. Showing the expired case rather than hiding it is the point: a
+  // missing badge reads as never checked, which is a different thing.
+  const badges = [q.licence_checked && 'Licence checked', q.insurance_checked && 'Insured',
+    q.insurance_expired && 'Insurance expired', q.nzbn_checked && 'NZBN checked']
     .filter(Boolean) as string[];
   const canRespond = jobOpen && (q.status === 'sent' || q.status === 'shortlisted');
   return (
