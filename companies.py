@@ -33,6 +33,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import timedelta
 
 BASE = os.environ.get('NZBN_API_BASE', 'https://api.business.govt.nz/services/v5/nzbn')
 AUTH_HEADER = os.environ.get('NZBN_AUTH_HEADER', 'Ocp-Apim-Subscription-Key')
@@ -290,3 +291,89 @@ def worth_a_look(check):
         reasons.append(f'{ended} of {total} companies connected to the directors are removed, '
                        'in liquidation or struck off.')
     return reasons
+
+
+# ── Keeping it current ───────────────────────────────────────────────────────
+
+RECHECK_DAYS = 90
+PER_SWEEP = 3          # gentle on a free government API, and there is no hurry
+
+
+def due(db, at=None, limit=PER_SWEEP):
+    """Businesses with an NZBN that nobody has asked about lately.
+
+    Never-checked first, then the stalest. The re-check matters more than it
+    looks: a company can go into liquidation while it is happily quoting here,
+    and the register is the only place that shows up.
+    """
+    from engine import ts, utcnow
+    cutoff = ts((at or utcnow()) - timedelta(days=RECHECK_DAYS))
+    return db.execute(
+        'SELECT t.* FROM trades t JOIN users u ON u.id = t.user_id '
+        "WHERE COALESCE(t.nzbn, '') <> '' AND u.closed_at IS NULL "
+        '  AND NOT EXISTS (SELECT 1 FROM company_checks c WHERE c.trade_id = t.user_id '
+        '                  AND c.checked_at > ?) '
+        'ORDER BY (SELECT MAX(checked_at) FROM company_checks c2 WHERE c2.trade_id = t.user_id) '
+        '  IS NOT NULL, '
+        '         (SELECT MAX(checked_at) FROM company_checks c3 WHERE c3.trade_id = t.user_id) '
+        'LIMIT ?', (cutoff, limit)).fetchall()
+
+
+def sweep(db, at=None, limit=PER_SWEEP):
+    """Check a few businesses, and say something when the answer got worse.
+
+    Only a change is worth an admin's attention. A company that was registered
+    last time and is in liquidation now is the thing this exists to catch —
+    reporting "still registered" every ninety days would bury it.
+    """
+    from engine import notify
+    done = changed = 0
+    for trade in due(db, at=at, limit=limit):
+        before = latest(db, trade['user_id'])
+        out = run(db, trade, at=at)
+        if not out:
+            continue                          # couldn't ask; try again next time
+        done += 1
+        if not _got_worse(before, out):
+            continue
+        changed += 1
+        what = out['entity']['status'] if out.get('found') else 'no longer on the register'
+        for a in db.execute("SELECT id FROM users WHERE role = 'admin' AND closed_at IS NULL"):
+            notify(db, a['id'],
+                   f'The Companies Office now lists {trade["business_name"]} as “{what}”. '
+                   'It was fine when we last looked.',
+                   f'/admin/trades/{trade["user_id"]}', at=at)
+    db.commit()
+    return {'checked': done, 'changed': changed}
+
+
+def _got_worse(before, now):
+    """Did this go from fine to not fine? Only that is worth interrupting for."""
+    if not before or not before.get('found'):
+        return False                          # nothing to compare against
+    was_fine = not _has_ended(before.get('status'))
+    if not now.get('found'):
+        return was_fine                       # it was there, and now it isn't
+    return was_fine and _has_ended(now['entity']['status'])
+
+
+def needing_a_look(db):
+    """Every business whose latest register answer gives a reason to read it.
+
+    So this scales past pressing a button on one page at a time. Sorted worst
+    first, where "worst" means the most reasons — still not a score, just the
+    order a person would work through them in.
+    """
+    rows = db.execute(
+        'SELECT c.* , t.business_name FROM company_checks c '
+        'JOIN trades t ON t.user_id = c.trade_id '
+        'JOIN users u ON u.id = c.trade_id AND u.closed_at IS NULL '
+        'WHERE c.id IN (SELECT MAX(id) FROM company_checks GROUP BY trade_id)').fetchall()
+    out = []
+    for row in rows:
+        reasons = worth_a_look(dict(row))
+        if reasons:
+            out.append({'trade_id': row['trade_id'], 'name': row['business_name'],
+                        'checked_at': row['checked_at'], 'reasons': reasons})
+    out.sort(key=lambda r: (-len(r['reasons']), r['name']))
+    return out

@@ -2842,7 +2842,8 @@ def admin_trades():
     for r in db().execute('SELECT ta.trade_id, a.name FROM trade_areas ta '
                           'JOIN areas a ON a.id = ta.area_id ORDER BY a.id').fetchall():
         places.setdefault(r['trade_id'], []).append(r['name'])
-    return render_template('admin/trades.html', rows=rows, work=work, places=places,
+    return render_template('admin/trades.html',
+        company_flags=companies.needing_a_look(db()), rows=rows, work=work, places=places,
                            search=request.args.get('q', ''), show=show)
 
 
@@ -3243,6 +3244,7 @@ def sweep_once():
                 push.flush(conn)
                 outreach.flush(conn)
                 reporting.remind(conn)
+                companies.sweep(conn)
                 backup.maybe_nightly(conn)
                 backup.remind_admins(conn)
         finally:

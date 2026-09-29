@@ -273,5 +273,88 @@ class OnlyAnAdminTest(Base):
         self.assertNotIn('liquidation', page.lower())
 
 
+
+class CheckingItselfTest(Base):
+    """Pressing a button per business doesn't scale past a handful."""
+
+    def clean(self, nzbn='9429001234567', name='Tane Building Limited'):
+        self.register[nzbn] = entity(nzbn, name, directors=['Wiremu Tane'])
+        self.by_name['Wiremu Tane'] = []
+
+    def test_a_business_nobody_has_asked_about_is_due(self):
+        self.clean()
+        self.assertIn(self.trade['user_id'], [t['user_id'] for t in companies.due(self.db)])
+
+    def test_one_just_checked_is_not_due_again(self):
+        self.clean()
+        companies.run(self.db, self.trade)
+        self.assertEqual(companies.due(self.db), [])
+
+    def test_it_comes_round_again_after_the_recheck_window(self):
+        from datetime import timedelta
+        self.clean()
+        companies.run(self.db, self.trade)
+        later = utcnow() + timedelta(days=companies.RECHECK_DAYS + 1)
+        self.assertIn(self.trade['user_id'],
+                      [t['user_id'] for t in companies.due(self.db, at=later)])
+
+    def test_the_sweep_is_gentle(self):
+        self.clean()
+        for i in range(8):
+            t = self.a_trade(name=f'Other {i}', nzbn=f'942900000000{i}')
+            self.register[f'942900000000{i}'] = entity(f'942900000000{i}', f'Other {i} Limited')
+        out = companies.sweep(self.db)
+        self.assertLessEqual(out['checked'], companies.PER_SWEEP)
+
+    def test_a_company_going_into_liquidation_is_reported(self):
+        """The thing this exists for: it was fine when they joined."""
+        self.clean()
+        companies.run(self.db, self.trade)
+        self.register['9429001234567'] = entity('9429001234567', 'Tane Building Limited',
+                                                status='In Liquidation', directors=['Wiremu Tane'])
+        from datetime import timedelta
+        later = utcnow() + timedelta(days=companies.RECHECK_DAYS + 1)
+        out = companies.sweep(self.db, at=later)
+        self.assertEqual(out['changed'], 1)
+        notes = [r['body'] for r in self.db.execute(
+            "SELECT body FROM notifications WHERE body LIKE '%Companies Office%'")]
+        self.assertTrue(notes)
+        self.assertIn('Liquidation', notes[0])
+
+    def test_still_fine_is_not_worth_interrupting_anybody(self):
+        self.clean()
+        companies.run(self.db, self.trade)
+        from datetime import timedelta
+        later = utcnow() + timedelta(days=companies.RECHECK_DAYS + 1)
+        out = companies.sweep(self.db, at=later)
+        self.assertEqual(out['changed'], 0)
+        self.assertEqual(self.db.execute(
+            "SELECT COUNT(*) AS n FROM notifications WHERE body LIKE '%Companies Office%'"
+        ).fetchone()['n'], 0, 'reporting no change every 90 days would bury the one that matters')
+
+    def test_a_business_that_was_already_bad_is_not_re_reported(self):
+        self.register['9429001234567'] = entity('9429001234567', 'Tane Building Limited',
+                                                status='Removed', directors=['Wiremu Tane'])
+        self.by_name['Wiremu Tane'] = []
+        companies.run(self.db, self.trade)
+        from datetime import timedelta
+        later = utcnow() + timedelta(days=companies.RECHECK_DAYS + 1)
+        self.assertEqual(companies.sweep(self.db, at=later)['changed'], 0)
+
+    def test_the_ones_worth_reading_are_listed_together(self):
+        self.register['9429001234567'] = entity('9429001234567', 'Someone Else Limited',
+                                                directors=['Wiremu Tane'])
+        self.by_name['Wiremu Tane'] = []
+        companies.run(self.db, self.trade)
+        flagged = companies.needing_a_look(self.db)
+        self.assertEqual(len(flagged), 1)
+        self.assertEqual(flagged[0]['trade_id'], self.trade['user_id'])
+        self.assertTrue(flagged[0]['reasons'])
+
+    def test_a_clean_business_is_not_on_that_list(self):
+        self.clean()
+        companies.run(self.db, self.trade)
+        self.assertEqual(companies.needing_a_look(self.db), [])
+
 if __name__ == '__main__':
     unittest.main()

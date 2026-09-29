@@ -9,6 +9,29 @@
       <h1>Businesses</h1>
       <p class="muted">Every trade on {{ cfg.BRAND }}. Click one to see their work, plan and history, or to make changes.</p>
     </div>
+
+  {% if company_flags %}
+  {# The register checks itself on a rota, so this is how you find out without
+     opening every business in turn. Reasons, in words — the page never decides
+     anything, and none of it is shown to customers. #}
+  <div class="card" style="border-left:4px solid var(--paint)">
+    <h3 style="margin-top:0">{{ company_flags|length }}
+      business{{ 'es' if company_flags|length != 1 }} the Companies Office gives a reason to read</h3>
+    <p class="small muted" style="margin:0 0 12px">Things the public register said, not conclusions.
+      Worth a look, in the order a person would work through them.</p>
+    <ul class="notes-log" style="margin:0">
+      {% for f in company_flags %}
+      <li>
+        <a href="{{ url_for('admin_trade', trade_id=f.trade_id) }}"><b>{{ f.name }}</b></a>
+        <span class="small muted">— asked {{ f.checked_at|day }}</span>
+        <ul class="small" style="margin:4px 0 0;padding-left:18px">
+          {% for r in f.reasons %}<li>{{ r }}</li>{% endfor %}
+        </ul>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
     <form method="get" class="actions">
       <label class="vh" for="q">Search</label>
       <input id="q" name="q" type="search" placeholder="Name, email or licence number" value="{{ search }}" style="width:auto;min-width:240px">
